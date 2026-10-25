@@ -26,7 +26,7 @@ async function run(host, scale) {
   delete env.CLAUDECODE;
   const git = (...args) => command(root, 'git', args, env);
   const state = () => JSON.parse(command(root, process.execPath, [helper, 'status'], env)).state;
-  git('init', '-q');
+  git('init', '-q', '-b', 'main');
   git('config', 'user.name', 'Neef Plan Smoke');
   git('config', 'user.email', 'neef-plan@example.invalid');
   git('config', 'commit.gpgsign', 'false');
@@ -82,22 +82,18 @@ async function run(host, scale) {
   const finished = state();
   const completed = finished?.plan?.phases.filter(phase => phase.status === 'complete') || [];
   assert.equal(continued.code, 0, continued.final);
-  assert.equal(completed.length, 1);
-  assert.ok(completed[0].verification);
+  assert.equal(completed.length, saved.plan.phases.length);
+  assert.ok(completed.every(phase => phase.verification));
   assert.equal(finished.plan.phases.length, saved.plan.phases.length);
-  assert.equal(finished.progress, scale === 'small' ? 'complete' : 'active');
+  assert.equal(finished.progress, 'complete');
   assert.equal(finished.baseline, null);
   assert.notEqual(git('rev-parse', 'HEAD'), initial.head);
+  assert.equal(git('branch', '--show-current'), 'main');
+  assert.equal(git('branch', '--format=%(refname:short)'), 'main');
+  assert.ok(Number(git('rev-list', '--count', `${initial.head}..HEAD`)) >= saved.plan.phases.length);
   assert.equal(git('status', '--porcelain'), '');
   command(root, process.execPath, ['--test'], env);
   if (scale === 'small') command(root, process.execPath, ['--input-type=module', '-e', 'import assert from "node:assert/strict"; import {greet} from "./index.mjs"; assert.equal(greet(), "Hello, Neef!"); assert.equal(greet("Ada"), "Hello, Ada!");'], env);
-  else {
-    assert.ok(finished.plan.phases.filter(phase => phase.status !== 'complete').every(phase => phase.status === 'pending'));
-    const beforeNext = command(root, process.execPath, [helper, 'status'], env);
-    const blocked = await turn(`${prefix} next`, 'next-active');
-    assert.equal(blocked.code, 0, blocked.final);
-    assert.equal(command(root, process.execPath, [helper, 'status'], env), beforeNext);
-  }
   fs.writeFileSync(path.join(artifacts, `${host}-${scale}.result.json`), JSON.stringify({ host, scale, passed: true, root, planned, saved, continued, finished }, null, 2));
   console.log(JSON.stringify({ host, scale, passed: true, phases: finished.plan.phases.length, completed: completed.length, root }));
 }

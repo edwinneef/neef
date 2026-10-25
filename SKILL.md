@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 Navigate → Execute → Evaluate → Follow-up
 
-Implement and verify the request, commit only owned work when safe, and save continuity for either agent. Otherwise record the blocker and preserved work. NEEF authorizes scoped local edits, checks, branches and commits. Pushing, merging, destructive actions and scope expansion need separate user authorization.
+Implement and verify the request, commit only owned work when safe, and save continuity for either agent. Otherwise record the blocker and preserved work. NEEF authorizes scoped local edits, checks and commits on main. Keep development on main; create no branches or worktrees. If another branch is checked out, preserve it and report the mismatch; pause project edits and commits until main is selected. Pushing, merging, destructive actions and scope expansion need separate user authorization.
 
 Use Node 20+ and Git with `~/.neef/neef.mjs`; resolve the actual home and quote absolute paths. Run `node <helper> help` for command contracts. Commands use cwd as the project; `--project <path>` overrides it.
 
@@ -31,9 +31,9 @@ Match bare modes exactly; route leading shape, plan, challenge, prototype/proto 
 
 ## Navigate and Execute
 
-Read applicable AGENTS.md, CLAUDE.md, relevant code and helper `status`. Bootstrap missing `context`; `begin` does this automatically. Setup is optional; cached facts never override current instructions. On persistence failure, preserve state, report the issue and continue independent development. Reconcile stale state; retain unfinished work unless the user replaces it. Before edits that may be committed, run `begin <short-task-slug>` for a baseline. It creates a unique task branch only from a clean tree; dirty trees stay on their branch, and a suitable current `neef/` branch is reused. Commits require the returned baseline ID. Trivial work needs no formal plan or delegation.
+Read applicable AGENTS.md, CLAUDE.md, relevant code and helper `status`. Bootstrap missing `context`; `begin` does this automatically. Setup is optional; cached facts never override current instructions. On persistence failure, preserve state, report the issue and continue independent development. Reconcile stale state; retain unfinished work unless the user replaces it. Before edits that may be committed, run `begin <short-task-slug>` for a baseline. It preserves the current branch and working tree. Commits require the returned baseline ID. Trivial work needs no formal plan or delegation.
 
-Make routine decisions without approval checkpoints. Follow project patterns, reuse abstractions and fix introduced regressions. Scale sequencing and verification to risk; ordinary work needs no planning documents, full suite or independent review. Never interview simple requests. Batch independent calls, give brief updates during long work and finish authorized work before stopping.
+Optimize for fast development with the smallest working change and focused checks. Make routine decisions without approval checkpoints. Follow project patterns, reuse abstractions and fix introduced regressions. Ordinary work needs no extra planning documents, full suite or independent review. Never interview simple requests. For authorized plans, execute every ready phase until the requested outcome is complete or no further safe progress is possible. Resolve technical questions through inspection and reasonable defaults; ask only for essential missing user information or authority. Continue independent work when one part is blocked. Batch independent calls and give brief updates during long work.
 
 Use native delegates only for useful independent investigation or disjoint edits. Bound their scope; own integration, verification, Git and state. Otherwise work sequentially. Add no orchestration dependencies.
 
@@ -43,7 +43,7 @@ Stable discovery lives in `context`; task writes preserve it, and setup preserve
 
 ## Evaluate and commit
 
-Run focused existing checks, inspect the final diff, and distinguish pre-existing failures from regressions. Track owned files explicitly. Never discard, stash, clean, reset, force-push, rewrite history, delete branches, or change global Git settings. Never include unrelated work.
+Commit small completed increments often, after focused checks, rather than waiting for the whole task or roadmap. Each completed phase is a commit opportunity; larger phases can have several coherent commits. Inspect each increment's diff and distinguish pre-existing failures from regressions. Track owned files explicitly. Never discard, stash, clean, reset, force-push, rewrite history, delete branches, or change global Git settings. Never include unrelated work.
 
 Run `prepare <baseline-id>` with stdin JSON `{"files":["relative/path"],"message":"Describe the change"}`. Inspect its staged diff and returned token before `commit <token>`. The helper refuses pre-existing edits to selected files, staged changes, changed branches/HEAD, conflicts, and stale working trees. It does not prove authorship of later edits: confirm every selected change belongs to this task. Never re-baseline dirty overlapping work to evade ownership checks. If a file had user edits before NEEF began, preserve it and skip its commit. If a safe commit is unavailable, leave edits intact and report why. Git hooks remain active and are trusted project code.
 
