@@ -330,6 +330,44 @@ test('installer preserves edited managed files and unrelated agent content', t =
   assert.equal(fs.existsSync(path.join(f.home, 'install.lock')), false);
 });
 
+test('help groups every command and alias by intent without bootstrapping a project', t => {
+  const f = fixture(t, false);
+  const help = f.run(['help']);
+  assert.equal(help.groups.length, 4);
+  const commands = help.groups.flatMap(group => {
+    assert.ok(group.intent);
+    assert.ok(group.commands.length);
+    return group.commands;
+  });
+  assert.equal(new Set(commands.map(item => item.command)).size, commands.length);
+  const covered = commands.flatMap(({ command, changes, stops, aliases }) => {
+    assert.ok(changes && stops, `Missing behavior for ${command}`);
+    const name = command.split(' ')[0];
+    return [command, ...aliases.map(alias => `${command.replace(name, alias)} (alias of ${name})`)];
+  });
+  assert.deepEqual(new Set(covered), new Set(help.commands));
+  const row = name => commands.find(item => item.command.split(' ')[0] === name);
+  assert.match(row('shape').stops, /implemented.*unless discussion-only/);
+  assert.match(row('plan').stops, /Plan saved.*one ready phase/);
+  assert.match(row('prototype').changes, /scratch.*task state unchanged/);
+  assert.deepEqual(row('prototype').aliases, ['proto']);
+  assert.match(row('options').changes, /read-only/);
+  assert.match(row('options').stops, /later explicit selection/);
+  assert.match(row('ask').stops, /never invokes/);
+  assert.match(row('next').stops, /active tasks require continue/);
+  assert.equal(fs.existsSync(f.home), false);
+  assert.deepEqual(fs.readdirSync(f.root), []);
+});
+
+test('grouped help preserves dirty files, active progress and saved recommendations', t => {
+  const f = fixture(t);
+  f.state('missing', 'Unfinished feature', { decisions: 'Preserve these choices', next: 'Finish the existing task', recommendations: { primary: { kind: 'RECOMMENDED', action: 'Add a named greeting.', reason: 'The greeting fixture currently supports only the default.' }, alternatives: [] } });
+  f.write('user.txt', 'Personal tuning\n');
+  const before = f.run(['status']);
+  f.run(['help']);
+  assert.deepEqual(f.run(['status']), before);
+});
+
 test('every command installs an explicit alias that routes through canonical Neef instructions', t => {
   const f = installation(t);
   const plan = f.install();

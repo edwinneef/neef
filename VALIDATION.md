@@ -1,5 +1,32 @@
 # Validation — 2026-10-25
 
+## Help grouped by intent
+
+- Existing help now groups commands into choosing work, exploring before
+  building, building/continuing, and understanding the project/installation.
+  Each command carries Changes and Stops at text. No UI or dependency added.
+- One built-in command catalog supplies the existing flat command list, direct
+  alias discovery and grouped behavior metadata. Existing ordering, arguments,
+  `--deep`, prototype/proto equivalence and installer contracts remain intact.
+  The canonical help route renders compact tables using the current host syntax
+  and stops without task or project writes; helper commands stay internal.
+- `npm run check`: all 59 tests passed. Four focused help/alias/prompt-budget
+  checks passed as well. New coverage checks complete nonduplicated catalog and
+  alias membership, material write/stop boundaries, missing-state read-only
+  behavior, and preservation of active progress, advice and dirty files.
+- Native installed help passed on Claude and Codex. Both displayed all four
+  intent groups, Changes/Stops columns, flags, prototype/proto and full direct
+  aliases. Source files, Git and seeded active task state stayed unchanged.
+  The initial Claude run shortened repeated alias prefixes; the help instruction
+  now explicitly requires the full host prefix on every alias, and its retry
+  passed. Codex passed the initial run.
+- Managed installation passed its dry run, receipt checks, rollback backup and
+  copied-file hash verification. Installed doctor reports no failed checks.
+- Evidence: `.test-artifacts/hosts-1792920005218/` (Codex pass and initial Claude
+  output), `.test-artifacts/hosts-1792920120639/` (Claude retry). Reproduce with
+  `node scripts/smoke.mjs --help --alias`; use `--codex-only` or `--claude-only`
+  to limit the host. Native checks are opt-in and skip project test execution.
+
 ## Isolated prototype workflow
 
 - Added `prototype <description>` and equivalent `proto` routes and explicit

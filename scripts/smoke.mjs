@@ -11,6 +11,7 @@ const artifacts = path.join(source, '.test-artifacts', `hosts-${Date.now()}`);
 fs.mkdirSync(artifacts, { recursive: true });
 const shared = path.join(artifacts, 'shared');
 const setup = process.argv.includes('--setup');
+const help = process.argv.includes('--help');
 const aliases = process.argv.includes('--alias');
 const discovery = process.argv.includes('--next-discovery');
 const blocked = process.argv.includes('--next-blocked');
@@ -36,7 +37,7 @@ async function run(host) {
   fs.writeFileSync(path.join(root, 'index.mjs'), 'export function greet() { return "Hello, world!"; }\n');
   fs.writeFileSync(path.join(root, 'index.test.mjs'), 'import { test } from "node:test";\nimport assert from "node:assert/strict";\nimport { greet } from "./index.mjs";\ntest("greeting", () => assert.equal(greet(), "Hello, world!"));\n');
   const files = ['index.mjs', 'index.test.mjs'];
-  if (next || active) {
+  if (next || active || help) {
     fs.writeFileSync(path.join(root, 'README.md'), '# Greeting sample\n\nThe user goal is a small greeting module. The base greeting returns Hello, world!; the remaining feature is optional name support with unchanged default output and a focused named-greeting test. The sample is complete once both behaviors work.\n');
     files.push('README.md');
   }
@@ -62,10 +63,10 @@ async function run(host) {
   const env = { ...process.env, NEEF_HOME: shared };
   delete env.CLAUDECODE;
   fs.mkdirSync(shared, { recursive: true });
-  if (next || active) {
+  if (next || active || help) {
     const seeded = spawnSync(process.execPath, [helper, 'state-write', 'missing'], { cwd: root, env, encoding: 'utf8', input: JSON.stringify({
-      task: 'Implement the base greeting', progress: active ? 'active' : 'complete',
-      decisions: 'README.md defines the greeting sample goal.', verification: 'Base greeting fixture test passes.', next: active ? 'Finish the original base greeting task.' : '',
+      task: 'Implement the base greeting', progress: active || help ? 'active' : 'complete',
+      decisions: 'README.md defines the greeting sample goal.', verification: 'Base greeting fixture test passes.', next: active || help ? 'Finish the original base greeting task.' : '',
       recommendations: exhausted
         ? { primary: null, alternatives: [], reason: 'README.md defines only the already-completed base greeting; no supported work remains.' }
         : discovery || blocked
@@ -75,10 +76,11 @@ async function run(host) {
     }) });
     if (seeded.status) throw new Error(seeded.stdout + seeded.stderr);
   }
+  const beforeHelp = help ? spawnSync(process.execPath, [helper, 'status'], { cwd: root, env, encoding: 'utf8' }).stdout : null;
   const prefix = host === 'claude' ? '/neef' : '$neef';
   const invoke = mode => `${prefix}${aliases ? '-' : ' '}${mode}`;
   const task = aliases ? invoke('task') : prefix;
-  const prompt = next || active ? invoke('next') : setup ? invoke('setup') : host === 'claude'
+  const prompt = help ? invoke('help') : next || active ? invoke('next') : setup ? invoke('setup') : host === 'claude'
     ? `${task} Change greet() to return "Hello, Neef!", update its existing test, verify and commit. Work only in this disposable project.`
     : `${task} Add an optional name parameter to greet(name), defaulting to "world". Preserve greet() output, add a focused named-greeting test, verify and commit. Work only in this disposable project.`;
   const args = host === 'claude'
@@ -94,7 +96,7 @@ async function run(host) {
   child.stdin.end(prompt);
   const code = await new Promise((resolve, reject) => { child.on('error', reject); child.on('exit', resolve); });
   fs.closeSync(out); fs.closeSync(err);
-  const checks = setup || active ? { status: null } : spawnSync(process.execPath, ['--test'], { cwd: root, encoding: 'utf8' });
+  const checks = setup || active || help ? { status: null } : spawnSync(process.execPath, ['--test'], { cwd: root, encoding: 'utf8' });
   const result = { host, code, root, initial, head: git(root, ['rev-parse', 'HEAD']),
     status: git(root, ['status', '--porcelain']), checks: checks.status,
     state: fs.existsSync(path.join(shared, 'state')) ? fs.readdirSync(path.join(shared, 'state')) : [] };
@@ -107,7 +109,16 @@ async function run(host) {
   result.continuationCommand = active ? /(?:\$neef|\/neef) continue/.test(finalMessage)
     : /(?:^|\n)\s*(?:[-*]\s*)?(?:\*\*)?(?:Run:?(?:\*\*)?\s*)?`?(?:\$neef|\/neef) next\b/i.test(finalMessage);
   result.contextDepth = saved?.context?.depth;
-  if (exhausted) {
+  if (help) {
+    result.help = { text: finalMessage, stateUnchanged: status.stdout === beforeHelp };
+    result.passed = code === 0 && result.head === initial && result.status === '' && result.help.stateUnchanged
+      && /Changes/i.test(finalMessage) && /Stops/i.test(finalMessage)
+      && /Choose what to do/i.test(finalMessage) && /Explore before building/i.test(finalMessage)
+      && /Build or keep moving/i.test(finalMessage) && /Understand the project/i.test(finalMessage)
+      && /--deep/.test(finalMessage) && /neef-proto\b/.test(finalMessage)
+      && /neef-doctor\b/.test(finalMessage) && /discussion.only/.test(finalMessage)
+      && !/state-write|recommendations-write|prototype-workspace/.test(finalMessage);
+  } else if (exhausted) {
     result.passed = code === 0 && checks.status === 0 && result.head === initial && result.status === ''
       && !result.continuationCommand && saved?.progress === 'complete'
       && saved.recommendations?.primary === null && !!saved.recommendations.reason;
@@ -138,4 +149,4 @@ async function run(host) {
 }
 
 console.log(JSON.stringify({ artifacts }));
-await Promise.all((process.argv.includes('--codex-only') ? ['codex'] : ['claude', 'codex']).map(run));
+await Promise.all((process.argv.includes('--codex-only') ? ['codex'] : process.argv.includes('--claude-only') ? ['claude'] : ['claude', 'codex']).map(run));

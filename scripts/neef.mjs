@@ -7,7 +7,22 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 export const legacy = ['ed', 'ed-auto', 'ed-feature', 'ed-help', 'ed-next', 'ed-setup', 'ed-skills', 'ed-status'];
-export const commandNames = ['task', 'shape', 'plan', 'challenge', 'prototype', 'proto', 'options', 'ask', 'setup', 'next', 'continue', 'status', 'help', 'doctor'];
+const commandCatalog = [
+  { name: 'task', usage: '<task>', intent: 'build', changes: 'Project files and task state; safe local commits', stops: 'Scoped work verified, or a concrete blocker recorded' },
+  { name: 'shape', usage: 'shape [--deep] <idea>', intent: 'explore', changes: 'Task decisions, then project files by default', stops: 'Clarified and implemented, unless discussion-only' },
+  { name: 'plan', usage: 'plan <feature>', intent: 'explore', changes: 'External task state only', stops: 'Plan saved; continue executes one ready phase later' },
+  { name: 'challenge', usage: 'challenge [--deep] <topic>', intent: 'choose', changes: 'May save external recommendations; project/Git unchanged', stops: 'Evidence-based critique and improvements; no implementation' },
+  { name: 'prototype', usage: 'prototype <description>', aliases: ['proto'], intent: 'explore', changes: 'External scratch demo and README; source/Git/task state unchanged', stops: 'Working demo and handoff; no automatic production promotion' },
+  { name: 'options', usage: 'options', intent: 'choose', changes: 'Nothing during advice (read-only)', stops: 'Ranked choices; a later explicit selection can execute its action' },
+  { name: 'ask', usage: 'ask <description>', intent: 'choose', changes: 'Nothing (read-only)', stops: 'Best-fit command and why; never invokes it' },
+  { name: 'setup', usage: 'setup', intent: 'inspect', changes: 'External project context only', stops: 'Discovery saved; no project commands run' },
+  { name: 'next', usage: 'next', intent: 'build', changes: 'Project files and task state; safe local commits', stops: 'One useful action; active tasks require continue instead' },
+  { name: 'continue', usage: 'continue', intent: 'build', changes: 'Existing task and scoped project work; safe local commits', stops: 'Resumed work; at most one saved plan phase per invocation' },
+  { name: 'status', usage: 'status', intent: 'inspect', changes: 'Nothing (read-only)', stops: 'Progress, Git, verification and blockers reported' },
+  { name: 'help', usage: 'help', intent: 'inspect', changes: 'Nothing (read-only)', stops: 'Grouped command guide and aliases displayed' },
+  { name: 'doctor', usage: 'doctor', intent: 'inspect', changes: 'Nothing; no implicit repairs', stops: 'Installation health checks and concrete fixes reported' },
+];
+export const commandNames = commandCatalog.flatMap(({ name, aliases = [] }) => [name, ...aliases]);
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const fail = message => { throw new Error(message); };
 const home = () => path.resolve(process.env.NEEF_HOME || path.join(os.homedir(), '.neef'));
@@ -661,7 +676,10 @@ export async function main(args = process.argv.slice(2)) {
   const [command = 'help', argument] = args;
   if (command === 'help') return {
     name: 'NEEF', fullName: 'No-nonsense Engineering & Execution Framework', motto: 'Navigate → Execute → Evaluate → Follow-up',
-    commands: ['<task>', 'shape [--deep] <idea>', 'plan <feature>', 'challenge [--deep] <topic>', 'prototype <description>', 'proto <description> (alias of prototype)', 'options', 'ask <description>', 'setup', 'next', 'continue', 'status', 'help', 'doctor'],
+    commands: commandCatalog.flatMap(({ name, usage, aliases = [] }) => [usage, ...aliases.map(alias => `${usage.replace(name, alias)} (alias of ${name})`)]),
+    groups: [['choose', 'Choose what to do'], ['explore', 'Explore before building'], ['build', 'Build or keep moving'], ['inspect', 'Understand the project and installation']]
+      .map(([id, intent]) => ({ intent, commands: commandCatalog.filter(command => command.intent === id)
+        .map(({ usage, changes, stops, aliases = [] }) => ({ command: usage, changes, stops, aliases })) })),
     invocation: { codex: '$neef <command>', claude: '/neef <command>' },
     aliases: { codex: commandNames.map(command => `$neef-${command}`), claude: commandNames.map(command => `/neef-${command}`) },
     helperCommands: ['prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug>', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?})', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?}]}. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. Shared state remains under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, shape [--deep] <idea>, plan <feature>, challenge [--deep] <topic>, prototype <description> (proto alias), options, ask <description>, setup, next, continue, status, help, doctor are agent skill modes; prototype builds or refines isolated external demos and hands approved concepts to development without automatic production changes; options ranks project actions and ask recommends an existing command, both read-only including external state and without execution; shaping uses native questions and state-write then implements unless discussion-only; plan saves a complexity-sized full-feature roadmap then stops, continue executes at most one saved phase; challenge is read-only except external recommendations-write and never implements, continue resumes unfinished work, next starts one revalidated follow-up after completion' };

@@ -16,7 +16,7 @@ Use Node 20+ and Git with `~/.neef/neef.mjs`; resolve the actual home and quote 
 
 Match bare modes exactly; route leading shape, plan, challenge, prototype/proto and ask commands first. Ask for missing subjects. Other arguments request development.
 
-- `help`: run helper `help`; show name, fullName, motto, every commands entry and aliases with host syntax. Helper commands are internal.
+- `help`: run helper `help`; show name, fullName and motto, then its intent groups as compact tables: Command, Changes, Stops at. Cover every command, flags and aliases using this host's syntax, including proto beside prototype and the direct subskills. Write the full host prefix on every alias. Use the returned changes/stops text. Helper commands stay internal. Read-only; stop after showing help.
 - `shape [--deep] <idea>`: read `references/shape.md`, clarify, save decisions and implement unless discussion-only.
 - `plan <feature>`: read `references/plan.md`; save the full feature plan and stop. Only external state writes are permitted. Skip development below.
 - `challenge [--deep] <topic>`: read `references/challenge.md`. Project files and Git are read-only. The only permitted write is external `recommendations-write`; then report and stop. Skip all sections below in this mode.
