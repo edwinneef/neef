@@ -361,7 +361,7 @@ function setup(p, minimal = false) {
   if (before.error) fail(before.error);
   if (minimal && before.state?.context) return { initialized: false, revision: before.revision };
   const relativeHome = path.relative(p.root, home());
-  if (!relativeHome || (relativeHome !== '..' && !relativeHome.startsWith(`..${path.sep}`) && !path.isAbsolute(relativeHome))) fail('Neef state storage must be outside the project');
+  if (!relativeHome || (relativeHome !== '..' && !relativeHome.startsWith(`..${path.sep}`) && !path.isAbsolute(relativeHome))) fail('NEEF state storage must be outside the project');
   const { context, warnings } = discover(p, minimal);
   const safety = { projectReadable: !warnings.some(warning => warning === 'Unreadable directory: .'), runtime: Number(process.versions.node.split('.')[0]) >= 20,
     projectWritable: true, git: p.isGit, dirty: false, selectiveCommitAvailable: false, commandsExecuted: false };
@@ -539,13 +539,13 @@ export function doctor() {
   } catch { add('install receipt', false, 'Reinstall from the source project'); }
   for (const agent of ['.claude', '.agents']) {
     const skill = path.join(user, agent, 'skills/neef/SKILL.md');
-    add(`${agent} skill`, exists(skill) && /name: neef/.test(read(skill)), 'Reinstall Neef');
-    add(`${agent} synchronized instructions`, exists(skill) && exists(path.join(home(), 'SKILL.md')) && read(skill) === read(path.join(home(), 'SKILL.md')), 'Reinstall Neef from its source');
+    add(`${agent} skill`, exists(skill) && /name: neef/.test(read(skill)), 'Reinstall NEEF');
+    add(`${agent} synchronized instructions`, exists(skill) && exists(path.join(home(), 'SKILL.md')) && read(skill) === read(path.join(home(), 'SKILL.md')), 'Reinstall NEEF from its source');
   }
   const claude = path.join(user, '.claude/skills/neef/SKILL.md');
   const codex = path.join(user, '.agents/skills/neef/agents/openai.yaml');
-  add('Claude explicit-only', exists(claude) && /disable-model-invocation: true/.test(read(claude)), 'Reinstall Neef');
-  add('Codex explicit-only', exists(codex) && /allow_implicit_invocation: false/.test(read(codex)), 'Reinstall Neef');
+  add('Claude explicit-only', exists(claude) && /disable-model-invocation: true/.test(read(claude)), 'Reinstall NEEF');
+  add('Codex explicit-only', exists(codex) && /allow_implicit_invocation: false/.test(read(codex)), 'Reinstall NEEF');
   const stateDir = path.join(home(), 'state');
   try { fs.accessSync(stateDir, fs.constants.R_OK | fs.constants.W_OK); add('state directory permissions', true); }
   catch { add('state directory permissions', false, 'Reinstall or correct state directory permissions'); }

@@ -1,6 +1,6 @@
 interface:
-  display_name: "Neef"
-  short_description: "Autonomous development with safe Git and shared continuity"
+  display_name: "NEEF"
+  short_description: "No-nonsense Engineering & Execution Framework"
   default_prompt: "Use $neef to implement the requested development task."
 policy:
   allow_implicit_invocation: false

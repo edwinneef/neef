@@ -88,7 +88,7 @@
   this change instead.
 
 Implemented and installed from this source on Windows. Local tools: Node 24,
-Python 3.12, Git 2.54, Claude Code 2.1.310, Codex CLI 0.164.0. Neef uses Node and
+Python 3.12, Git 2.54, Claude Code 2.1.310, Codex CLI 0.164.0. NEEF uses Node and
 Git only. No dependencies were added.
 
 - Focused disposable-repository tests cover safe branches and commits, new files,
@@ -124,7 +124,7 @@ These migration edits remain uncommitted for review.
 Independent final scan of 86,756 directories / 528,275 files under `D:/projects`
 followed no directory links and found no remaining exact-eight skill installations
 or active ED workflow requirements. All unrelated global skill names remained;
-only Neef was added. All 42 tracked legacy-source file hashes and its clean Git
+only NEEF was added. All 42 tracked legacy-source file hashes and its clean Git
 status were unchanged. `D:/projects/ed-skill` remains intact.
 
 Ambiguous `dev-flow` skills in `D:/projects/eddiesp/.agents/skills` and

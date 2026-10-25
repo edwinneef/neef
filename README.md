@@ -1,4 +1,15 @@
-# Neef
+# NEEF
+
+**No-nonsense Engineering & Execution Framework**
+
+Navigate → Execute → Evaluate → Follow-up
+
+- **Navigate:** Understand the task, codebase, context and relevant decisions.
+- **Execute:** Implement autonomously with minimal overhead.
+- **Evaluate:** Verify proportionately and identify meaningful improvements.
+- **Follow-up:** Recommend the next valuable action and maintain momentum.
+
+These principles guide the existing workflow; they are not mandatory phases. The command name remains `neef`.
 
 One explicit skill for autonomous development in Claude Code (`/neef`) and Codex (`$neef`). Modes: task, shape [--deep], challenge [--deep], setup, next, continue, status, help, doctor. Node 20+ and Git are required. No dependencies, daemon, or mandatory project setup.
 
@@ -8,11 +19,11 @@ The runtime lives at `~/.neef/neef.mjs`; `node <absolute-runtime-path> help` des
 
 `$neef setup` or `/neef setup` inspects project structure, manifests, languages, frameworks, entry points, instructions, command definitions, Git conventions and safety. The agent adds a short architecture summary from relevant source. Discovery never executes project commands or writes project-local files. Stable facts live in `context` in the existing per-project state JSON; transient task fields remain separate and unchanged. Repeating unchanged setup leaves the state byte-for-byte intact. Ordinary tasks bootstrap minimal context automatically through `begin`, without a setup requirement. Explicit setup refreshes deeper context; task writes and recovery preserve it. Bounded scans skip dependencies, build output and links; warnings identify partial discovery. Commands are discovered, not verified as runnable, and cached facts must be checked against current instructions.
 
-After every development task, Neef evaluates established goals and actual project state, then saves one primary recommendation and up to two useful alternatives in `recommendations` in that same state file. Actions are REQUIRED (unfinished original scope), RECOMMENDED (logical next improvement), or OPTIONAL (nonessential enhancement), each with an executable task description and grounded reason. Completed task writes require an explicit evaluation; unsupported suggestions are recorded as no useful action rather than invented. Recommendations never expand the current task automatically.
+After every development task, NEEF evaluates established goals and actual project state, then saves one primary recommendation and up to two useful alternatives in `recommendations` in that same state file. Actions are REQUIRED (unfinished original scope), RECOMMENDED (logical next improvement), or OPTIONAL (nonessential enhancement), each with an executable task description and grounded reason. Completed task writes require an explicit evaluation; unsupported suggestions are recorded as no useful action rather than invented. Recommendations never expand the current task automatically.
 
 `$neef continue` / `/neef continue` resumes unfinished work. `$neef next` / `/neef next` starts one saved follow-up after completion: the agent rechecks current code, goals and Git state, skips obsolete or blocked candidates, implements the best actionable one, and generates new recommendations. The helper's `next` command only returns advisory candidates and current Git state; it never executes saved text. Active tasks block `next` and direct the user to `continue`. The transient task `next` field stays separate from recommendations. `recommendations-write <revision>` refreshes advice without replacing context or task progress.
 
-`$neef shape <task>` / `/neef shape <task>` inspects code first, then asks only consequential unanswered questions, one at a time, with concrete choices and a recommended answer. Standard shaping stops at five questions (usually one to three); `shape --deep <task>` explores dependent design tradeoffs until meaningful uncertainty is resolved or the user stops. Ordinary tasks get at most two targeted questions and implement directly when clear. Counts and a pending question live in task `next`; agreed constraints live in `decisions`. Active same-task writes preserve both when omitted; completed/new tasks clear the pending step. After real answers, Neef implements automatically unless discussion-only was requested, then generates next recommendations. No separate skill, interview runtime, specification documents or dependency is used; see [the integrated guidance](references/shape.md).
+`$neef shape <task>` / `/neef shape <task>` inspects code first, then asks only consequential unanswered questions, one at a time, with concrete choices and a recommended answer. Standard shaping stops at five questions (usually one to three); `shape --deep <task>` explores dependent design tradeoffs until meaningful uncertainty is resolved or the user stops. Ordinary tasks get at most two targeted questions and implement directly when clear. Counts and a pending question live in task `next`; agreed constraints live in `decisions`. Active same-task writes preserve both when omitted; completed/new tasks clear the pending step. After real answers, NEEF implements automatically unless discussion-only was requested, then generates next recommendations. No separate skill, interview runtime, specification documents or dependency is used; see [the integrated guidance](references/shape.md).
 
 `$neef challenge <topic>` / `/neef challenge <topic>` critiques existing code or an approach using source evidence, ranks confirmed problems and potential concerns by impact, severity and effort, and recommends one improvement with up to two alternatives. `challenge --deep` examines architectural, technical and UX implications more thoroughly. It leaves project files and Git unchanged, runs no project commands, and never implements. Only concise external recommendations may be saved (even before a project has task state) for a later `next` invocation, which revalidates them. See [challenge guidance](references/challenge.md). Both modes are optional; ordinary tasks still implement directly.
 

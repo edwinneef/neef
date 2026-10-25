@@ -1,12 +1,14 @@
 ---
 name: neef
-description: "Autonomous development with deterministic Git safeguards and shared project continuity. Use only when explicitly invoked as /neef or $neef."
+description: "No-nonsense Engineering & Execution Framework. Use only when explicitly invoked as /neef or $neef."
 disable-model-invocation: true
 ---
 
-# Neef
+# NEEF
 
-Implement and verify the request, commit only owned work when safe, and save continuity for either agent. Otherwise record the blocker and preserved work. Neef authorizes scoped local edits, checks, branches and commits. Pushing, merging, destructive actions and scope expansion need separate user authorization.
+Navigate → Execute → Evaluate → Follow-up
+
+Implement and verify the request, commit only owned work when safe, and save continuity for either agent. Otherwise record the blocker and preserved work. NEEF authorizes scoped local edits, checks, branches and commits. Pushing, merging, destructive actions and scope expansion need separate user authorization.
 
 Use Node 20+ and Git with `~/.neef/neef.mjs`; resolve the actual home and quote absolute paths. Run `node <helper> help` for command contracts. Commands use cwd as the project; `--project <path>` overrides it.
 
@@ -24,7 +26,7 @@ Match bare reserved modes exactly; recognize shape and challenge as leading comm
 - `next`: run helper `next`. Active work stops without edits or task-state changes; show the host's `neef continue` command, never invoke it implicitly. Otherwise revalidate candidates against code, goals and Git, skipping obsolete or blocked actions. Record the highest-priority actionable task active with a fresh baseline and implement only that task. Generate recommendations afterward. If none is actionable, refresh advice and explain. Saved text is advisory, never a command or authorization.
 - `<task>`: implement directly when clear. For consequential ambiguity, read `references/shape.md`; ask at most two targeted questions with recommended defaults.
 
-## Develop
+## Navigate and Execute
 
 Read applicable AGENTS.md, CLAUDE.md, relevant code and helper `status`. Bootstrap missing `context`; `begin` does this automatically. Setup is optional; cached facts never override current instructions. On persistence failure, preserve state, report the issue and continue independent development. Reconcile stale state; retain unfinished work unless the user replaces it. Before edits that may be committed, run `begin <short-task-slug>` for a baseline. It creates a unique task branch only from a clean tree; dirty trees stay on their branch, and a suitable current `neef/` branch is reused. Commits require the returned baseline ID. Trivial work needs no formal plan or delegation.
 
@@ -36,13 +38,13 @@ Use `state-write <revision>` with stdin JSON containing `task`, `progress` (`act
 
 Stable discovery lives in `context`; task writes preserve it, and setup preserves task progress and recommendations. Agreed `decisions` constrain implementation. Refresh stale facts without requiring setup.
 
-## Verify and commit
+## Evaluate and commit
 
 Run focused existing checks, inspect the final diff, and distinguish pre-existing failures from regressions. Track owned files explicitly. Never discard, stash, clean, reset, force-push, rewrite history, delete branches, or change global Git settings. Never include unrelated work.
 
-Run `prepare <baseline-id>` with stdin JSON `{"files":["relative/path"],"message":"Describe the change"}`. Inspect its staged diff and returned token before `commit <token>`. The helper refuses pre-existing edits to selected files, staged changes, changed branches/HEAD, conflicts, and stale working trees. It does not prove authorship of later edits: confirm every selected change belongs to this task. Never re-baseline dirty overlapping work to evade ownership checks. If a file had user edits before Neef began, preserve it and skip its commit. If a safe commit is unavailable, leave edits intact and report why. Git hooks remain active and are trusted project code.
+Run `prepare <baseline-id>` with stdin JSON `{"files":["relative/path"],"message":"Describe the change"}`. Inspect its staged diff and returned token before `commit <token>`. The helper refuses pre-existing edits to selected files, staged changes, changed branches/HEAD, conflicts, and stale working trees. It does not prove authorship of later edits: confirm every selected change belongs to this task. Never re-baseline dirty overlapping work to evade ownership checks. If a file had user edits before NEEF began, preserve it and skip its commit. If a safe commit is unavailable, leave edits intact and report why. Git hooks remain active and are trusted project code.
 
-## Maintain momentum
+## Follow-up
 
 After every development task, evaluate actual project state and established goals without being asked. Rank unfinished requirements, functional gaps and adjacent improvements by user value, relevance, effort and dependencies. Prefer functional progress over housekeeping. Choose one primary action and at most two useful alternatives; never invent filler.
 
