@@ -595,3 +595,42 @@ test('missing and legacy recommendation state stays read-only; recovery preserve
   assert.deepEqual(f.run(['next']).candidates, []);
   assert.equal(fs.readFileSync(file, 'utf8'), JSON.stringify(legacy));
 });
+
+test('agreed decisions survive same-task progress and completion, without leaking into new tasks', t => {
+  const f = fixture(t);
+  const setup = f.run(['setup']);
+  const first = f.state(setup.revision, 'Grill greeting behavior', {
+    decisions: 'Preserve greet() output. Accept an optional name.', next: 'grill standard: 1/5 asked; awaiting choice of empty-name behavior',
+  });
+  const checkpoint = f.state(first.revision, 'Grill greeting behavior', { verification: 'Rechecked the relevant source' });
+  assert.equal(checkpoint.state.next, first.state.next);
+  const resumed = f.state(checkpoint.revision, 'Grill greeting behavior', { next: 'Implement agreed greeting behavior' });
+  assert.equal(resumed.state.decisions, first.state.decisions);
+  assert.deepEqual(resumed.state.context, first.state.context);
+  const answered = f.state(resumed.revision, 'Grill greeting behavior', { decisions: `${resumed.state.decisions} Empty names use the default.` });
+  const completed = f.state(answered.revision, 'Grill greeting behavior', { progress: 'complete', recommendations: noRecommendation });
+  assert.equal(completed.state.decisions, answered.state.decisions);
+  const newTask = f.state(completed.revision, 'Unrelated task');
+  assert.equal(newTask.state.decisions, '');
+  assert.equal(newTask.state.next, '');
+  f.state(completed.revision, 'Grill greeting behavior', { decisions: 'Stale answer' }, /Stale state revision/);
+  assert.equal(f.run(['status']).state.task, 'Unrelated task');
+});
+
+test('both agent installations receive self-contained grilling guidance and preserve unmanaged references', t => {
+  const f = installation(t);
+  f.install(true);
+  const guidance = fs.readFileSync(path.join(f.home, 'references/grill.md'), 'utf8');
+  for (const agent of ['.claude', '.agents']) {
+    assert.equal(fs.readFileSync(path.join(f.user, agent, 'skills/neef/references/grill.md'), 'utf8'), guidance);
+  }
+  assert.match(guidance, /at most five questions/);
+  assert.match(guidance, /at most two targeted questions/);
+  assert.match(guidance, /one question at a time/);
+  assert.match(guidance, /implement.*automatically/);
+  assert.ok(fs.statSync(path.join(path.dirname(installer), '../SKILL.md')).size < 8000);
+  const extra = path.join(f.user, '.agents/skills/neef/references/personal.md');
+  fs.writeFileSync(extra, 'Unrelated user guidance');
+  f.install(true, /Unmanaged skill reference/);
+  assert.equal(fs.readFileSync(extra, 'utf8'), 'Unrelated user guidance');
+});

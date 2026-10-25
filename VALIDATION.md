@@ -1,5 +1,31 @@
 # Validation — 2026-10-25
 
+## Adaptive grilling
+
+- 33 isolated tests pass, including same-task decision/pending-step preservation,
+  clearing unrelated constraints for new tasks, stale revision rejection, and
+  synchronized self-contained grilling references with unmanaged-file protection.
+- Fresh Claude and Codex standard interviews inspected the published API, asked
+  one concrete policy question with a recommendation, and waited without changing
+  code. A real scripted answer resumed each conversation; both saved constraints,
+  implemented the policy, passed focused tests, committed, and saved the next-step
+  evaluation without asking for a new plan or implementation approval.
+- Both hosts honored deep discussion-only across the answer and left project
+  files/HEAD unchanged. One initial deep Claude run asked about out-of-scope input
+  behavior; the guidance now explicitly preserves behavior outside the requested
+  change. Both corrected runs ended after the relevant policy was settled.
+- Explicit deep grilling of a fully specified change asked zero questions and
+  implemented directly on both hosts. Ordinary clear requests did the same.
+- Reproduce with `node scripts/grill-smoke.mjs`, `--deep --discussion-only`,
+  `--deep --clear`, or `--automatic`. These are opt-in headless host conversations
+  using the chat-question fallback, not live native question-widget UI tests.
+  Numeric question limits are checked in guidance; exhaustive five-/two-question
+  conversations were not run. A fresh reader found the fresh-session interview
+  resume gap; `continue` now requires the integrated reference for saved interviews.
+- Agreed constraints use the existing `decisions` field; mode/count/pending
+  question and discussion-only boundaries use task `next`. No interview engine,
+  dependency, separate skill or formal specification document was introduced.
+
 ## Proactive next-step orchestration
 
 - 31 disposable-repository tests pass. New coverage checks mandatory atomic

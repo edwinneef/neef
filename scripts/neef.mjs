@@ -155,7 +155,10 @@ function stateWrite(p, expected, input) {
       baseline: input.baseline ?? (current.state?.task === input.task ? current.state.baseline : null) ?? null,
       ...(current.state?.context ? { context: current.state.context } : {}),
       ...(current.state?.recommendations ? { recommendations: current.state.recommendations } : {}),
-      decisions: input.decisions || '', verification: input.verification || '', next: input.next || '', blockers: input.blockers || '' };
+      decisions: input.decisions ?? (current.state?.task === input.task ? current.state.decisions : '') ?? '',
+      verification: input.verification || '',
+      next: input.next ?? (input.progress === 'active' && current.state?.task === input.task ? current.state.next : '') ?? '',
+      blockers: input.blockers || '' };
     if (Object.hasOwn(input, 'recommendations')) value.recommendations = recommendations(input.recommendations, value.progress, { task: value.task, branch: actual.branch, head: actual.head });
     if (value.baseline !== null) {
       const baseline = json(baselineFile(value.baseline));
@@ -570,7 +573,7 @@ export async function main(args = process.argv.slice(2)) {
   let cwd = process.cwd();
   if (option >= 0) { cwd = args[option + 1] || fail('Missing project path'); args.splice(option, 2); }
   const [command = 'help', argument] = args;
-  if (command === 'help') return { commands: ['setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug>', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations})', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, setup, next, continue, status, help, doctor are agent skill modes; continue resumes unfinished work, next starts one revalidated follow-up after completion' };
+  if (command === 'help') return { commands: ['setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug>', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations})', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, grill [--deep] <task>, setup, next, continue, status, help, doctor are agent skill modes; grilling uses native questions and state-write, continue resumes unfinished work, next starts one revalidated follow-up after completion' };
   if (command === 'doctor') return doctor();
   const p = project(cwd);
   const input = () => JSON.parse(fs.readFileSync(0, 'utf8'));

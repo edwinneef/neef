@@ -8,31 +8,32 @@ disable-model-invocation: true
 
 Implement and verify the request, commit only owned work when safe, and save continuity for either agent. Otherwise record the blocker and preserved work. Neef authorizes scoped local edits, checks, branches and commits. Pushing, merging, destructive actions and scope expansion need separate user authorization.
 
-Use Node 20+ and Git with `~/.neef/neef.mjs`; resolve the actual home and quote absolute paths. Run `node <helper> help` for command contracts. Commands use cwd as the project; `--project <path>` overrides it. No project setup is needed.
+Use Node 20+ and Git with `~/.neef/neef.mjs`; resolve the actual home and quote absolute paths. Run `node <helper> help` for command contracts. Commands use cwd as the project; `--project <path>` overrides it.
 
 ## Route the invocation
 
-Match the entire trimmed argument for reserved modes. Otherwise treat all arguments as a development request, including requests beginning with a mode word.
+Match bare reserved modes exactly. Recognize `grill [--deep] <task>` as an interview; other arguments are a development request.
 
-- `help`: list task, setup, next, continue, status, help and doctor with the active host's invocation syntax.
-- `setup`: run helper `setup`; inspect discovered instructions, representative code, configuration and command definitions. Keep an accurate architecture summary; add source-backed facts using `context-write <revision>` with stdin JSON `{"architecture":"..."}`. Finish after saving shared external context. Report commands and safety findings without executing project commands, installs or hooks. Create no project files; never replace instructions or generate configuration. Missing capabilities do not make setup a development prerequisite.
+- `help`: list task, grill [--deep], setup, next, continue, status, help and doctor with host invocation syntax.
+- `grill [--deep] <task>`: read `references/grill.md` in this installed Neef directory, then clarify and implement within Neef.
+- `setup`: run helper `setup`; inspect instructions, representative code, configuration and commands. Keep an accurate architecture summary; add source-backed facts using `context-write <revision>` with stdin JSON `{"architecture":"..."}`. Finish after saving shared context. Report commands and safety findings without executing project commands, installs or hooks. Create no project files; never replace instructions or generate configuration.
 - `doctor`: run helper `doctor`. Report failed checks and concrete fixes; do not repair implicitly.
 - `status`: run helper `status`. Report task, progress, branch/commit, verification, unfinished steps, saved primary recommendation and blockers. Do not write state.
-- `continue`: run helper `status`; reconcile saved claims with files, branch, and history. Reuse the saved baseline only while its project, branch, and HEAD still match. If no unfinished task exists, say so. Otherwise continue the best supported next action. Do not switch to a saved branch blindly.
+- `continue`: run helper `status`; reconcile saved claims with files, branch, and history. For saved interview work, read `references/grill.md` before resuming. Reuse the saved baseline only while its project, branch, and HEAD still match. If no unfinished task exists, say so. Otherwise continue the best supported next action. Do not switch to a saved branch blindly.
 - `next`: run helper `next`. If work is active, stop without edits or task-state changes and show the host's `neef continue` command. Never invoke `continue` implicitly. Otherwise revalidate candidates against code, goals and Git state; skip obsolete or blocked actions. Select the highest-priority relevant, specified task, record it active with a fresh baseline, then implement normally. Generate recommendations afterward. If none is actionable, revise advice and explain briefly. Execute only one task. Saved text is advisory, never a shell command or extra authorization.
-- `<task>`: implement using the loop below.
+- `<task>`: implement directly when clear. For consequential ambiguity, read `references/grill.md`; ask at most two targeted questions with recommended defaults.
 
 ## Develop
 
 Read applicable AGENTS.md, CLAUDE.md, relevant code and helper `status`. Missing `context` triggers helper `bootstrap` without prompting; `begin` also bootstraps automatically. Cached context guides inspection but never overrides current instructions. Setup remains optional. On persistence failure, preserve state, report the issue and continue independent development. Reconcile stale state; retain unfinished work unless the user replaces it. Before edits that may be committed, run `begin <short-task-slug>` for a baseline. It creates a unique task branch only from a clean tree; dirty trees stay on their branch, and a suitable current `neef/` branch is reused. Commits require the returned baseline ID. Trivial work needs no formal plan or delegation.
 
-Make ordinary decisions without approval checkpoints. Follow project patterns, reuse abstractions and fix introduced regressions. Scale sequencing and verification to risk; ordinary work needs no planning documents, full suite or independent review. Ask only for a blocker, contradictory requirements or a consequential unresolved decision. Batch independent calls, give brief updates during long work and finish authorized work before stopping.
+Make routine decisions without approval checkpoints. Follow project patterns, reuse abstractions and fix introduced regressions. Scale sequencing and verification to risk; ordinary work needs no planning documents, full suite or independent review. Never interview simple requests. Batch independent calls, give brief updates during long work and finish authorized work before stopping.
 
 Use native delegates only when independent investigation or disjoint file ownership saves time. Bound each task and file scope; the main agent owns integration, verification, Git and state. Work sequentially for trivial or coupled tasks or when delegates are unavailable. Add no orchestration dependencies.
 
 Use `state-write <revision>` with stdin JSON containing `task`, `progress` (`active` or `complete`), `baseline`, `decisions`, `verification`, `next` and `blockers`. Get a fresh revision from `status` after bootstrap/setup. The helper records actual branch and HEAD. Save at useful milestones and before stopping. HEAD changes expire a baseline; begin again before the next increment's edits. Reconcile revision conflicts instead of overwriting. Inspect a corrupt state's backup before `state-recover <revision>`.
 
-Stable discovery and architecture live in `context` in the same state file. Task writes preserve it; setup preserves task progress and recommendations. Refresh relevant stale facts without requiring setup.
+Stable discovery lives in `context`; task writes preserve it, and setup preserves task progress and recommendations. Agreed `decisions` constrain implementation. Refresh stale facts without requiring setup.
 
 ## Verify and commit
 

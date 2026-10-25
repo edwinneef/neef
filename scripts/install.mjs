@@ -32,6 +32,9 @@ export function install(apply = false) {
     ['SKILL.md', path.join(user, '.claude/skills/neef/SKILL.md')],
     ['SKILL.md', path.join(user, '.agents/skills/neef/SKILL.md')],
     ['agents/openai.yaml', path.join(user, '.agents/skills/neef/agents/openai.yaml')],
+    ['references/grill.md', path.join(shared, 'references/grill.md')],
+    ['references/grill.md', path.join(user, '.claude/skills/neef/references/grill.md')],
+    ['references/grill.md', path.join(user, '.agents/skills/neef/references/grill.md')],
   ];
   const receiptPath = path.join(shared, 'install.json');
   noLinks(receiptPath);
@@ -47,10 +50,13 @@ export function install(apply = false) {
   for (const agent of ['.claude', '.agents']) {
     const root = path.join(user, agent, 'skills/neef');
     if (!fs.existsSync(root)) continue;
-    const allowed = agent === '.claude' ? ['SKILL.md'] : ['SKILL.md', 'agents'];
+    const allowed = agent === '.claude' ? ['SKILL.md', 'references'] : ['SKILL.md', 'agents', 'references'];
     for (const name of fs.readdirSync(root)) if (!allowed.includes(name)) throw new Error(`Unmanaged skill content preserved: ${path.join(root, name)}`);
     if (agent === '.agents' && fs.existsSync(path.join(root, 'agents'))) {
       for (const name of fs.readdirSync(path.join(root, 'agents'))) if (name !== 'openai.yaml') throw new Error(`Unmanaged agent metadata: ${name}`);
+    }
+    if (fs.existsSync(path.join(root, 'references'))) {
+      for (const name of fs.readdirSync(path.join(root, 'references'))) if (name !== 'grill.md') throw new Error(`Unmanaged skill reference: ${name}`);
     }
   }
   noLinks(path.join(shared, 'state'));
