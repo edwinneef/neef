@@ -1,5 +1,15 @@
 # Validation — 2026-10-25
 
+## Shorter post-commit tail
+
+- `prepare` and `commit` return the current state revision, so the closing
+  `state-write` needs no `status` re-read. SKILL.md now carries the essential
+  follow-up rule inline; `references/follow-up.md` stays installed for
+  blockers or competing follow-ups. Descriptive helper internals were trimmed
+  to keep SKILL.md at 7968 of its 8000-byte budget.
+- `npm run check`: all 62 tests passed, including revision assertions on
+  `prepare` and `commit`. Evidence: `.test-artifacts/post-commit-tail-check.log`.
+
 ## Self-describing state-write errors
 
 - `state-write` now names each malformed field and its expected type, for

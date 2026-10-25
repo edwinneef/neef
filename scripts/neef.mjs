@@ -581,7 +581,7 @@ function prepare(p, id, input) {
   const token = crypto.randomUUID();
   const selected = Object.fromEntries(files.map(name => [name, fileState(p.root, name)]));
   atomic(baselineFile(token), JSON.stringify({ project: p.root, actual, files, selected, message: input.message, diff, kind: 'commit' }));
-  return { token, files, message: input.message, diff };
+  return { token, files, message: input.message, diff, revision: stateRead(p).revision };
 }
 
 function commit(p, token) {
@@ -620,7 +620,7 @@ function commit(p, token) {
       if (!published && exists(indexLock)) fs.unlinkSync(indexLock);
       if (exists(privateIndex)) fs.unlinkSync(privateIndex);
     }
-    return { ...snapshot(p), output };
+    return { ...snapshot(p), revision: stateRead(p).revision, output };
   });
 }
 

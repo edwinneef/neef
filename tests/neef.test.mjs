@@ -72,9 +72,11 @@ test('clean trivial change commits only the reviewed change and consumes its tok
   f.write('owned.txt', 'after\n');
   const prepared = f.prepare(begin.baseline);
   assert.match(prepared.diff, /\+after/);
+  assert.equal(prepared.revision, begin.revision);
   assert.equal(f.git('diff', '--cached'), '');
   const committed = f.run(['commit', prepared.token]);
   assert.equal(committed.changes.length, 0);
+  assert.equal(committed.revision, begin.revision);
   assert.equal(committed.branch, 'main');
   assert.equal(f.git('branch', '--format=%(refname:short)'), 'main');
   assert.equal(f.git('show', 'HEAD:owned.txt'), 'after');
@@ -517,7 +519,8 @@ test('advisor aliases install shared read-only guidance without replacing unfini
     assert.equal(fs.readFileSync(path.join(root, 'references/follow-up.md'), 'utf8'), followUp);
     assert.match(skill, /`options` or `ask <description>`: read `references\/advisor.md`/);
     assert.match(skill, /Advice is read-only, including external state/);
-    assert.match(skill, /After development, read `references\/follow-up.md`/);
+    assert.match(skill, /After development, finish with one `state-write`/);
+    assert.match(skill, /Read `references\/follow-up.md` only for blockers/);
   }
   const help = f.run(['help']);
   assert.ok(help.commands.includes('options'));
