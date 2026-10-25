@@ -240,7 +240,8 @@ test('begin preserves a different branch and refuses development outside main', 
 
 test('invalid or oversized state and missing recovery backup fail without overwriting data', t => {
   const f = fixture(t, false);
-  f.state('missing', 'Invalid progress', { progress: 'unknown' }, /Invalid state fields/);
+  f.state('missing', 'Invalid progress', { progress: 'unknown' }, /Invalid state fields: progress must be "active" or "complete"/);
+  f.state('missing', 'Array fields', { decisions: [], blockers: ['none'] }, /decisions must be a string \(got array\); blockers must be a string \(got array\)/);
   assert.equal(f.run(['status']).state, null);
   f.state('missing', 'Too large', { decisions: 'x'.repeat(9000) }, /State must stay under/);
   f.state('missing', 'Valid task');

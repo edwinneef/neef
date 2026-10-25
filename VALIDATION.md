@@ -1,5 +1,17 @@
 # Validation — 2026-10-25
 
+## Self-describing state-write errors
+
+- `state-write` now names each malformed field and its expected type, for
+  example `blockers must be a string (got array)`, before taking the lock.
+  Null optional fields remain treated as omitted. SKILL.md and the help
+  contract state that decisions, verification, next and blockers are strings.
+- Motivation: smoke artifacts held 34 bare `Invalid state fields` failures;
+  28 of 69 state-writing runs hit at least one and repaired by reading source.
+- `npm run check`: all 62 tests passed, with new array-field coverage. A first
+  run caught SKILL.md exceeding its 8000-byte budget; the wording was shortened.
+- Evidence: `.test-artifacts/state-field-errors-check.log`.
+
 ## Reuse helper revisions and session instructions
 
 - `begin` now returns the bootstrap state revision for Git and non-Git projects,
