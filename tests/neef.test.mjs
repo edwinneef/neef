@@ -586,7 +586,7 @@ test('installer rejects linked installation ancestors without writing the destin
   assert.equal(fs.existsSync(f.home), false);
 });
 
-test('setup discovers reusable project facts without running commands or changing a dirty project', t => {
+test('setup discovers facts and adds directions while preserving dirty project content and task state', t => {
   const f = fixture(t);
   f.write('package.json', JSON.stringify({ type: 'module', packageManager: 'pnpm@10', main: 'src/main.tsx',
     dependencies: { react: '1', vite: '1', typescript: '1' },
@@ -623,7 +623,10 @@ test('setup discovers reusable project facts without running commands or changin
   const { context, ...task } = after;
   assert.deepEqual(task, saved.state);
   assert.doesNotMatch(JSON.stringify(context), /must-not-be-stored|node_modules\/ignored/);
-  assert.equal(f.git('status', '--porcelain'), before);
+  assert.equal(fs.readFileSync(path.join(f.root, 'AGENTS.md'), 'utf8').startsWith('Use existing React patterns. Never deploy during setup.\n'), true);
+  assert.deepEqual(setup.directions.files, ['AGENTS.md', 'CLAUDE.md']);
+  assert.equal(fs.readFileSync(path.join(setup.directions.backup, '0.bak'), 'utf8'), 'Use existing React patterns. Never deploy during setup.\n');
+  assert.equal(f.git('status', '--porcelain').replace('?? CLAUDE.md\n', ''), before);
   assert.deepEqual(fs.readFileSync(path.join(f.root, '.git/index')), index);
   assert.equal(fs.existsSync(path.join(f.root, '.neef')), false);
 });
@@ -644,6 +647,47 @@ test('setup and architecture enrichment are idempotent and task writes preserve 
   assert.equal(f.run(['bootstrap']).initialized, false);
   assert.equal(f.run(['status']).state.context.depth, 'full');
   assert.ok(fs.readFileSync(f.statePath(), 'utf8').split('\n').length < 40);
+});
+
+test('setup directions preserve bytes, back up originals and remain idempotent', t => {
+  const f = fixture(t);
+  const original = Buffer.from('\ufeff# Personal rules\r\nKeep my settings.');
+  f.write('CLAUDE.md', original);
+  const first = f.run(['setup']);
+  const agent = fs.readFileSync(path.join(f.root, 'AGENTS.md'));
+  const claude = fs.readFileSync(path.join(f.root, 'CLAUDE.md'));
+  assert.deepEqual(claude.subarray(0, original.length), original);
+  assert.ok(claude.toString().includes('settings.\r\n\r\n<!-- neef:'));
+  assert.match(agent.toString(), /ordinary prompts without a NEEF invocation/);
+  assert.match(agent.toString(), /Suggestions are advisory/);
+  assert.deepEqual(fs.readFileSync(path.join(first.directions.backup, '1.bak')), original);
+  const second = f.run(['setup']);
+  assert.deepEqual(second.directions, { files: [], backup: null });
+  assert.deepEqual(fs.readFileSync(path.join(f.root, 'CLAUDE.md')), claude);
+  assert.deepEqual(fs.readFileSync(path.join(f.root, 'AGENTS.md')), agent);
+});
+
+test('setup refuses unsafe or edited instructions before changing either instruction file', t => {
+  const f = fixture(t);
+  f.write('CLAUDE.md', '<!-- neef:next-prompt:start -->\nPersonal edit\n');
+  f.run(['setup'], undefined, /Edited or malformed/);
+  assert.equal(fs.existsSync(path.join(f.root, 'AGENTS.md')), false);
+  fs.unlinkSync(path.join(f.root, 'CLAUDE.md'));
+  const outside = path.join(path.dirname(f.root), 'outside');
+  fs.mkdirSync(outside);
+  fs.symlinkSync(outside, path.join(f.root, 'CLAUDE.md'), process.platform === 'win32' ? 'junction' : 'dir');
+  f.run(['setup'], undefined, /Linked path refused/);
+  assert.equal(fs.existsSync(path.join(f.root, 'AGENTS.md')), false);
+  assert.deepEqual(fs.readdirSync(outside), []);
+});
+
+test('setup refuses a backup directory linked into the project', t => {
+  const f = fixture(t);
+  fs.mkdirSync(f.home, { recursive: true });
+  fs.symlinkSync(f.root, path.join(f.home, 'backups'), process.platform === 'win32' ? 'junction' : 'dir');
+  f.run(['setup'], undefined, /outside the project/);
+  assert.equal(fs.existsSync(path.join(f.root, 'AGENTS.md')), false);
+  assert.equal(fs.existsSync(path.join(f.root, 'CLAUDE.md')), false);
 });
 
 test('begin revisions support direct state writes and reject intervening updates', t => {
@@ -705,7 +749,7 @@ test('setup skips linked project trees and storage inside the project', t => {
   fs.writeFileSync(path.join(outside, 'AGENTS.md'), 'Private outside instructions');
   fs.symlinkSync(outside, path.join(f.root, 'linked'), process.platform === 'win32' ? 'junction' : 'dir');
   const setup = f.run(['setup']);
-  assert.deepEqual(setup.context.instructions, []);
+  assert.deepEqual(setup.context.instructions, ['AGENTS.md', 'CLAUDE.md']);
   assert.equal(setup.safety.git, false);
   assert.equal(setup.safety.selectiveCommitAvailable, false);
   const result = spawnSync(process.execPath, [helper, '--project', f.root, 'setup'], {

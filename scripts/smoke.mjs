@@ -11,6 +11,7 @@ const artifacts = path.join(source, '.test-artifacts', `hosts-${Date.now()}`);
 fs.mkdirSync(artifacts, { recursive: true });
 const shared = path.join(artifacts, 'shared');
 const setup = process.argv.includes('--setup');
+const directions = process.argv.includes('--directions');
 const help = process.argv.includes('--help');
 const aliases = process.argv.includes('--alias');
 const discovery = process.argv.includes('--next-discovery');
@@ -63,6 +64,13 @@ async function run(host) {
   const env = { ...process.env, NEEF_HOME: shared };
   delete env.CLAUDECODE;
   fs.mkdirSync(shared, { recursive: true });
+  if (directions) {
+    const configured = spawnSync(process.execPath, [helper, 'setup'], { cwd: root, env, encoding: 'utf8' });
+    if (configured.status) throw new Error(configured.stdout + configured.stderr);
+    git(root, ['add', '--', 'AGENTS.md', 'CLAUDE.md']);
+    git(root, ['commit', '-qm', 'Configure project directions']);
+  }
+  const beforeDirections = directions ? { head: git(root, ['rev-parse', 'HEAD']), state: spawnSync(process.execPath, [helper, 'status'], { cwd: root, env, encoding: 'utf8' }).stdout } : null;
   if (next || active || help) {
     const seeded = spawnSync(process.execPath, [helper, 'state-write', 'missing'], { cwd: root, env, encoding: 'utf8', input: JSON.stringify({
       task: 'Implement the base greeting', progress: active || help ? 'active' : 'complete',
@@ -80,7 +88,7 @@ async function run(host) {
   const prefix = host === 'claude' ? '/neef' : '$neef';
   const invoke = mode => `${prefix}${aliases ? '-' : ' '}${mode}`;
   const task = aliases ? invoke('task') : prefix;
-  const prompt = help ? invoke('help') : next || active ? invoke('next') : setup ? invoke('setup') : host === 'claude'
+  const prompt = directions ? 'Read index.mjs and explain what greet() returns. Do not change files or run workflows.' : help ? invoke('help') : next || active ? invoke('next') : setup ? invoke('setup') : host === 'claude'
     ? `${task} Change greet() to return "Hello, Neef!", update its existing test, verify and commit. Work only in this disposable project.`
     : `${task} Add an optional name parameter to greet(name), defaulting to "world". Preserve greet() output, add a focused named-greeting test, verify and commit. Work only in this disposable project.`;
   const args = host === 'claude'
@@ -96,7 +104,7 @@ async function run(host) {
   child.stdin.end(prompt);
   const code = await new Promise((resolve, reject) => { child.on('error', reject); child.on('exit', resolve); });
   fs.closeSync(out); fs.closeSync(err);
-  const checks = setup || active || help ? { status: null } : spawnSync(process.execPath, ['--test'], { cwd: root, encoding: 'utf8' });
+  const checks = setup || active || help || directions ? { status: null } : spawnSync(process.execPath, ['--test'], { cwd: root, encoding: 'utf8' });
   const result = { host, code, root, initial, head: git(root, ['rev-parse', 'HEAD']),
     status: git(root, ['status', '--porcelain']), checks: checks.status,
     state: fs.existsSync(path.join(shared, 'state')) ? fs.readdirSync(path.join(shared, 'state')) : [] };
@@ -109,7 +117,12 @@ async function run(host) {
   result.continuationCommand = active ? /(?:\$neef|\/neef) continue/.test(finalMessage)
     : /(?:^|\n)\s*(?:[-*]\s*)?(?:\*\*)?(?:Run:?(?:\*\*)?\s*)?`?(?:\$neef|\/neef) next\b/i.test(finalMessage);
   result.contextDepth = saved?.context?.depth;
-  if (help) {
+  if (directions) {
+    result.reply = finalMessage;
+    result.passed = code === 0 && result.head === beforeDirections.head && result.status === ''
+      && status.stdout === beforeDirections.state && /Hello, world!/.test(finalMessage)
+      && /next|prompt|you can|try|ask|would you/i.test(finalMessage);
+  } else if (help) {
     result.help = { text: finalMessage, stateUnchanged: status.stdout === beforeHelp };
     result.passed = code === 0 && result.head === initial && result.status === '' && result.help.stateUnchanged
       && /Changes/i.test(finalMessage) && /Stops/i.test(finalMessage)
@@ -131,7 +144,7 @@ async function run(host) {
   } else if (setup) {
     result.setup = { depth: saved?.context?.depth, architecture: saved?.context?.architecture,
       noCommands: !fs.existsSync(path.join(root, 'COMMAND_WAS_RUN')), task: saved?.task };
-    result.passed = code === 0 && result.head === initial && result.status === '' && result.setup.noCommands
+    result.passed = code === 0 && result.head === initial && result.status === 'M AGENTS.md\n?? CLAUDE.md' && result.setup.noCommands
       && result.setup.depth === 'full' && !!result.setup.architecture && result.setup.task === '';
   } else {
     result.recommendations = saved?.recommendations;

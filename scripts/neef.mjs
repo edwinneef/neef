@@ -15,7 +15,7 @@ const commandCatalog = [
   { name: 'prototype', usage: 'prototype <description>', aliases: ['proto'], intent: 'explore', changes: 'External scratch demo and README; source/Git/task state unchanged', stops: 'Working demo and handoff; no automatic production promotion' },
   { name: 'options', usage: 'options', intent: 'choose', changes: 'Nothing during advice (read-only)', stops: 'Ranked choices; a later explicit selection can execute its action' },
   { name: 'ask', usage: 'ask <description>', intent: 'choose', changes: 'Nothing (read-only)', stops: 'Best-fit command and why; never invokes it' },
-  { name: 'setup', usage: 'setup', intent: 'inspect', changes: 'External project context only', stops: 'Discovery saved; no project commands run' },
+  { name: 'setup', usage: 'setup', intent: 'inspect', changes: 'External context and managed AGENTS.md/CLAUDE.md directions', stops: 'Context and next-prompt rule saved; no project commands run' },
   { name: 'next', usage: 'next', intent: 'build', changes: 'Project files and task state; safe local commits', stops: 'One useful action; active tasks require continue instead' },
   { name: 'continue', usage: 'continue', intent: 'build', changes: 'Existing task and scoped project work; frequent safe local commits', stops: 'Scoped work complete, or no further progress without user input' },
   { name: 'status', usage: 'status', intent: 'inspect', changes: 'Nothing (read-only)', stops: 'Progress, Git, verification and blockers reported' },
@@ -471,6 +471,53 @@ function discover(p, minimal) {
   return { context, warnings: [...new Set(warnings)].slice(0, 8) };
 }
 
+const directionBlock = `<!-- neef:next-prompt:start -->
+## Next prompt
+
+End each final reply about this project with one useful next-prompt direction, including replies to ordinary prompts without a NEEF invocation. Give a concrete, copyable prompt or the appropriate NEEF command in the current host's syntax, with enough detail to explain its intended result. Base it on current work and established goals; prefer the actual action over a bare "neef next". When waiting for input, make the needed answer the direction. When no useful work remains, say so and invite the next goal rather than inventing work. Use one closing direction, without repeating it elsewhere.
+
+Suggestions are advisory. Invoke NEEF only when the user explicitly requests it; setup does not authorize automatic workflows or executing suggested prompts.
+<!-- neef:next-prompt:end -->`;
+
+function projectDirections(p) {
+  const entries = ['AGENTS.md', 'CLAUDE.md'].map(name => {
+    const file = path.join(p.root, name);
+    const digest = fileState(p.root, name);
+    const old = digest === null ? null : fs.readFileSync(file);
+    const text = old?.toString('utf8') || '';
+    const block = directionBlock.replaceAll('\n', text.includes('\r\n') ? '\r\n' : '\n');
+    if (text.includes('<!-- neef:next-prompt:')) {
+      if (!text.includes(block) || text.split('<!-- neef:next-prompt:').length !== 3) fail(`Edited or malformed NEEF direction block: ${name}; preserve it and reconcile manually`);
+      return { name, file, old, bytes: old };
+    }
+    const newline = text.includes('\r\n') ? '\r\n' : '\n';
+    return { name, file, old, bytes: Buffer.concat([old || Buffer.alloc(0), Buffer.from(`${text ? (text.endsWith('\n') ? newline : newline + newline) : ''}${block}${newline}`)]) };
+  }).filter(entry => !entry.old?.equals(entry.bytes));
+  if (!entries.length) return { files: [], backup: null };
+  const backup = path.join(home(), 'backups', `directions-${p.id}-${crypto.randomUUID()}`);
+  requireExternalStorage(p, [backup]);
+  fs.mkdirSync(backup, { recursive: true });
+  fs.writeFileSync(path.join(backup, 'restore.json'), JSON.stringify(entries.map(({ file, old }, i) => ({ target: file, backup: old === null ? null : `${i}.bak` })), null, 2));
+  for (const [i, entry] of entries.entries()) if (entry.old !== null) fs.writeFileSync(path.join(backup, `${i}.bak`), entry.old);
+  const changed = [];
+  try {
+    for (const entry of entries) {
+      const digest = fileState(p.root, entry.name);
+      if (digest !== (entry.old === null ? null : hash(entry.old))) fail(`Instruction file changed: ${entry.name}`);
+      atomic(entry.file, entry.bytes);
+      changed.push(entry);
+      if (!fs.readFileSync(entry.file).equals(entry.bytes)) fail(`Instruction verification failed: ${entry.name}`);
+    }
+  } catch (error) {
+    for (const entry of changed.reverse()) {
+      if (entry.old === null) fs.unlinkSync(entry.file);
+      else atomic(entry.file, entry.old);
+    }
+    throw error;
+  }
+  return { files: entries.map(entry => entry.name), backup };
+}
+
 function setup(p, minimal = false) {
   const before = stateRead(p);
   if (before.error) fail(before.error);
@@ -507,12 +554,14 @@ function setup(p, minimal = false) {
     const current = stateRead(p);
     if (current.error) fail(current.error);
     if (current.revision !== before.revision) fail('Stale state revision; reread and reconcile');
+    const directions = minimal ? null : projectDirections(p);
+    if (directions?.files.length) Object.assign(context, discover(p, minimal).context);
     if (current.state?.context?.fingerprint === context.fingerprint) context.architecture = current.state.context.architecture || '';
-    if (JSON.stringify(current.state?.context) === JSON.stringify(context)) return { initialized: false, revision: current.revision, context, safety: { ...safety, externalStateWritable: true }, warnings };
+    if (JSON.stringify(current.state?.context) === JSON.stringify(context)) return { initialized: false, revision: current.revision, context, directions, safety: { ...safety, externalStateWritable: true }, warnings };
     const value = current.state || { version: 1, project: p.root, revision: crypto.randomUUID(), updated: new Date().toISOString(),
       task: '', progress: 'complete', branch: null, head: null, baseline: null, decisions: '', verification: '', next: '', blockers: '' };
     const saved = saveState(p, current, { ...value, context });
-    return { initialized: true, revision: saved.revision, context, safety: { ...safety, externalStateWritable: true }, warnings };
+    return { initialized: true, revision: saved.revision, context, directions, safety: { ...safety, externalStateWritable: true }, warnings };
   });
 }
 

@@ -1,5 +1,34 @@
 # Validation — 2026-10-25
 
+## Persistent next-prompt directions
+
+- Explicit setup now adds a managed direction block to root AGENTS.md and
+  CLAUDE.md. Existing bytes remain intact, originals have external backups and
+  restore metadata, and writes are verified. Matching blocks are idempotent;
+  malformed or edited blocks and linked files are refused before either write.
+  Minimal bootstrap still creates no project instruction files.
+- The rule covers ordinary project replies as well as NEEF workflows: one
+  concrete suggested prompt or host command, the needed input when waiting,
+  or an honest invitation for the next goal when work is exhausted. Suggestions
+  remain advisory and NEEF execution remains explicit-only.
+- Focused setup checks passed, including task-state and index preservation,
+  original CRLF/BOM bytes, backups, repeat setup and unsafe targets. The first
+  full check caught the 8000-byte skill budget; touched routing prose was
+  shortened while preserving its command coverage.
+- Fresh Claude and Codex ordinary-prompt checks both supplied concrete next
+  prompts without changing files, Git or shared state. Evidence:
+  `.test-artifacts/hosts-1792947487324/`; reproduce with
+  `node scripts/smoke.mjs --directions`. Managed install passed dry run,
+  backup/copy verification and doctor; setup enabled the rule in this project.
+- This repository has no Bun skill-guard command or portable authoring-guide
+  file; its Node checks and native host fixtures cover the changed contracts.
+- Final `npm run check`: 64/64 passed. After adding backup-link protection,
+  all 11 focused setup/installation checks passed, including the new case.
+  Evidence: `.test-artifacts/next-prompt-check-final.log` and
+  `.test-artifacts/next-prompt-focused-final.log`. Fresh setup aliases passed
+  on both hosts without project-command execution or Git commits:
+  `.test-artifacts/hosts-1792947528064/`.
+
 ## Codex post-commit task-alias check
 
 - Fresh installed `$neef-task` smoke passed: default and named greetings,
