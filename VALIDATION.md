@@ -9,6 +9,10 @@
   to keep SKILL.md at 7968 of its 8000-byte budget.
 - `npm run check`: all 62 tests passed, including revision assertions on
   `prepare` and `commit`. Evidence: `.test-artifacts/post-commit-tail-check.log`.
+- Fresh installed Claude task-alias smoke (same greeting task as the earlier
+  48.7s / 16-turn run): 23.9s / 7 turns, one first-try `state-write`, no
+  `status` re-read and no follow-up reference read. One sample; Codex not rerun.
+  Evidence: `.test-artifacts/hosts-1792946649095/`.
 
 ## Self-describing state-write errors
 
