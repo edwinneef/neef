@@ -1,5 +1,48 @@
 # Validation — 2026-10-25
 
+## Isolated prototype workflow
+
+- Added `prototype <description>` and equivalent `proto` routes and explicit
+  aliases on Claude and Codex, using one shared prototype reference. The workflow
+  builds runnable visual or nonvisual demonstrations, explores alternatives when
+  useful, refines the same demo through ordinary follow-ups, and records a
+  selected concept and production acceptance criteria before a NEEF handoff.
+- The internal `prototype-workspace [slug]` helper lists recent per-project demos
+  without writing, or allocates a unique external scratch directory. No new
+  dependencies or task-state schema. It rejects traversal, invalid slugs,
+  project-local storage and linked prototype directories; discovery ignores
+  linked demo entries. Prototypes preserve active production tasks and Git.
+- `npm run check`: all 57 tests passed. Eight focused scratch/alias/installation/
+  prompt-budget/storage tests also passed. Coverage includes missing-state
+  read-only listing, distinct workspaces for repeated slugs, separate projects,
+  active/dirty work preservation, unsafe storage, alias parity, receipt backups,
+  managed-edit refusal and preservation of demos across reinstallations.
+- Fresh installed sessions on both hosts passed four workflow turns: two
+  interactive HTML concepts; a plain-language compactness refinement in the same
+  workspace; approval of concept 2 with a concrete production handoff and no
+  promotion; and a new nonvisual Node search comparison invoked through `proto`.
+  Both algorithms returned index 2 for target 6 in the synthetic sorted array.
+  Every turn preserved source files, Git and the complete production task state.
+- Both hosts' `ask` prototype advice now recommends the installed route and
+  stops without allocating a workspace or changing project/state files.
+- Initial Claude visual work skipped checks when a browser was unavailable.
+  Guidance now requires a lightweight script syntax check even without preview,
+  with check files in scratch or inline scripts checked in memory via vm.Script.
+  The final headless Claude check passed syntax and exercised selection/filter/
+  concept-switch logic with a small DOM stub, keeping its check file in scratch.
+  Codex independently exercised its generated demo with a DOM simulation.
+- Visual rendering and actual browser input remain unverified. The local-file
+  preview was blocked by browser URL policy; native host browser access was also
+  unavailable or denied. Syntax/DOM simulations are not visual proof.
+- Installed globally through the managed installer after a safe dry run, with
+  rollback backups and copied-file hash verification. Prototype artifacts and
+  existing task state remain outside the install receipt and are preserved.
+- Evidence: `.test-artifacts/prototypes-1792917659468/` (both full workflows),
+  `prototypes-1792918138421/` (final headless syntax/scratch check), and
+  `.test-artifacts/advisors-1792917720606/` (both advice-only routes). Reproduce
+  with `node scripts/prototype-smoke.mjs` (`--claude`/`--codex`, `--ui-only`) and
+  `node scripts/advisor-smoke.mjs --prototype`. Ordinary tests do not launch hosts.
+
 ## Options and ask advisors
 
 - Added `options` and `ask <description>` plus generated explicit aliases for

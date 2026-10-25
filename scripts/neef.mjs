@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 export const legacy = ['ed', 'ed-auto', 'ed-feature', 'ed-help', 'ed-next', 'ed-setup', 'ed-skills', 'ed-status'];
-export const commandNames = ['task', 'shape', 'plan', 'challenge', 'options', 'ask', 'setup', 'next', 'continue', 'status', 'help', 'doctor'];
+export const commandNames = ['task', 'shape', 'plan', 'challenge', 'prototype', 'proto', 'options', 'ask', 'setup', 'next', 'continue', 'status', 'help', 'doctor'];
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const fail = message => { throw new Error(message); };
 const home = () => path.resolve(process.env.NEEF_HOME || path.join(os.homedir(), '.neef'));
@@ -48,8 +48,8 @@ function storagePath(target) {
   }
 }
 
-function requireExternalStorage(p) {
-  for (const target of [home(), path.join(home(), 'state'), path.join(home(), 'baselines')]) {
+function requireExternalStorage(p, additional = []) {
+  for (const target of [home(), path.join(home(), 'state'), path.join(home(), 'baselines'), ...additional]) {
     const relative = path.relative(p.root, storagePath(target));
     if (!relative || (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`))) {
       fail('NEEF state storage must be outside the project');
@@ -153,6 +153,28 @@ export function status(p) {
     if (saved.state.head !== actual.head) discrepancies.push('HEAD changed; reconcile saved progress with history and files');
   }
   return { project: p.root, ...saved, actual, discrepancies };
+}
+
+function prototypeWorkspace(p, slug) {
+  const parent = path.join(home(), 'prototypes');
+  const root = path.join(parent, p.id);
+  requireExternalStorage(p, [root]);
+  for (const directory of [parent, root]) {
+    try { if (fs.lstatSync(directory).isSymbolicLink()) fail(`Linked prototype storage refused: ${directory}`); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
+  if (slug !== undefined) {
+    if (!/^[a-z0-9][a-z0-9-]{0,47}$/.test(slug)) fail('Provide a prototype slug of 1-48 lowercase letters, digits or hyphens');
+    fs.mkdirSync(root, { recursive: true });
+    const workspace = fs.mkdtempSync(path.join(root, `${slug}-`));
+    return { project: p.root, workspace, readme: path.join(workspace, 'README.md') };
+  }
+  const workspaces = exists(root) ? fs.readdirSync(root, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && !entry.isSymbolicLink())
+    .map(entry => ({ workspace: path.join(root, entry.name), created: fs.statSync(path.join(root, entry.name)).birthtimeMs }))
+    .sort((a, b) => b.created - a.created || a.workspace.localeCompare(b.workspace))
+    .slice(0, 20).map(({ workspace }) => ({ workspace, readme: path.join(workspace, 'README.md') })) : [];
+  return { project: p.root, root, workspaces };
 }
 
 function saveState(p, current, value) {
@@ -639,10 +661,10 @@ export async function main(args = process.argv.slice(2)) {
   const [command = 'help', argument] = args;
   if (command === 'help') return {
     name: 'NEEF', fullName: 'No-nonsense Engineering & Execution Framework', motto: 'Navigate → Execute → Evaluate → Follow-up',
-    commands: ['<task>', 'shape [--deep] <idea>', 'plan <feature>', 'challenge [--deep] <topic>', 'options', 'ask <description>', 'setup', 'next', 'continue', 'status', 'help', 'doctor'],
+    commands: ['<task>', 'shape [--deep] <idea>', 'plan <feature>', 'challenge [--deep] <topic>', 'prototype <description>', 'proto <description> (alias of prototype)', 'options', 'ask <description>', 'setup', 'next', 'continue', 'status', 'help', 'doctor'],
     invocation: { codex: '$neef <command>', claude: '/neef <command>' },
     aliases: { codex: commandNames.map(command => `$neef-${command}`), claude: commandNames.map(command => `/neef-${command}`) },
-    helperCommands: ['setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug>', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?})', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?}]}. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. Shared state remains under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, shape [--deep] <idea>, plan <feature>, challenge [--deep] <topic>, options, ask <description>, setup, next, continue, status, help, doctor are agent skill modes; options ranks project actions and ask recommends an existing command, both read-only including external state and without execution; shaping uses native questions and state-write then implements unless discussion-only; plan saves a complexity-sized full-feature roadmap then stops, continue executes at most one saved phase; challenge is read-only except external recommendations-write and never implements, continue resumes unfinished work, next starts one revalidated follow-up after completion' };
+    helperCommands: ['prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug>', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?})', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?}]}. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. Shared state remains under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, shape [--deep] <idea>, plan <feature>, challenge [--deep] <topic>, prototype <description> (proto alias), options, ask <description>, setup, next, continue, status, help, doctor are agent skill modes; prototype builds or refines isolated external demos and hands approved concepts to development without automatic production changes; options ranks project actions and ask recommends an existing command, both read-only including external state and without execution; shaping uses native questions and state-write then implements unless discussion-only; plan saves a complexity-sized full-feature roadmap then stops, continue executes at most one saved phase; challenge is read-only except external recommendations-write and never implements, continue resumes unfinished work, next starts one revalidated follow-up after completion' };
   if (command === 'doctor') return doctor();
   const p = project(cwd);
   if (['setup', 'bootstrap', 'context-write', 'begin', 'prepare', 'commit', 'state-write', 'recommendations-write', 'state-recover'].includes(command)) requireExternalStorage(p);
@@ -651,6 +673,7 @@ export async function main(args = process.argv.slice(2)) {
   if (command === 'bootstrap') return bootstrap(p);
   if (command === 'context-write') return contextWrite(p, argument, input());
   if (command === 'status') return status(p);
+  if (command === 'prototype-workspace') return prototypeWorkspace(p, argument);
   if (command === 'next') return next(p);
   if (command === 'begin') return begin(p, argument);
   if (command === 'state-write') return stateWrite(p, argument, input());

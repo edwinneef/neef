@@ -117,8 +117,8 @@ async function run(host) {
       }
 
       const prototype = await turn('ask-prototype', `${prefix}-ask Explore an isolated interactive prototype of three different greeting APIs before deciding what to build`);
-      assert.match(prototype, /discussion.only/i);
-      assert.match(prototype, /not (?:available|installed|implemented)|unavailable|future|no (?:dedicated|existing|installed)/i);
+      assert.match(prototype, new RegExp(`${host === 'claude' ? '/' : '\\$'}neef(?:-prototype| prototype|-proto| proto)\\b`));
+      assert.doesNotMatch(prototype, /no installed.*proto|proto.*(?:unavailable|future capability)/i);
     }
 
     if (!prototypeOnly) {

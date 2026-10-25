@@ -33,7 +33,7 @@ export function install(apply = false) {
     ['SKILL.md', path.join(user, '.claude/skills/neef/SKILL.md')],
     ['SKILL.md', path.join(user, '.agents/skills/neef/SKILL.md')],
     ['agents/openai.yaml', path.join(user, '.agents/skills/neef/agents/openai.yaml')],
-    ...['shape', 'plan', 'challenge', 'advisor', 'next', 'follow-up'].flatMap(mode => [shared, path.join(user, '.claude/skills/neef'), path.join(user, '.agents/skills/neef')]
+    ...['shape', 'plan', 'challenge', 'prototype', 'advisor', 'next', 'follow-up'].flatMap(mode => [shared, path.join(user, '.claude/skills/neef'), path.join(user, '.agents/skills/neef')]
       .map(root => [`references/${mode}.md`, path.join(root, `references/${mode}.md`)])),
   ];
   for (const command of commandNames) {
@@ -50,7 +50,7 @@ export function install(apply = false) {
     noLinks(target);
     let bytes = fs.readFileSync(path.join(source, relative));
     if (command) bytes = Buffer.from(bytes.toString('utf8').replaceAll('{{command}}', command)
-      .replaceAll('{{route}}', command === 'task' ? '`<task>` route (use the supplied development request as the task)' : `\`${command}\` route`));
+      .replaceAll('{{route}}', command === 'task' ? '`<task>` route (use the supplied development request as the task)' : `\`${command === 'proto' ? 'prototype' : command}\` route`));
     const old = fs.existsSync(target) ? fs.readFileSync(target) : null;
     if (old && previous?.files?.[target] !== digest(old)) throw new Error(`Unmanaged or edited file preserved: ${target}`);
     return { target, bytes, old, hash: digest(bytes) };
@@ -75,7 +75,7 @@ export function install(apply = false) {
       for (const name of fs.readdirSync(path.join(root, 'agents'))) if (name !== 'openai.yaml') throw new Error(`Unmanaged agent metadata: ${name}`);
     }
     if (fs.existsSync(path.join(root, 'references'))) {
-      for (const name of fs.readdirSync(path.join(root, 'references'))) if (!['shape.md', 'plan.md', 'challenge.md', 'advisor.md', 'next.md', 'follow-up.md'].includes(name) && !retired.includes(path.join(root, 'references', name))) throw new Error(`Unmanaged skill reference: ${name}`);
+      for (const name of fs.readdirSync(path.join(root, 'references'))) if (!['shape.md', 'plan.md', 'challenge.md', 'prototype.md', 'advisor.md', 'next.md', 'follow-up.md'].includes(name) && !retired.includes(path.join(root, 'references', name))) throw new Error(`Unmanaged skill reference: ${name}`);
     }
   }
   noLinks(path.join(shared, 'state'));

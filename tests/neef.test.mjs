@@ -335,7 +335,7 @@ test('every command installs an explicit alias that routes through canonical Nee
   const plan = f.install();
   assert.equal(fs.existsSync(f.user), false);
   f.install(true);
-  const commands = ['task', 'shape', 'plan', 'challenge', 'options', 'ask', 'setup', 'next', 'continue', 'status', 'help', 'doctor'];
+  const commands = ['task', 'shape', 'plan', 'challenge', 'prototype', 'proto', 'options', 'ask', 'setup', 'next', 'continue', 'status', 'help', 'doctor'];
   for (const command of commands) {
     for (const agent of ['.agents', '.claude']) {
       const root = path.join(f.user, agent, 'skills', `neef-${command}`);
@@ -352,6 +352,89 @@ test('every command installs an explicit alias that routes through canonical Nee
   }
   assert.deepEqual(f.run(['help']).aliases.codex, commands.map(command => `$neef-${command}`));
   assert.deepEqual(f.run(['help']).aliases.claude, commands.map(command => `/neef-${command}`));
+});
+
+test('prototype allocation is isolated, unique and preserves active work and Git', t => {
+  const f = fixture(t);
+  const empty = f.run(['prototype-workspace']);
+  assert.deepEqual(empty.workspaces, []);
+  assert.equal(fs.existsSync(f.home), false);
+  const saved = f.state('missing', 'Production feature', { decisions: 'Keep my task', next: 'Finish production work' });
+  f.write('user.txt', 'Uncommitted user tuning\n');
+  const before = f.run(['status']);
+  const first = f.run(['prototype-workspace', 'algorithm-demo']);
+  fs.writeFileSync(first.readme, '# Algorithm comparison\nRun: node demo.mjs\n');
+  const second = f.run(['prototype-workspace', 'algorithm-demo']);
+  assert.notEqual(first.workspace, second.workspace);
+  assert.ok(first.workspace.startsWith(`${empty.root}${path.sep}`));
+  assert.ok(!first.workspace.startsWith(`${f.root}${path.sep}`));
+  const listed = f.run(['prototype-workspace']);
+  assert.deepEqual(new Set(listed.workspaces.map(item => item.workspace)), new Set([first.workspace, second.workspace]));
+  assert.equal(fs.readFileSync(first.readme, 'utf8'), '# Algorithm comparison\nRun: node demo.mjs\n');
+  assert.deepEqual(f.run(['status']), before);
+  assert.equal(f.run(['status']).revision, saved.revision);
+  const other = { ...f, root: path.join(path.dirname(f.root), 'other-project') };
+  fs.mkdirSync(other.root);
+  const result = spawnSync(process.execPath, [helper, '--project', other.root, 'prototype-workspace'], {
+    encoding: 'utf8', env: { ...process.env, NEEF_HOME: f.home },
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout).workspaces, []);
+});
+
+test('prototype slugs cannot escape scratch storage or overwrite files', t => {
+  const f = fixture(t, false);
+  for (const slug of ['../project', 'C:\\escape', 'with space', '', 'x'.repeat(49)]) {
+    f.run(['prototype-workspace', slug], undefined, /Provide a prototype slug/);
+    assert.equal(fs.existsSync(f.home), false);
+  }
+});
+
+test('prototype storage refuses directory links and ignores linked demo entries', t => {
+  const f = fixture(t);
+  const { root } = f.run(['prototype-workspace']);
+  const parent = path.dirname(root);
+  fs.mkdirSync(parent, { recursive: true });
+  const linkType = process.platform === 'win32' ? 'junction' : 'dir';
+  fs.symlinkSync(f.root, root, linkType);
+  f.run(['prototype-workspace', 'blocked'], undefined, /storage must be outside the project/);
+  fs.unlinkSync(root);
+  fs.mkdirSync(root);
+  const linked = path.join(root, 'linked-demo');
+  fs.symlinkSync(f.root, linked, linkType);
+  assert.deepEqual(f.run(['prototype-workspace']).workspaces, []);
+  fs.unlinkSync(linked);
+  fs.rmdirSync(root);
+  fs.rmdirSync(parent);
+  const external = path.join(path.dirname(f.root), 'foreign-prototypes');
+  fs.mkdirSync(external);
+  fs.symlinkSync(external, parent, linkType);
+  f.run(['prototype-workspace', 'blocked'], undefined, /Linked prototype storage refused/);
+  assert.deepEqual(fs.readdirSync(external), []);
+  fs.unlinkSync(parent);
+  assert.equal(f.git('status', '--porcelain'), '');
+});
+
+test('both prototype aliases share installed guidance, backups and preserve demo artifacts', t => {
+  const f = installation(t);
+  f.install(true);
+  const demo = f.run(['prototype-workspace', 'api-demo']);
+  fs.writeFileSync(demo.readme, 'Keep this prototype and its findings');
+  const guidance = fs.readFileSync(path.join(f.home, 'references/prototype.md'), 'utf8');
+  for (const agent of ['.agents', '.claude']) {
+    const root = path.join(f.user, agent, 'skills');
+    assert.equal(fs.readFileSync(path.join(root, 'neef/references/prototype.md'), 'utf8'), guidance);
+    for (const alias of ['prototype', 'proto']) {
+      assert.match(fs.readFileSync(path.join(root, `neef-${alias}/SKILL.md`), 'utf8'), /Follow its `prototype` route/);
+    }
+  }
+  const updated = f.install(true);
+  assert.ok(fs.existsSync(path.join(updated.backup, 'install.json.bak')));
+  assert.equal(fs.readFileSync(demo.readme, 'utf8'), 'Keep this prototype and its findings');
+  const reference = path.join(f.user, '.agents/skills/neef/references/prototype.md');
+  fs.writeFileSync(reference, 'Personal prototype rules');
+  f.install(true, /Unmanaged or edited file preserved/);
+  assert.equal(fs.readFileSync(reference, 'utf8'), 'Personal prototype rules');
 });
 
 test('advisor aliases install shared read-only guidance without replacing unfinished work', t => {
@@ -373,7 +456,7 @@ test('advisor aliases install shared read-only guidance without replacing unfini
   const help = f.run(['help']);
   assert.ok(help.commands.includes('options'));
   assert.ok(help.commands.includes('ask <description>'));
-  assert.ok(!help.commands.some(command => /proto/.test(command)));
+  assert.ok(help.commands.includes('prototype <description>'));
   assert.deepEqual(f.run(['status']), before);
   assert.equal(f.run(['next']).state.task, saved.state.task);
   assert.match(guidance, /Advice ends before work begins/);
@@ -990,7 +1073,7 @@ test('every mutation rejects project-local storage before creating files or swit
   const alias = path.join(path.dirname(f.root), 'project-alias');
   fs.symlinkSync(f.root, alias, process.platform === 'win32' ? 'junction' : 'dir');
   paths.push(path.join(alias, 'new', 'shared'));
-  const mutations = ['setup', 'bootstrap', 'context-write', 'begin', 'prepare', 'commit', 'state-write', 'recommendations-write', 'state-recover'];
+  const mutations = ['setup', 'bootstrap', 'context-write', 'begin', 'prepare', 'commit', 'state-write', 'recommendations-write', 'state-recover', 'prototype-workspace'];
   for (const home of paths) for (const command of mutations) {
     const result = spawnSync(process.execPath, [helper, '--project', f.root, command], {
       encoding: 'utf8', input: '{}', env: { ...process.env, NEEF_HOME: home },

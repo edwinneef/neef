@@ -14,12 +14,13 @@ Use Node 20+ and Git with `~/.neef/neef.mjs`; resolve the actual home and quote 
 
 ## Route the invocation
 
-Match bare modes exactly; route leading shape, plan, challenge and ask commands first. Ask for missing subjects. Other arguments request development.
+Match bare modes exactly; route leading shape, plan, challenge, prototype/proto and ask commands first. Ask for missing subjects. Other arguments request development.
 
 - `help`: run helper `help`; show name, fullName, motto, every commands entry and aliases with host syntax. Helper commands are internal.
 - `shape [--deep] <idea>`: read `references/shape.md`, clarify, save decisions and implement unless discussion-only.
 - `plan <feature>`: read `references/plan.md`; save the full feature plan and stop. Only external state writes are permitted. Skip development below.
 - `challenge [--deep] <topic>`: read `references/challenge.md`. Project files and Git are read-only. The only permitted write is external `recommendations-write`; then report and stop. Skip all sections below in this mode.
+- `prototype <description>` or `proto <description>`: read `references/prototype.md`; build or refine an isolated working demonstration and stop at its handoff. Preserve project files, Git and task state. Skip development below unless production implementation is explicitly requested.
 - `options` or `ask <description>`: read `references/advisor.md`; inspect and recommend, then stop. Advice is read-only, including external state. Skip all sections below until the user explicitly selects work.
 - `setup`: run helper `setup`; inspect instructions, representative code, configuration and commands. Keep an accurate architecture summary; add source-backed facts using `context-write <revision>` with stdin JSON `{"architecture":"..."}`. Finish after saving shared context. Report commands and safety findings without executing project commands, installs or hooks. Create no project files; never replace instructions or generate configuration.
 - `doctor`: run helper `doctor`. Report failed checks and concrete fixes; do not repair implicitly.
