@@ -1,5 +1,20 @@
 # Validation — 2026-10-25
 
+## Codex post-commit task-alias check
+
+- Fresh installed `$neef-task` smoke passed: default and named greetings,
+  two focused tests, owned fixture commit, clean working tree and completed
+  external state with no remaining recommendation.
+- The closing `state-write` succeeded on its first attempt using the revision
+  returned by `commit`; no state-field schema repair, post-commit `status`
+  re-read or follow-up reference read occurred.
+- The first `prepare` failed because the sandbox could not write Git objects
+  (and could not access the global ignore file). Codex reconciled with `status`
+  and retried successfully with the required access. This sample establishes
+  behavior, not an end-to-end speedup.
+- Evidence: `.test-artifacts/hosts-1792946797189/`. Reproduce with
+  `node scripts/smoke.mjs --alias --codex-only`.
+
 ## Shorter post-commit tail
 
 - `prepare` and `commit` return the current state revision, so the closing
