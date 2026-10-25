@@ -68,18 +68,20 @@ function fixture(t, initialize = true) {
 test('clean trivial change commits only the reviewed change and consumes its token', t => {
   const f = fixture(t);
   const begin = f.run(['begin', 'Fix typo']);
-  assert.match(begin.branch, /^neef\/fix-typo-[a-f0-9]{8}$/);
+  assert.equal(begin.branch, 'main');
   f.write('owned.txt', 'after\n');
   const prepared = f.prepare(begin.baseline);
   assert.match(prepared.diff, /\+after/);
   assert.equal(f.git('diff', '--cached'), '');
   const committed = f.run(['commit', prepared.token]);
   assert.equal(committed.changes.length, 0);
+  assert.equal(committed.branch, 'main');
+  assert.equal(f.git('branch', '--format=%(refname:short)'), 'main');
   assert.equal(f.git('show', 'HEAD:owned.txt'), 'after');
   f.run(['commit', prepared.token], undefined, /consumed/);
 });
 
-test('normal multi-file feature reuses its task branch and records verification', t => {
+test('normal multi-file feature stays on main and records verification', t => {
   const f = fixture(t);
   const begin = f.run(['begin', 'feature']);
   assert.equal(f.run(['begin', 'same feature']).branch, begin.branch);
@@ -93,6 +95,22 @@ test('normal multi-file feature reuses its task branch and records verification'
   assert.equal(status.state.progress, 'complete');
   assert.equal(status.state.head, status.actual.head);
   assert.deepEqual(status.discrepancies, []);
+});
+
+test('successive increments commit on main with fresh baselines', t => {
+  const f = fixture(t);
+  const first = f.run(['begin', 'first increment']);
+  f.write('owned.txt', 'first increment\n');
+  f.run(['commit', f.prepare(first.baseline).token]);
+  const second = f.run(['begin', 'second increment']);
+  assert.notEqual(second.head, first.head);
+  assert.equal(second.branch, 'main');
+  f.write('owned.txt', 'second increment\n');
+  f.prepare(first.baseline, ['owned.txt'], 'Stale increment', /HEAD changed/);
+  f.run(['commit', f.prepare(second.baseline).token]);
+  assert.equal(f.git('rev-list', '--count', 'HEAD'), '3');
+  assert.equal(f.git('branch', '--format=%(refname:short)'), 'main');
+  assert.equal(f.git('status', '--porcelain'), '');
 });
 
 test('dirty tracked and untracked user work survives selective commit without branch switching', t => {
@@ -209,6 +227,15 @@ test('detached HEAD cannot create a task branch implicitly', t => {
   f.run(['begin', 'detached'], undefined, /Detached HEAD/);
   assert.equal(f.git('rev-parse', 'HEAD'), head);
   assert.equal(f.git('branch', '--show-current'), '');
+});
+
+test('begin preserves a different branch and refuses development outside main', t => {
+  const f = fixture(t);
+  f.git('switch', '-c', 'existing-work');
+  f.write('user.txt', 'unfinished user work\n');
+  f.run(['begin', 'feature'], undefined, /Development requires main/);
+  assert.equal(f.git('branch', '--show-current'), 'existing-work');
+  assert.equal(fs.readFileSync(path.join(f.root, 'user.txt'), 'utf8'), 'unfinished user work\n');
 });
 
 test('invalid or oversized state and missing recovery backup fail without overwriting data', t => {
@@ -348,7 +375,7 @@ test('help groups every command and alias by intent without bootstrapping a proj
   assert.deepEqual(new Set(covered), new Set(help.commands));
   const row = name => commands.find(item => item.command.split(' ')[0] === name);
   assert.match(row('shape').stops, /implemented.*unless discussion-only/);
-  assert.match(row('plan').stops, /Plan saved.*one ready phase/);
+  assert.match(row('plan').stops, /Plan saved.*until complete or blocked/);
   assert.match(row('prototype').changes, /scratch.*task state unchanged/);
   assert.deepEqual(row('prototype').aliases, ['proto']);
   assert.match(row('options').changes, /read-only/);
