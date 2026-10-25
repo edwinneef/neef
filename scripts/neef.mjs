@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 export const legacy = ['ed', 'ed-auto', 'ed-feature', 'ed-help', 'ed-next', 'ed-setup', 'ed-skills', 'ed-status'];
-export const commandNames = ['task', 'shape', 'challenge', 'setup', 'next', 'continue', 'status', 'help', 'doctor'];
+export const commandNames = ['task', 'shape', 'plan', 'challenge', 'setup', 'next', 'continue', 'status', 'help', 'doctor'];
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const fail = message => { throw new Error(message); };
 const home = () => path.resolve(process.env.NEEF_HOME || path.join(os.homedir(), '.neef'));
@@ -130,6 +130,7 @@ function validState(value, p) {
     && (value.context === undefined || (value.context?.version === 1
       && ['minimal', 'full'].includes(value.context.depth) && typeof value.context.fingerprint === 'string'))
     && (value.recommendations === undefined || validRecommendations(value.recommendations))
+    && (value.plan === undefined || (validPlan(value.plan) && (value.progress !== 'complete' || value.plan.phases.every(phase => phase.status === 'complete'))))
     && ['decisions', 'verification', 'next', 'blockers'].every(key => typeof value[key] === 'string');
 }
 function stateRead(p) {
@@ -158,9 +159,9 @@ function saveState(p, current, value) {
   const file = stateFile(p);
   // Keep project context readable as one field without expanding a small state
   // file into a permanent discovery report.
-  const { context, recommendations, ...task } = value;
+  const { context, recommendations, plan, ...task } = value;
   let contents = JSON.stringify(task, null, 2);
-  for (const [key, field] of Object.entries({ context, recommendations })) {
+  for (const [key, field] of Object.entries({ context, recommendations, plan })) {
     if (field) contents = `${contents.slice(0, -2)},\n  "${key}": ${JSON.stringify(field)}\n}`;
   }
   contents += '\n';
@@ -180,7 +181,7 @@ function stateWrite(p, expected, input) {
     const actual = snapshot(p);
     const value = { version: 1, project: p.root, revision: crypto.randomUUID(), updated: new Date().toISOString(),
       task: input.task, progress: input.progress, branch: actual.branch, head: actual.head,
-      baseline: input.baseline ?? (current.state?.task === input.task ? current.state.baseline : null) ?? null,
+      baseline: Object.hasOwn(input, 'baseline') ? input.baseline : (current.state?.task === input.task ? current.state.baseline : null) ?? null,
       ...(current.state?.context ? { context: current.state.context } : {}),
       ...(current.state?.recommendations ? { recommendations: current.state.recommendations } : {}),
       decisions: input.decisions ?? (current.state?.task === input.task ? current.state.decisions : '') ?? '',
@@ -188,6 +189,12 @@ function stateWrite(p, expected, input) {
       next: input.next ?? (input.progress === 'active' && current.state?.task === input.task ? current.state.next : '') ?? '',
       blockers: input.blockers || '' };
     if (Object.hasOwn(input, 'recommendations')) value.recommendations = recommendations(input.recommendations, value.progress, { task: value.task, branch: actual.branch, head: actual.head });
+    const plan = Object.hasOwn(input, 'plan') ? input.plan : current.state?.task === input.task ? current.state.plan : undefined;
+    if (plan !== undefined) {
+      if (!validPlan(plan)) fail('Invalid plan: provide goal, scale, rationale and phases with unique ids, tasks, dependencies, acceptance criteria and valid statuses');
+      if (value.progress === 'complete' && plan.phases.some(phase => phase.status !== 'complete')) fail('Unfinished plan phases require active task progress');
+      value.plan = plan;
+    }
     if (value.baseline !== null) {
       const baseline = json(baselineFile(value.baseline));
       if (baseline.project !== p.root) fail('Baseline belongs to another project');
@@ -199,6 +206,35 @@ function stateWrite(p, expected, input) {
 
 const actionKinds = ['REQUIRED', 'RECOMMENDED', 'OPTIONAL'];
 const shortText = (value, limit) => typeof value === 'string' && !!value.trim() && value.length <= limit;
+function validPlan(value) {
+  if (!value || !shortText(value.goal, 600) || !['small', 'large'].includes(value.scale) || !shortText(value.rationale, 400)
+    || !Array.isArray(value.phases) || !value.phases.length
+    || (value.scale === 'small' ? value.phases.length !== 1 : value.phases.length < 2)) return false;
+  const phases = value.phases;
+  if (!phases.every(phase => phase && shortText(phase.id, 60) && shortText(phase.task, 600)
+    && ['pending', 'active', 'complete'].includes(phase.status) && Array.isArray(phase.dependsOn)
+    && phase.dependsOn.every(id => shortText(id, 60)) && new Set(phase.dependsOn).size === phase.dependsOn.length
+    && Array.isArray(phase.acceptance) && phase.acceptance.length && phase.acceptance.every(item => shortText(item, 400))
+    && (phase.verification === undefined || shortText(phase.verification, 800))
+    && (phase.status !== 'complete' || shortText(phase.verification, 800)))) return false;
+  const byId = new Map(phases.map(phase => [phase.id, phase]));
+  if (byId.size !== phases.length || phases.filter(phase => phase.status === 'active').length > 1) return false;
+  const visited = new Set();
+  const visiting = new Set();
+  function visit(phase) {
+    if (visiting.has(phase.id)) return false;
+    if (visited.has(phase.id)) return true;
+    visiting.add(phase.id);
+    for (const id of phase.dependsOn) {
+      const dependency = byId.get(id);
+      if (!dependency || (phase.status !== 'pending' && dependency.status !== 'complete') || !visit(dependency)) return false;
+    }
+    visiting.delete(phase.id);
+    visited.add(phase.id);
+    return true;
+  }
+  return phases.every(visit);
+}
 function validAction(value) {
   return value && actionKinds.includes(value.kind) && shortText(value.action, 600) && shortText(value.reason, 400);
 }
@@ -603,10 +639,10 @@ export async function main(args = process.argv.slice(2)) {
   const [command = 'help', argument] = args;
   if (command === 'help') return {
     name: 'NEEF', fullName: 'No-nonsense Engineering & Execution Framework', motto: 'Navigate → Execute → Evaluate → Follow-up',
-    commands: ['<task>', 'shape [--deep] <idea>', 'challenge [--deep] <topic>', 'setup', 'next', 'continue', 'status', 'help', 'doctor'],
+    commands: ['<task>', 'shape [--deep] <idea>', 'plan <feature>', 'challenge [--deep] <topic>', 'setup', 'next', 'continue', 'status', 'help', 'doctor'],
     invocation: { codex: '$neef <command>', claude: '/neef <command>' },
     aliases: { codex: commandNames.map(command => `$neef-${command}`), claude: commandNames.map(command => `/neef-${command}`) },
-    helperCommands: ['setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug>', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations})', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, shape [--deep] <idea>, challenge [--deep] <topic>, setup, next, continue, status, help, doctor are agent skill modes; shaping uses native questions and state-write then implements unless discussion-only; challenge is read-only except external recommendations-write and never implements, continue resumes unfinished work, next starts one revalidated follow-up after completion' };
+    helperCommands: ['setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug>', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?})', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?}]}. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. Shared state remains under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, shape [--deep] <idea>, plan <feature>, challenge [--deep] <topic>, setup, next, continue, status, help, doctor are agent skill modes; shaping uses native questions and state-write then implements unless discussion-only; plan saves a complexity-sized full-feature roadmap then stops, continue executes at most one saved phase; challenge is read-only except external recommendations-write and never implements, continue resumes unfinished work, next starts one revalidated follow-up after completion' };
   if (command === 'doctor') return doctor();
   const p = project(cwd);
   if (['setup', 'bootstrap', 'context-write', 'begin', 'prepare', 'commit', 'state-write', 'recommendations-write', 'state-recover'].includes(command)) requireExternalStorage(p);

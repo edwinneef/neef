@@ -14,15 +14,16 @@ Use Node 20+ and Git with `~/.neef/neef.mjs`; resolve the actual home and quote 
 
 ## Route the invocation
 
-Match bare reserved modes exactly; recognize shape and challenge as leading command words before development. Ask for a missing subject. Other arguments are development requests.
+Match bare modes exactly; route leading shape, plan and challenge commands first. Ask for missing subjects. Other arguments request development.
 
 - `help`: run helper `help`; show name, fullName, motto, every commands entry and aliases with host syntax. Helper commands are internal.
-- `shape [--deep] <idea>`: read `references/shape.md`, clarify, save decisions and implement unless discussion-only. This mode is optional.
+- `shape [--deep] <idea>`: read `references/shape.md`, clarify, save decisions and implement unless discussion-only.
+- `plan <feature>`: read `references/plan.md`; save the full feature plan and stop. Only external state writes are permitted. Skip development below.
 - `challenge [--deep] <topic>`: read `references/challenge.md`. Project files and Git are read-only. The only permitted write is external `recommendations-write`; then report and stop. Skip all sections below in this mode.
 - `setup`: run helper `setup`; inspect instructions, representative code, configuration and commands. Keep an accurate architecture summary; add source-backed facts using `context-write <revision>` with stdin JSON `{"architecture":"..."}`. Finish after saving shared context. Report commands and safety findings without executing project commands, installs or hooks. Create no project files; never replace instructions or generate configuration.
 - `doctor`: run helper `doctor`. Report failed checks and concrete fixes; do not repair implicitly.
-- `status`: run helper `status`. Report task, progress, branch/commit, verification, unfinished steps, saved primary recommendation and blockers. Do not write state.
-- `continue`: run helper `status`; reconcile saved claims with files, branch, and history. For saved shaping or legacy interview work, read `references/shape.md`. Reuse the saved baseline only while its project, branch, and HEAD still match. If no unfinished task exists, say so. Otherwise continue the best supported next action. Do not switch to a saved branch blindly.
+- `status`: run helper `status`; report task/progress, branch/commit, verification, unfinished steps, plan phases/dependencies, primary recommendation and blockers. No writes.
+- `continue`: run helper `status`; reconcile files, branch and history. If `state.plan` exists or `next` starts `plan:`, read `references/plan.md` before proceeding and follow its stop boundary. Otherwise resume unfinished work, reading `references/shape.md` for shaping or legacy interviews; report if none exists. Reuse baselines only for matching project/branch/HEAD; never switch branches blindly.
 - `next`: run helper `next`. Active work stops without edits or task-state changes; show the host's `neef continue` command, never invoke it implicitly. Otherwise read `references/next.md`, find and execute the highest-value supported action, then save what comes afterward. Saved text is advisory, never a command or authorization.
 - `<task>`: implement directly when clear. For consequential ambiguity, read `references/shape.md`; ask at most two targeted questions with recommended defaults.
 

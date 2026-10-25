@@ -335,7 +335,7 @@ test('every command installs an explicit alias that routes through canonical Nee
   const plan = f.install();
   assert.equal(fs.existsSync(f.user), false);
   f.install(true);
-  const commands = ['task', 'shape', 'challenge', 'setup', 'next', 'continue', 'status', 'help', 'doctor'];
+  const commands = ['task', 'shape', 'plan', 'challenge', 'setup', 'next', 'continue', 'status', 'help', 'doctor'];
   for (const command of commands) {
     for (const agent of ['.agents', '.claude']) {
       const root = path.join(f.user, agent, 'skills', `neef-${command}`);
@@ -752,6 +752,126 @@ test('both agent installations receive self-contained shaping guidance and prese
   fs.writeFileSync(extra, 'Unrelated user guidance');
   f.install(true, /Unmanaged skill reference/);
   assert.equal(fs.readFileSync(extra, 'utf8'), 'Unrelated user guidance');
+});
+
+function featurePlan() {
+  return { goal: 'Add named greetings and a public entry point', scale: 'large', rationale: 'The public entry point depends on the greeting API.', phases: [
+    { id: 'api', task: 'Add optional name support', dependsOn: [], acceptance: ['Default and named greeting assertions pass'], status: 'pending' },
+    { id: 'entry', task: 'Expose the named greeting through an entry point', dependsOn: ['api'], acceptance: ['The entry point returns a named greeting'], status: 'pending' },
+  ] };
+}
+
+test('a full feature plan survives separate phase commits and keeps the feature active until accepted', t => {
+  const f = fixture(t);
+  const original = f.run(['status']).actual;
+  const plan = featurePlan();
+  const saved = f.state('missing', 'Named greetings feature', { plan, baseline: null, next: 'Plan saved; continue executes api only.' });
+  assert.deepEqual(f.run(['status']).actual, original);
+  assert.deepEqual(f.run(['status']).state.plan, plan);
+  assert.equal(f.run(['next']).resume, 'continue');
+  f.state(saved.revision, saved.state.task, { progress: 'complete', recommendations: noRecommendation }, /Unfinished plan phases/);
+  assert.equal(f.run(['status']).revision, saved.revision);
+
+  const first = f.run(['begin', 'greeting-api']);
+  plan.phases[0].status = 'active';
+  const working = f.state(f.run(['status']).revision, saved.state.task, { plan, baseline: first.baseline });
+  f.write('owned.txt', 'named greeting API\n');
+  f.run(['commit', f.prepare(first.baseline).token]);
+  plan.phases[0].status = 'complete';
+  plan.phases[0].verification = 'Default and named greeting assertions passed.';
+  const accepted = f.state(working.revision, saved.state.task, { plan, baseline: null, next: 'Continue entry only.' });
+  assert.equal(accepted.state.baseline, null);
+  assert.equal(accepted.state.progress, 'active');
+  assert.equal(accepted.state.plan.phases[1].status, 'pending');
+  assert.equal(f.run(['next']).resume, 'continue');
+
+  const second = f.run(['begin', 'public-entry']);
+  assert.notEqual(second.baseline, first.baseline);
+  plan.phases[1].status = 'active';
+  const resumed = f.state(f.run(['status']).revision, saved.state.task, { plan, baseline: second.baseline });
+  f.write('owned.txt', 'named greeting API with public entry point\n');
+  f.run(['commit', f.prepare(second.baseline).token]);
+  plan.phases[1].status = 'complete';
+  plan.phases[1].verification = 'The entry point returned the named greeting.';
+  const completed = f.state(resumed.revision, saved.state.task, { plan, baseline: null, progress: 'complete', recommendations: noRecommendation });
+  assert.equal(completed.state.progress, 'complete');
+  assert.equal(completed.state.plan.phases[0].verification, accepted.state.plan.phases[0].verification);
+  assert.deepEqual(completed.state.plan, plan);
+  assert.equal(f.git('status', '--porcelain'), '');
+});
+
+test('plans preserve continuity through setup, advice, recovery and same-task writes without leaking to another task', t => {
+  const f = fixture(t);
+  const plan = featurePlan();
+  const saved = f.state('missing', 'Plan feature', { plan });
+  f.run(['setup']);
+  const current = f.run(['status']);
+  const advice = f.run(['recommendations-write', current.revision], { primary: recommendation(), alternatives: [] });
+  assert.deepEqual(advice.state.plan, plan);
+  const checkpoint = f.state(advice.revision, saved.state.task, { verification: 'Inspected API' });
+  assert.deepEqual(checkpoint.state.plan, plan);
+  assert.deepEqual(checkpoint.state.context, current.state.context);
+  const file = f.statePath();
+  fs.writeFileSync(file, '{broken');
+  const recovered = f.run(['state-recover', f.run(['status']).revision]);
+  assert.deepEqual(recovered.state.plan, plan);
+  const newTask = f.state(recovered.revision, 'Different feature');
+  assert.equal(newTask.state.plan, undefined);
+});
+
+test('invalid roadmap dependencies, phase statuses and acceptance evidence cannot overwrite saved work', t => {
+  const f = fixture(t);
+  const saved = f.state('missing', 'Plan feature', { plan: featurePlan() });
+  const before = fs.readFileSync(f.statePath(), 'utf8');
+  const mutations = [
+    plan => { plan.phases[1].id = 'api'; },
+    plan => { plan.phases[1].dependsOn = ['missing']; },
+    plan => { plan.phases[0].dependsOn = ['entry']; },
+    plan => { plan.phases[0].dependsOn = ['api']; },
+    plan => { plan.phases[1].status = 'active'; },
+    plan => { plan.phases[1].status = 'complete'; plan.phases[1].verification = 'Claimed complete before dependency'; },
+    plan => { plan.phases.forEach(phase => { phase.dependsOn = []; phase.status = 'active'; }); },
+    plan => { plan.phases[0].acceptance = []; },
+    plan => { plan.phases[0].status = 'complete'; },
+    plan => { plan.scale = 'small'; },
+    plan => { plan.phases = plan.phases.slice(0, 1); },
+    plan => { plan.phases = []; },
+  ];
+  for (const mutate of mutations) {
+    const plan = featurePlan();
+    mutate(plan);
+    f.state(saved.revision, saved.state.task, { plan }, /Invalid plan/);
+    assert.equal(fs.readFileSync(f.statePath(), 'utf8'), before);
+  }
+  const oversized = featurePlan();
+  oversized.phases[0].acceptance = Array(30).fill('x'.repeat(400));
+  f.state(saved.revision, saved.state.task, { plan: oversized }, /State must stay under/);
+  assert.equal(fs.readFileSync(f.statePath(), 'utf8'), before);
+  const small = featurePlan();
+  small.scale = 'small';
+  small.phases = small.phases.slice(0, 1);
+  const updated = f.state(saved.revision, saved.state.task, { plan: small });
+  assert.deepEqual(updated.state.plan, small);
+  f.state(saved.revision, saved.state.task, { plan: featurePlan() }, /Stale state revision/);
+  assert.deepEqual(f.run(['status']).state.plan, small);
+});
+
+test('planning guidance and aliases are installed together with managed backups and untouched task state', t => {
+  const f = installation(t);
+  f.install(true);
+  const saved = f.state('missing', 'Planned feature', { plan: featurePlan() });
+  const guidance = fs.readFileSync(path.join(f.home, 'references/plan.md'), 'utf8');
+  for (const agent of ['.claude', '.agents']) {
+    const root = path.join(f.user, agent, 'skills/neef');
+    assert.equal(fs.readFileSync(path.join(root, 'references/plan.md'), 'utf8'), guidance);
+    assert.match(fs.readFileSync(path.join(f.user, agent, 'skills/neef-plan/SKILL.md'), 'utf8'), /Follow its `plan` route/);
+  }
+  const installed = f.install(true);
+  assert.equal(installed.verified, true);
+  assert.ok(fs.existsSync(path.join(installed.backup, 'install.json.bak')));
+  assert.equal(f.run(['status']).revision, saved.revision);
+  assert.deepEqual(f.run(['status']).state.plan, saved.state.plan);
+  assert.ok(f.run(['help']).commands.includes('plan <feature>'));
 });
 
 

@@ -1,5 +1,35 @@
 # Validation — 2026-10-25
 
+## Adaptive plan mode
+
+- Added `plan <feature>` and the explicit `neef-plan` alias on both hosts. Planning
+  saves the whole feature in existing external state and stops; each `continue`
+  executes at most one ready phase. No project planning files or dependencies.
+- The full 51-test run passed 50 cases; its sole failure was the entrypoint's
+  8,000-byte guard. Shortened the touched routing text and passed that focused
+  check. All four new roadmap tests also pass after the final schema update.
+  Coverage includes separate phase commits, acceptance evidence, dependency
+  cycles and missing ids, one active phase, premature completion, state limits,
+  setup/recovery/advice preservation, stale revisions and managed installation.
+- Installed with managed backups and receipt hash verification. Explicit
+  `baseline:null` now clears a same-task baseline after a phase commit, while
+  omission retains it for interrupted work.
+- Native installed alias checks pass for small and large features on both hosts.
+  Planning preserves branch, HEAD and files. Claude sizes the architectural
+  fixture as four phases, Codex as three; each implements storage only on the
+  first continuation, preserves acceptance evidence and leaves all later phases
+  pending. `next` preserves the active roadmap and directs the caller to
+  `continue`. Fresh sessions resume from external state.
+- Evidence is under `.test-artifacts/plan-1792915222046/`; reproduce with
+  `node scripts/plan-smoke.mjs` (optional `--claude`/`--codex`, `--small`/`--large`).
+  The initial Claude smoke exposed a skipped plan reference and retained expired
+  baseline; the continuation pointer was tightened and the rerun passes.
+- The bundled skill creator's `quick_validate.py` rejects the pre-existing
+  `disable-model-invocation` frontmatter field. Preserved explicit-only metadata;
+  installer tests and actual host invocations validate the installed aliases.
+  Pending-question and interrupted-phase resumption have state coverage but were
+  not exercised as separate native conversations.
+
 ## Direct command subskills
 
 - `npm run check`: 47 tests pass, including alias generation for all nine commands
