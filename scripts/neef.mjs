@@ -99,6 +99,8 @@ const stateFile = p => path.join(home(), 'state', `${p.id}.json`);
 function validState(value, p) {
   return value?.version === 1 && value.project === p.root && typeof value.task === 'string'
     && ['active', 'complete'].includes(value.progress) && typeof value.revision === 'string'
+    && (value.context === undefined || (value.context?.version === 1
+      && ['minimal', 'full'].includes(value.context.depth) && typeof value.context.fingerprint === 'string'))
     && ['decisions', 'verification', 'next', 'blockers'].every(key => typeof value[key] === 'string');
 }
 function stateRead(p) {
@@ -116,11 +118,25 @@ export function status(p) {
   const saved = stateRead(p);
   const actual = snapshot(p);
   const discrepancies = [];
-  if (saved.state) {
+  if (saved.state?.task) {
     if (saved.state.branch !== actual.branch) discrepancies.push('Saved branch differs; inspect before continuing');
     if (saved.state.head !== actual.head) discrepancies.push('HEAD changed; reconcile saved progress with history and files');
   }
   return { project: p.root, ...saved, actual, discrepancies };
+}
+
+function saveState(p, current, value) {
+  const file = stateFile(p);
+  // Keep project context readable as one field without expanding a small state
+  // file into a permanent discovery report.
+  const { context, ...task } = value;
+  let contents = JSON.stringify(task, null, 2);
+  if (context) contents = `${contents.slice(0, -2)},\n  "context": ${JSON.stringify(context)}\n}`;
+  contents += '\n';
+  if (Buffer.byteLength(contents) > 8192 || contents.split('\n').length > 40) fail('State must stay under 8 KiB and 40 lines');
+  if (current.state) atomic(`${file}.bak`, read(file));
+  atomic(file, contents);
+  return stateRead(p);
 }
 
 function stateWrite(p, expected, input) {
@@ -133,17 +149,14 @@ function stateWrite(p, expected, input) {
     const value = { version: 1, project: p.root, revision: crypto.randomUUID(), updated: new Date().toISOString(),
       task: input.task, progress: input.progress, branch: actual.branch, head: actual.head,
       baseline: input.baseline ?? (current.state?.task === input.task ? current.state.baseline : null) ?? null,
+      ...(current.state?.context ? { context: current.state.context } : {}),
       decisions: input.decisions || '', verification: input.verification || '', next: input.next || '', blockers: input.blockers || '' };
     if (value.baseline !== null) {
       const baseline = json(baselineFile(value.baseline));
       if (baseline.project !== p.root) fail('Baseline belongs to another project');
     }
     if (!validState(value, p)) fail('Invalid state fields');
-    const contents = `${JSON.stringify(value, null, 2)}\n`;
-    if (contents.length > 8192 || contents.split('\n').length > 40) fail('State must stay under 8 KiB and 40 lines');
-    if (current.state) atomic(`${file}.bak`, read(file));
-    atomic(file, contents);
-    return stateRead(p);
+    return saveState(p, current, value);
   });
 }
 
@@ -156,8 +169,199 @@ function stateRecover(p, expected) {
     if (!validState(backup, p)) fail('Backup is invalid');
     const preserved = `${file}.corrupt-${crypto.randomUUID()}`;
     atomic(preserved, read(file));
-    atomic(file, `${JSON.stringify(backup, null, 2)}\n`);
+    saveState(p, { state: null }, backup);
     return { ...stateRead(p), preserved };
+  });
+}
+
+function discover(p, minimal) {
+  const skip = new Set(['.git', 'node_modules', 'vendor', 'dist', 'build', 'target', '.next', '.cache', '.venv', 'venv', '__pycache__', 'coverage', '.test-artifacts']);
+  const files = [];
+  const structure = [];
+  const warnings = [];
+  const sources = {};
+  let visited = 0;
+  let reads = 0;
+  const maxEntries = minimal ? 100 : 800;
+  const maxReads = minimal ? 12 : 50;
+  const walk = (directory, depth) => {
+    let entries;
+    try { entries = fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)); }
+    catch { warnings.push(`Unreadable directory: ${path.relative(p.root, directory) || '.'}`); return; }
+    const children = [];
+    for (const entry of entries) {
+      if (++visited > maxEntries) return;
+      if (entry.isSymbolicLink() || skip.has(entry.name) || (entry.name.startsWith('.') && entry.name !== '.github')) continue;
+      const absolute = path.join(directory, entry.name);
+      const relative = path.relative(p.root, absolute).split(path.sep).join('/');
+      if (directory === p.root && structure.length < 16) structure.push(`${entry.name}${entry.isDirectory() ? '/' : ''}`);
+      if (entry.isFile()) files.push(relative);
+      if (entry.isDirectory() && depth > 0) children.push(absolute);
+    }
+    for (const child of children) { if (visited >= maxEntries) break; walk(child, depth - 1); }
+  };
+  walk(p.root, minimal ? 1 : 3);
+  if (visited > maxEntries) warnings.push('Entry budget reached; discovery is partial');
+  const load = relative => {
+    const absolute = path.resolve(p.root, relative);
+    try {
+      // Walk only real ancestors, including for inherited instruction files.
+      for (let cursor = absolute; cursor !== path.dirname(cursor); cursor = path.dirname(cursor)) {
+        if (fs.lstatSync(cursor).isSymbolicLink()) return null;
+      }
+      const stat = fs.statSync(absolute);
+      if (!stat.isFile()) return null;
+      if (++reads > maxReads) { warnings.push('Read budget reached; inspect remaining instructions manually'); return null; }
+      if (stat.size > 32768) { warnings.push(`Large file left for focused inspection: ${relative}`); sources[relative] = `${stat.size}:${stat.mtimeMs}`; return null; }
+      const text = read(absolute);
+      sources[relative] = hash(text).slice(0, 16);
+      return text;
+    } catch (error) { if (error.code !== 'ENOENT') warnings.push(`Unreadable file: ${relative}`); return null; }
+  };
+  const instructions = [];
+  for (let directory = p.root; ; directory = path.dirname(directory)) {
+    for (const name of ['AGENTS.md', 'CLAUDE.md']) {
+      const relative = path.relative(p.root, path.join(directory, name)).split(path.sep).join('/');
+      const text = load(relative);
+      if (text !== null || sources[relative]) instructions.push(relative);
+    }
+    if (directory === path.dirname(directory)) break;
+  }
+  if (!minimal) for (const file of files.filter(name => /\/(AGENTS|CLAUDE)\.md$/.test(name)).slice(0, 8)) {
+    const text = load(file);
+    if (text !== null || sources[file]) instructions.push(file);
+  }
+  const languages = new Set();
+  const frameworks = new Set();
+  const entryPoints = new Set();
+  const conventions = [];
+  const commands = [];
+  const extensions = { '.ts': 'TypeScript', '.tsx': 'TypeScript', '.js': 'JavaScript', '.jsx': 'JavaScript', '.mjs': 'JavaScript', '.py': 'Python', '.rs': 'Rust', '.go': 'Go', '.cs': 'C#', '.lua': 'Lua' };
+  for (const file of files) {
+    const language = extensions[path.extname(file)];
+    if (language) languages.add(language);
+    if (/(^|\/)(index|main|app|server)\.(m?[jt]sx?|py|rs|go)$/.test(file) && entryPoints.size < 8) entryPoints.add(file);
+  }
+  const category = name => /deploy|publish|release/i.test(name) ? 'deployment' : /test|check/i.test(name) ? 'test' : /lint|format/i.test(name) ? 'lint' : /build|compile|typecheck/i.test(name) ? 'build' : null;
+  const manifests = ['package.json', ...(!minimal ? files.filter(file => file !== 'package.json' && file.endsWith('/package.json')).slice(0, 8) : [])];
+  for (const manifest of manifests) {
+    const text = load(manifest);
+    if (text === null) continue;
+    let pkg;
+    try { pkg = JSON.parse(text); } catch { warnings.push(`Invalid manifest: ${manifest}`); continue; }
+    const directory = path.posix.dirname(manifest);
+    const manager = /^pnpm@/.test(pkg.packageManager || '') || files.includes('pnpm-lock.yaml') ? 'pnpm'
+      : /^yarn@/.test(pkg.packageManager || '') || files.includes('yarn.lock') ? 'yarn'
+        : /^bun@/.test(pkg.packageManager || '') || files.some(file => /^bun\.lockb?$/.test(file)) ? 'bun' : 'npm';
+    const dependencies = { ...pkg.dependencies, ...pkg.devDependencies };
+    for (const [name, label] of Object.entries({ react: 'React', next: 'Next.js', vite: 'Vite', express: 'Express', vue: 'Vue', svelte: 'Svelte', typescript: 'TypeScript' })) {
+      if (Object.hasOwn(dependencies, name)) (label === 'TypeScript' ? languages : frameworks).add(label);
+    }
+    if (pkg.type === 'module') conventions.push(`${manifest}: ES modules`);
+    if (pkg.workspaces) conventions.push(`${manifest}: workspace packages`);
+    for (const target of [pkg.main, pkg.module, ...Object.values(typeof pkg.bin === 'object' ? pkg.bin : { bin: pkg.bin })]) {
+      if (typeof target === 'string' && target.length < 160) entryPoints.add(path.posix.join(directory, target));
+    }
+    for (const name of Object.keys(pkg.scripts || {}).slice(0, 40)) {
+      const kind = category(name);
+      if (kind && /^[\w:.-]+$/.test(name) && commands.length < 20) commands.push({ kind, directory, run: `${manager} run ${name}` });
+    }
+  }
+  for (const [manifest, language] of [['pyproject.toml', 'Python'], ['Cargo.toml', 'Rust'], ['go.mod', 'Go']]) {
+    if (!files.includes(manifest)) continue;
+    languages.add(language);
+    const text = load(manifest) || '';
+    if (manifest === 'pyproject.toml') for (const name of ['django', 'fastapi', 'flask', 'pytest', 'ruff']) if (new RegExp(`\\b${name}\\b`, 'i').test(text)) frameworks.add(name);
+    const declared = manifest === 'Cargo.toml' ? [['build', 'cargo build'], ['test', 'cargo test']]
+      : manifest === 'go.mod' ? [['build', 'go build ./...'], ['test', 'go test ./...']]
+        : frameworks.has('pytest') ? [['test', 'python -m pytest']] : [];
+    for (const [kind, run] of declared) if (commands.length < 20) commands.push({ kind, directory: '.', run });
+  }
+  for (const file of files.filter(name => /(^|\/)(tsconfig[^/]*\.json|\.editorconfig)$/.test(name)).slice(0, minimal ? 1 : 4)) {
+    const text = load(file) || '';
+    if (/"strict"\s*:\s*true/.test(text)) conventions.push(`${file}: strict TypeScript`);
+    if (/"paths"\s*:/.test(text)) conventions.push(`${file}: import aliases; inspect before adding imports`);
+  }
+  const makefile = files.find(file => /^(Makefile|makefile)$/.test(file));
+  if (makefile && !minimal) for (const match of (load(makefile) || '').matchAll(/^([\w.-]+):[^=]/gm)) {
+    const kind = category(match[1]);
+    if (kind && commands.length < 20) commands.push({ kind, directory: '.', run: `make ${match[1]}` });
+  }
+  const deployment = files.filter(file => /(^|\/)(Dockerfile|vercel\.json|netlify\.toml|fly\.toml|wrangler\.(toml|jsonc?)|.*deploy.*\.(ps1|py|sh))$|^\.github\/workflows\//i.test(file)).slice(0, 6);
+  if (!minimal) for (const file of files.filter(name => /(^|\/)(build|test|run_tests|lint|deploy)[\w.-]*\.(mjs|js|py|ps1)$/.test(name)).slice(0, 6)) {
+    if (!/^[\w./ -]+$/.test(file) || commands.length >= 20) continue;
+    const runner = /\.py$/.test(file) ? 'python' : /\.ps1$/.test(file) ? 'powershell -NoProfile -File' : 'node';
+    commands.push({ kind: category(path.posix.basename(file)), directory: '.', run: `${runner} "${file}"` });
+  }
+  const tests = files.filter(file => /(^|\/)(tests?|__tests__)\/|\.(test|spec)\.[^.]+$/.test(file));
+  if (tests.length) conventions.push(`Tests: ${tests.slice(0, 3).join(', ')}`);
+  const context = { version: 1, depth: minimal ? 'minimal' : 'full', structure, languages: [...languages].sort(), frameworks: [...frameworks].sort(),
+    entryPoints: [...entryPoints].slice(0, 8), instructions: instructions.slice(0, 12), commands, deployment, conventions: conventions.slice(0, 10),
+    fingerprint: hash(JSON.stringify({ sources, files })), architecture: '' };
+  return { context, warnings: [...new Set(warnings)].slice(0, 8) };
+}
+
+function setup(p, minimal = false) {
+  const before = stateRead(p);
+  if (before.error) fail(before.error);
+  if (minimal && before.state?.context) return { initialized: false, revision: before.revision };
+  const relativeHome = path.relative(p.root, home());
+  if (!relativeHome || (relativeHome !== '..' && !relativeHome.startsWith(`..${path.sep}`) && !path.isAbsolute(relativeHome))) fail('Neef state storage must be outside the project');
+  const { context, warnings } = discover(p, minimal);
+  const safety = { projectReadable: !warnings.some(warning => warning === 'Unreadable directory: .'), runtime: Number(process.versions.node.split('.')[0]) >= 20,
+    projectWritable: true, git: p.isGit, dirty: false, selectiveCommitAvailable: false, commandsExecuted: false };
+  try { fs.accessSync(p.root, fs.constants.W_OK); }
+  catch { safety.projectWritable = false; warnings.push('Project directory is not writable; inspect permissions before editing'); }
+  if (p.isGit) {
+    const raw = git(p.root, ['status', '--porcelain=v1', '-z', '--untracked-files=normal']);
+    safety.dirty = raw.length > 0;
+    let branch = null;
+    try { branch = git(p.root, ['symbolic-ref', '--quiet', '--short', 'HEAD']).trim(); } catch { warnings.push('Detached HEAD; explicit branch selection required for commits'); }
+    safety.branch = branch;
+    safety.stagedOrConflicted = raw.split('\0').some(entry => entry && entry[0] !== ' ' && !entry.startsWith('??'));
+    safety.selectiveCommitAvailable = !!branch && !safety.stagedOrConflicted && safety.projectWritable;
+    if (safety.stagedOrConflicted) warnings.push('Staged changes or conflicts must be preserved; automatic commits are unavailable');
+    const index = path.resolve(p.root, git(p.root, ['rev-parse', '--git-path', 'index']).trim());
+    try { fs.accessSync(exists(index) ? index : path.dirname(index), fs.constants.W_OK); }
+    catch { safety.selectiveCommitAvailable = false; warnings.push('Git index is not writable; inspect permissions before committing'); }
+    if (exists(`${index}.lock`)) { safety.selectiveCommitAvailable = false; warnings.push('Git index is locked; inspect its owner before committing'); }
+    if (minimal) context.git = { repository: true };
+    else {
+      let subjects = [];
+      let hooks = '.git/hooks';
+      try { subjects = git(p.root, ['log', '-3', '--format=%s']).trim().split('\n').filter(Boolean).map(subject => subject.slice(0, 100)); } catch { /* No commits yet. */ }
+      try { hooks = git(p.root, ['config', '--get', 'core.hooksPath']).trim(); } catch { /* Git default. */ }
+      context.git = { recentSubjects: subjects, hooks };
+    }
+  } else warnings.push('No Git repository; development and shared context work without automatic commits');
+  const file = stateFile(p);
+  return lock(file, () => {
+    const current = stateRead(p);
+    if (current.error) fail(current.error);
+    if (current.revision !== before.revision) fail('Stale state revision; reread and reconcile');
+    if (current.state?.context?.fingerprint === context.fingerprint) context.architecture = current.state.context.architecture || '';
+    if (JSON.stringify(current.state?.context) === JSON.stringify(context)) return { initialized: false, revision: current.revision, context, safety: { ...safety, externalStateWritable: true }, warnings };
+    const value = current.state || { version: 1, project: p.root, revision: crypto.randomUUID(), updated: new Date().toISOString(),
+      task: '', progress: 'complete', branch: null, head: null, baseline: null, decisions: '', verification: '', next: '', blockers: '' };
+    const saved = saveState(p, current, { ...value, context });
+    return { initialized: true, revision: saved.revision, context, safety: { ...safety, externalStateWritable: true }, warnings };
+  });
+}
+
+function bootstrap(p) {
+  try { return setup(p, true); }
+  catch (error) { return { initialized: false, warning: `Context bootstrap skipped: ${error.message}` }; }
+}
+
+function contextWrite(p, expected, input) {
+  if (typeof input.architecture !== 'string' || input.architecture.length > 1200) fail('Architecture must be a concise string under 1200 characters');
+  return lock(stateFile(p), () => {
+    const current = stateRead(p);
+    if (current.error) fail(current.error);
+    if (current.revision !== expected) fail('Stale state revision; reread and reconcile');
+    if (!current.state?.context) fail('Discover project context first with setup or bootstrap');
+    if (current.state.context.architecture === input.architecture) return current;
+    return saveState(p, current, { ...current.state, context: { ...current.state.context, architecture: input.architecture } });
   });
 }
 
@@ -166,7 +370,9 @@ const baselineFile = id => {
   return path.join(home(), 'baselines', `${id}.json`);
 };
 function begin(p, slug) {
-  if (!p.isGit) return { baseline: null, ...snapshot(p), note: 'Non-Git project; no branch or commit' };
+  const initialized = bootstrap(p);
+  const context = { initialized: initialized.initialized, ...(initialized.warning ? { warning: initialized.warning } : {}) };
+  if (!p.isGit) return { baseline: null, ...snapshot(p), context, note: 'Non-Git project; no branch or commit' };
   let before = snapshot(p);
   if (!before.branch) fail('Detached HEAD; select a task branch explicitly');
   if (!before.changes.length && !before.branch.startsWith('neef/')) {
@@ -176,7 +382,7 @@ function begin(p, slug) {
   }
   const id = crypto.randomUUID();
   atomic(baselineFile(id), JSON.stringify({ project: p.root, ...before }));
-  return { baseline: id, ...before };
+  return { baseline: id, ...before, context };
 }
 
 function prepare(p, id, input) {
@@ -313,10 +519,13 @@ export async function main(args = process.argv.slice(2)) {
   let cwd = process.cwd();
   if (option >= 0) { cwd = args[option + 1] || fail('Missing project path'); args.splice(option, 2); }
   const [command = 'help', argument] = args;
-  if (command === 'help') return { commands: ['status', 'begin <slug>', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers})', 'state-recover <corrupt-revision>', 'doctor'], options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, continue, status, help, doctor are agent skill modes; continue is implemented by the agent using status' };
+  if (command === 'help') return { commands: ['setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'begin <slug>', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers})', 'state-recover <corrupt-revision>', 'doctor'], options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, setup, continue, status, help, doctor are agent skill modes; continue is implemented by the agent using status' };
   if (command === 'doctor') return doctor();
   const p = project(cwd);
   const input = () => JSON.parse(fs.readFileSync(0, 'utf8'));
+  if (command === 'setup') return setup(p);
+  if (command === 'bootstrap') return bootstrap(p);
+  if (command === 'context-write') return contextWrite(p, argument, input());
   if (command === 'status') return status(p);
   if (command === 'begin') return begin(p, argument);
   if (command === 'state-write') return stateWrite(p, argument, input());

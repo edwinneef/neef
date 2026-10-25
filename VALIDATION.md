@@ -1,5 +1,27 @@
 # Validation — 2026-10-25
 
+## Optional project setup
+
+- 26 disposable-repository tests pass, including setup discovery, idempotent
+  reruns, task/context separation, stale revisions, corrupt or locked state,
+  external-only storage, linked paths, and automatic minimal bootstrap. Focused
+  setup tests also pass after adding permission and working-tree diagnostics.
+- Fresh Claude `/neef setup` and Codex `$neef setup` runs both saved full
+  discovery and source-backed architecture to shared external state. Each left
+  its fixture's branch, commit, working tree and project files unchanged. Build,
+  test, lint and deployment sentinel commands were discovered and never run.
+- Fresh ordinary development tasks on both agents automatically saved minimal
+  context without setup, passed their focused tests, and committed safely with
+  clean working trees. Run `node scripts/smoke.mjs --setup` for the opt-in setup
+  smoke, or omit `--setup` for ordinary development/bootstrap smoke tests.
+- The existing skill remains explicit-only. Setup adds no project files or
+  dependencies. The existing state format remains readable; task writes preserve
+  `context`, and setup preserves every existing task field. A fresh skill reader
+  caught a stale initial-revision instruction, now corrected to reread status
+  after bootstrap/setup. Repository-specific CE skill guards are unavailable in
+  this Node-only project; executable utility tests and native host smokes cover
+  this change instead.
+
 Implemented and installed from this source on Windows. Local tools: Node 24,
 Python 3.12, Git 2.54, Claude Code 2.1.310, Codex CLI 0.164.0. Neef uses Node and
 Git only. No dependencies were added.

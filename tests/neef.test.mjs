@@ -11,7 +11,7 @@ const helper = fileURLToPath(new URL('../scripts/neef.mjs', import.meta.url));
 test('persisted baseline resumes owned edits without replacing the before-edit snapshot', t => {
   const f = fixture(t);
   const begin = f.run(['begin', 'resume-work']);
-  f.state('missing', 'Resume work', { baseline: begin.baseline });
+  f.state(f.run(['status']).revision, 'Resume work', { baseline: begin.baseline });
   f.write('owned.txt', 'unfinished agent work\n');
   const restored = f.run(['status']);
   assert.equal(restored.state.baseline, begin.baseline);
@@ -82,7 +82,7 @@ test('normal multi-file feature reuses its task branch and records verification'
   const f = fixture(t);
   const begin = f.run(['begin', 'feature']);
   assert.equal(f.run(['begin', 'same feature']).branch, begin.branch);
-  const saved = f.state('missing', 'Add feature', { verification: 'Focused fixture assertions passed', next: 'Commit implementation' });
+  const saved = f.state(f.run(['status']).revision, 'Add feature', { verification: 'Focused fixture assertions passed', next: 'Commit implementation' });
   f.write('owned.txt', 'feature\n');
   f.write('new feature.txt', 'new module\n');
   const prepared = f.prepare(begin.baseline, ['owned.txt', 'new feature.txt']);
@@ -189,7 +189,7 @@ test('state revisions, locks, corruption and explicit backup recovery preserve d
 test('saved branch and HEAD are reconciled and old Git baselines are rejected', t => {
   const f = fixture(t);
   const begin = f.run(['begin', 'reconcile']);
-  f.state('missing');
+  f.state(f.run(['status']).revision);
   f.git('switch', '-c', 'other-task');
   f.write('user.txt', 'independent commit\n');
   f.git('add', '--', 'user.txt');
@@ -230,7 +230,7 @@ test('non-Git project supports state without creating project scaffolding', t =>
   assert.equal(status.state, null);
   assert.equal(status.actual.head, null);
   assert.equal(f.run(['begin', 'outside git']).baseline, null);
-  f.state('missing', 'Non-Git task');
+  f.state(f.run(['status']).revision, 'Non-Git task');
   assert.equal(f.run(['status']).state.task, 'Non-Git task');
   assert.deepEqual(fs.readdirSync(f.root), []);
 });
@@ -352,4 +352,137 @@ test('installer rejects linked installation ancestors without writing the destin
   f.install(true, /Linked installation path refused/);
   assert.deepEqual(fs.readdirSync(outside), []);
   assert.equal(fs.existsSync(f.home), false);
+});
+
+test('setup discovers reusable project facts without running commands or changing a dirty project', t => {
+  const f = fixture(t);
+  f.write('package.json', JSON.stringify({ type: 'module', packageManager: 'pnpm@10', main: 'src/main.tsx',
+    dependencies: { react: '1', vite: '1', typescript: '1' },
+    scripts: { build: 'node expensive.mjs', test: 'node expensive.mjs', lint: 'node expensive.mjs', deploy: 'node expensive.mjs' } }));
+  f.write('src/main.tsx', 'export const App = () => null;\n');
+  f.write('src/AGENTS.md', 'Keep components separate from API clients.\n');
+  f.write('AGENTS.md', 'Use existing React patterns. Never deploy during setup.\n');
+  f.write('tsconfig.json', '{"compilerOptions":{"strict":true,"paths":{"@/*":["src/*"]}}}');
+  f.write('tools/deploy.ps1', 'throw "must not run"\n');
+  f.write('.github/workflows/deploy.yml', 'name: Deployment\n');
+  f.write('expensive.mjs', 'throw new Error("must not run");\n');
+  f.write('node_modules/ignored/package.json', '{"dependencies":{"next":"1"}}');
+  f.write('.env', 'USER_SECRET=must-not-be-stored\n');
+  const saved = f.state('missing', 'Unfinished user task', { next: 'Keep working', verification: 'Not run' });
+  const before = f.git('status', '--porcelain');
+  const index = fs.readFileSync(path.join(f.root, '.git/index'));
+  const setup = f.run(['setup']);
+  assert.equal(setup.context.depth, 'full');
+  assert.ok(setup.context.languages.includes('TypeScript'));
+  assert.deepEqual(setup.context.frameworks, ['React', 'Vite']);
+  assert.ok(setup.context.entryPoints.includes('src/main.tsx'));
+  assert.ok(setup.context.instructions.includes('src/AGENTS.md'));
+  assert.ok(setup.context.conventions.some(value => value.includes('strict TypeScript')));
+  for (const kind of ['build', 'test', 'lint', 'deployment']) assert.ok(setup.context.commands.some(command => command.kind === kind));
+  assert.ok(setup.context.commands.some(command => command.run === 'pnpm run build'));
+  assert.ok(setup.context.commands.some(command => command.run.includes('tools/deploy.ps1')));
+  assert.ok(setup.context.deployment.includes('.github/workflows/deploy.yml'));
+  assert.equal(setup.safety.commandsExecuted, false);
+  assert.equal(setup.safety.dirty, true);
+  assert.equal(setup.safety.branch, 'main');
+  assert.equal(setup.safety.projectWritable, true);
+  assert.equal(setup.safety.externalStateWritable, true);
+  const after = f.run(['status']).state;
+  const { context, ...task } = after;
+  assert.deepEqual(task, saved.state);
+  assert.doesNotMatch(JSON.stringify(context), /must-not-be-stored|node_modules\/ignored/);
+  assert.equal(f.git('status', '--porcelain'), before);
+  assert.deepEqual(fs.readFileSync(path.join(f.root, '.git/index')), index);
+  assert.equal(fs.existsSync(path.join(f.root, '.neef')), false);
+});
+
+test('setup and architecture enrichment are idempotent and task writes preserve shared context', t => {
+  const f = fixture(t);
+  const first = f.run(['setup']);
+  const note = 'owned.txt contains the fixture behavior; user.txt is independent user data.';
+  const enriched = f.run(['context-write', first.revision], { architecture: note });
+  const raw = fs.readFileSync(f.statePath(), 'utf8');
+  const second = f.run(['setup']);
+  assert.equal(second.initialized, false);
+  assert.equal(second.revision, enriched.revision);
+  assert.equal(fs.readFileSync(f.statePath(), 'utf8'), raw);
+  f.run(['context-write', first.revision], { architecture: 'stale' }, /Stale state revision/);
+  const task = f.state(second.revision, 'Another task');
+  assert.equal(task.state.context.architecture, note);
+  assert.equal(f.run(['bootstrap']).initialized, false);
+  assert.equal(f.run(['status']).state.context.depth, 'full');
+  assert.ok(fs.readFileSync(f.statePath(), 'utf8').split('\n').length < 40);
+});
+
+test('ordinary begin bootstraps minimal context and optional setup deepens it', t => {
+  const f = fixture(t);
+  f.write('package.json', '{"scripts":{"test":"exit 1"}}');
+  f.write('packages/ui/src/main.tsx', 'export const App = () => null;\n');
+  const begin = f.run(['begin', 'automatic bootstrap']);
+  assert.equal(begin.context.initialized, true);
+  assert.equal(begin.branch, 'main');
+  const first = f.run(['status']);
+  assert.equal(first.state.context.depth, 'minimal');
+  assert.equal(first.state.task, '');
+  assert.deepEqual(first.discrepancies, []);
+  assert.equal(f.run(['begin', 'rerun']).context.initialized, false);
+  const full = f.run(['setup']);
+  assert.equal(full.context.depth, 'full');
+  assert.ok(full.context.entryPoints.includes('packages/ui/src/main.tsx'));
+  assert.equal(f.run(['bootstrap']).initialized, false);
+});
+
+test('setup preserves corrupt or locked state while failed bootstrap does not gate development', t => {
+  const f = fixture(t);
+  f.state('missing', 'Saved user work');
+  const file = f.statePath();
+  fs.writeFileSync(file, 'preserve corrupt context');
+  f.run(['setup'], undefined, /Invalid state preserved/);
+  const begin = f.run(['begin', 'still useful']);
+  assert.match(begin.context.warning, /bootstrap skipped/);
+  assert.equal(fs.readFileSync(file, 'utf8'), 'preserve corrupt context');
+  fs.unlinkSync(file);
+  const setup = f.run(['setup']);
+  const before = fs.readFileSync(file, 'utf8');
+  fs.writeFileSync(`${file}.lock`, 'another state writer');
+  f.run(['setup'], undefined, /Operation locked/);
+  f.run(['context-write', setup.revision], { architecture: 'Blocked update' }, /Operation locked/);
+  assert.equal(fs.readFileSync(file, 'utf8'), before);
+});
+
+test('setup skips linked project trees and storage inside the project', t => {
+  const f = fixture(t, false);
+  const outside = path.join(path.dirname(f.root), 'linked-source');
+  fs.mkdirSync(outside);
+  fs.writeFileSync(path.join(outside, 'AGENTS.md'), 'Private outside instructions');
+  fs.symlinkSync(outside, path.join(f.root, 'linked'), process.platform === 'win32' ? 'junction' : 'dir');
+  const setup = f.run(['setup']);
+  assert.deepEqual(setup.context.instructions, []);
+  assert.equal(setup.safety.git, false);
+  assert.equal(setup.safety.selectiveCommitAvailable, false);
+  const result = spawnSync(process.execPath, [helper, '--project', f.root, 'setup'], {
+    encoding: 'utf8', env: { ...process.env, NEEF_HOME: path.join(f.root, '..cache') },
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /outside the project/);
+  assert.equal(fs.existsSync(path.join(f.root, '..cache')), false);
+});
+
+test('setup refreshes changed manifests and reports limits without executing malformed or large inputs', t => {
+  const f = fixture(t, false);
+  f.write('package.json', '{broken');
+  const first = f.run(['setup']);
+  assert.ok(first.warnings.some(warning => warning.includes('Invalid manifest')));
+  f.write('package.json', '{"dependencies":{"react":"1"},"scripts":{"build":"throw expensive"}}');
+  f.write('AGENTS.md', 'a'.repeat(40000));
+  for (let i = 0; i < 105; i++) f.write(`source/file-${i}.ts`, 'export {};\n');
+  const minimal = f.run(['status']);
+  f.run(['context-write', minimal.revision], { architecture: 'Old facts' });
+  const refreshed = f.run(['setup']);
+  assert.notEqual(refreshed.context.fingerprint, first.context.fingerprint);
+  assert.deepEqual(refreshed.context.frameworks, ['React']);
+  assert.equal(refreshed.context.architecture, '');
+  assert.ok(refreshed.warnings.some(warning => warning.includes('Large file')));
+  assert.ok(refreshed.context.instructions.includes('AGENTS.md'));
+  assert.equal(refreshed.safety.commandsExecuted, false);
 });
