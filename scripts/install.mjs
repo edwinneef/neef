@@ -10,6 +10,22 @@ const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const user = path.resolve(process.env.NEEF_USER_HOME || os.homedir());
 const shared = path.resolve(process.env.NEEF_HOME || path.join(user, '.neef'));
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+const commandDescriptions = {
+  task: 'Implement and verify a development task',
+  shape: 'Clarify an idea, then build the agreed solution',
+  plan: 'Save an implementation plan without changing code',
+  challenge: 'Critique an approach and suggest improvements',
+  prototype: 'Build an isolated demo to test an idea',
+  proto: 'Build an isolated demo to test an idea',
+  options: 'Compare useful next actions for this project',
+  ask: 'Find the best NEEF command for your goal',
+  setup: 'Discover the project and save its context',
+  next: 'Implement one useful follow-up after completion',
+  continue: 'Resume unfinished work until complete or blocked',
+  status: 'Show progress, verification and blockers',
+  help: 'Explain NEEF commands and when to use them',
+  doctor: 'Check installation health and report fixes',
+};
 
 function noLinks(target) {
   for (let cursor = target; cursor !== path.dirname(cursor); cursor = path.dirname(cursor)) {
@@ -50,6 +66,7 @@ export function install(apply = false) {
     noLinks(target);
     let bytes = fs.readFileSync(path.join(source, relative));
     if (command) bytes = Buffer.from(bytes.toString('utf8').replaceAll('{{command}}', command)
+      .replaceAll('{{description}}', commandDescriptions[command])
       .replaceAll('{{route}}', command === 'task' ? '`<task>` route (use the supplied development request as the task)' : `\`${command === 'proto' ? 'prototype' : command}\` route`));
     const old = fs.existsSync(target) ? fs.readFileSync(target) : null;
     if (old && previous?.files?.[target] !== digest(old)) throw new Error(`Unmanaged or edited file preserved: ${target}`);

@@ -10,7 +10,7 @@ Navigate → Execute → Evaluate → Follow-up
 
 Implement and verify the request, commit only owned work when safe, and save continuity for either agent. Otherwise record the blocker and preserved work. NEEF authorizes scoped local edits, checks and commits on main. Keep development on main; create no branches or worktrees. If another branch is checked out, preserve it and report the mismatch; pause project edits and commits until main is selected. Pushing, merging, destructive actions and scope expansion need separate user authorization.
 
-Use Node 20+ and Git with `~/.neef/neef.mjs`; resolve the actual home and quote absolute paths. Run `node <helper> help` for command contracts. Commands use cwd as the project; `--project <path>` overrides it.
+Use Node 20+ and Git with `~/.neef/neef.mjs`; resolve the actual home and quote absolute paths. Run `node <helper> help` when command contracts are missing or changed. Commands use cwd as the project; `--project <path>` overrides it.
 
 ## Route the invocation
 
@@ -31,13 +31,13 @@ Match bare modes exactly; route leading shape, plan, challenge, prototype/proto 
 
 ## Navigate and Execute
 
-Read applicable AGENTS.md, CLAUDE.md, relevant code and helper `status`. Bootstrap missing `context`; `begin` does this automatically. Setup is optional; cached facts never override current instructions. On persistence failure, preserve state, report the issue and continue independent development. Reconcile stale state; retain unfinished work unless the user replaces it. Before edits that may be committed, run `begin <short-task-slug>` for a baseline. It preserves the current branch and working tree. Commits require the returned baseline ID. Trivial work needs no formal plan or delegation.
+Read applicable AGENTS.md, CLAUDE.md, relevant code and helper `status`; `next` already includes status. Reuse instructions already read in this session unless changed. Bootstrap missing `context`; `begin` does this automatically. Setup is optional; cached facts never override current instructions. On persistence failure, preserve state, report the issue and continue independent development. Reconcile stale state; retain unfinished work unless the user replaces it. Before edits that may be committed, run `begin <short-task-slug>` for a baseline. It preserves the current branch and working tree. Commits require the returned baseline ID. Trivial work needs no formal plan or delegation.
 
 Optimize for fast development with the smallest working change and focused checks. Make routine decisions without approval checkpoints. Follow project patterns, reuse abstractions and fix introduced regressions. Ordinary work needs no extra planning documents, full suite or independent review. Never interview simple requests. For authorized plans, execute every ready phase until the requested outcome is complete or no further safe progress is possible. Resolve technical questions through inspection and reasonable defaults; ask only for essential missing user information or authority. Continue independent work when one part is blocked. Batch independent calls and give brief updates during long work.
 
 Use native delegates only for useful independent investigation or disjoint edits. Bound their scope; own integration, verification, Git and state. Otherwise work sequentially. Add no orchestration dependencies.
 
-Use `state-write <revision>` with stdin JSON containing `task`, `progress` (`active` or `complete`), `baseline`, `decisions`, `verification`, `next` and `blockers`. Get a fresh revision from `status` after bootstrap/setup. The helper records actual branch and HEAD. Save at useful milestones and before stopping. HEAD changes expire a baseline; begin again before the next increment's edits. Reconcile revision conflicts instead of overwriting. Inspect a corrupt state's backup before `state-recover <revision>`.
+Use `state-write <revision>` with stdin JSON containing `task`, `progress` (`active` or `complete`), `baseline`, `decisions`, `verification`, `next` and `blockers`. Reuse the latest revision returned by `begin`, bootstrap/setup or a state mutation. Use `status` when no revision is available, a revision check fails, or current progress needs reconciliation. The helper checks revisions and reads actual Git state at mutation boundaries. Save at useful milestones and before stopping. HEAD changes expire a baseline; begin again before the next increment's edits. Inspect a corrupt state's backup before `state-recover <revision>`.
 
 Stable discovery lives in `context`; task writes preserve it, and setup preserves task progress and recommendations. Agreed `decisions` constrain implementation. Refresh stale facts without requiring setup.
 

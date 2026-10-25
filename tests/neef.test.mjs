@@ -642,6 +642,21 @@ test('setup and architecture enrichment are idempotent and task writes preserve 
   assert.ok(fs.readFileSync(f.statePath(), 'utf8').split('\n').length < 40);
 });
 
+test('begin revisions support direct state writes and reject intervening updates', t => {
+  for (const initialize of [true, false]) {
+    const f = fixture(t, initialize);
+    const begin = f.run(['begin', 'revision-handoff']);
+    assert.match(begin.revision, /^[a-f0-9]{64}$/);
+    const saved = f.state(begin.revision, 'Revision handoff', { baseline: begin.baseline });
+    const resumed = f.run(['begin', 'reuse-context']);
+    assert.equal(resumed.context.initialized, false);
+    assert.equal(resumed.revision, saved.revision);
+    const updated = f.state(resumed.revision, 'Revision handoff', { verification: 'Updated state' });
+    f.state(resumed.revision, 'Stale handoff', {}, /Stale state revision/);
+    assert.equal(f.run(['status']).revision, updated.revision);
+  }
+});
+
 test('ordinary begin bootstraps minimal context and optional setup deepens it', t => {
   const f = fixture(t);
   f.write('package.json', '{"scripts":{"test":"exit 1"}}');
@@ -668,6 +683,7 @@ test('setup preserves corrupt or locked state while failed bootstrap does not ga
   f.run(['setup'], undefined, /Invalid state preserved/);
   const begin = f.run(['begin', 'still useful']);
   assert.match(begin.context.warning, /bootstrap skipped/);
+  assert.equal(Object.hasOwn(begin, 'revision'), false);
   assert.equal(fs.readFileSync(file, 'utf8'), 'preserve corrupt context');
   fs.unlinkSync(file);
   const setup = f.run(['setup']);

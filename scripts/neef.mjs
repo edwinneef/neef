@@ -527,13 +527,13 @@ const baselineFile = id => {
 function begin(p, slug) {
   const initialized = bootstrap(p);
   const context = { initialized: initialized.initialized, ...(initialized.warning ? { warning: initialized.warning } : {}) };
-  if (!p.isGit) return { baseline: null, ...snapshot(p), context, note: 'Non-Git project; no branch or commit' };
+  if (!p.isGit) return { baseline: null, ...snapshot(p), revision: initialized.revision, context, note: 'Non-Git project; no branch or commit' };
   const before = snapshot(p);
   if (!before.branch) fail('Detached HEAD; select main explicitly');
   if (before.branch !== 'main') fail('Development requires main; preserve the current branch and report the mismatch');
   const id = crypto.randomUUID();
   atomic(baselineFile(id), JSON.stringify({ project: p.root, ...before }));
-  return { baseline: id, ...before, context };
+  return { baseline: id, ...before, revision: initialized.revision, context };
 }
 
 function prepare(p, id, input) {

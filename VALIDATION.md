@@ -1,5 +1,26 @@
 # Validation — 2026-10-25
 
+## Reuse helper revisions and session instructions
+
+- `begin` now returns the bootstrap state revision for Git and non-Git projects,
+  including when context already exists. Failed bootstrap still permits work
+  with a warning and omits the unavailable revision.
+- Guidance reuses returned revisions and unchanged session instructions, avoids
+  a second status read after `next`, and loads help when contracts need discovery.
+  Revision conflicts still require reconciliation; Git mutation checks remain.
+- `npm run check`: all 62 tests passed. New coverage writes state directly from
+  `begin`, reuses existing context and rejects intervening updates for Git and
+  non-Git projects. The first sandboxed attempt could not write disposable Git
+  fixture configuration; the run with required filesystem access passed.
+- Managed installation passed its dry run, backups and copied-file hash checks;
+  installed doctor passed. Fresh Claude and Codex task-alias smoke tests both
+  passed, including focused verification, owned commits and completed state.
+  Codex initially supplied arrays for string state fields, then inspected the
+  schema and recovered. This run does not establish an end-to-end speedup.
+- Evidence: `.test-artifacts/round-trips-check.log` and
+  `.test-artifacts/hosts-1792934329122/`. A fresh reader checked the three changed
+  instruction paragraphs; one revision-conflict sentence was clarified.
+
 ## Help grouped by intent
 
 - Existing help now groups commands into choosing work, exploring before
