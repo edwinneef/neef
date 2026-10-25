@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 export const legacy = ['ed', 'ed-auto', 'ed-feature', 'ed-help', 'ed-next', 'ed-setup', 'ed-skills', 'ed-status'];
 const commandCatalog = [
-  { name: 'task', usage: '<task>', intent: 'build', changes: 'Project files and task state; safe local commits', stops: 'Scoped work verified, or a concrete blocker recorded' },
+  { name: 'task', usage: '<task>', intent: 'build', changes: 'Project files and task state; safe local commits; Git for an empty folder', stops: 'Scoped work verified and runnable, or a concrete blocker recorded' },
   { name: 'shape', usage: 'shape [--deep] <idea>', intent: 'explore', changes: 'Task decisions, then project files by default', stops: 'Clarified and implemented, unless discussion-only' },
   { name: 'plan', usage: 'plan <feature>', intent: 'explore', changes: 'External task state only', stops: 'Plan saved; continue runs ready phases until complete or blocked' },
   { name: 'challenge', usage: 'challenge [--deep] <topic>', intent: 'choose', changes: 'May save external recommendations; project/Git unchanged', stops: 'Evidence-based critique and improvements; no implementation' },
@@ -587,15 +587,23 @@ const baselineFile = id => {
   return path.join(home(), 'baselines', `${id}.json`);
 };
 function begin(p, slug) {
+  // A completely empty folder is a new project: give it Git on main so work can be committed at once.
+  const gitInitialized = !p.isGit && fs.readdirSync(p.root).length === 0;
+  if (gitInitialized) {
+    git(p.root, ['init', '--quiet']);
+    git(p.root, ['symbolic-ref', 'HEAD', 'refs/heads/main']);
+    p = project(p.root);
+  }
   const initialized = bootstrap(p);
   const context = { initialized: initialized.initialized, ...(initialized.warning ? { warning: initialized.warning } : {}) };
-  if (!p.isGit) return { baseline: null, ...snapshot(p), revision: initialized.revision, context, note: 'Non-Git project; no branch or commit' };
+  if (!p.isGit) return { baseline: null, ...snapshot(p), revision: initialized.revision, context, note: 'Non-Git project; no branch or commit. Ask before running git init to enable commits' };
   const before = snapshot(p);
   if (!before.branch) fail('Detached HEAD; select main explicitly');
   if (before.branch !== 'main') fail('Development requires main; preserve the current branch and report the mismatch');
   const id = crypto.randomUUID();
   atomic(baselineFile(id), JSON.stringify({ project: p.root, ...before }));
-  return { baseline: id, ...before, revision: initialized.revision, context };
+  const greenfield = !before.head && before.changes.length === 0;
+  return { baseline: id, ...before, ...(gitInitialized ? { gitInitialized } : {}), ...(greenfield ? { greenfield } : {}), revision: initialized.revision, context };
 }
 
 function prepare(p, id, input) {
@@ -740,7 +748,7 @@ export async function main(args = process.argv.slice(2)) {
         .map(({ usage, changes, stops, aliases = [] }) => ({ command: usage, changes, stops, aliases })) })),
     invocation: { codex: '$neef <command>', claude: '/neef <command>' },
     aliases: { codex: commandNames.map(command => `$neef-${command}`), claude: commandNames.map(command => `/neef-${command}`) },
-    helperCommands: ['prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug>', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?}]}. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. Shared state remains under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, shape [--deep] <idea>, plan <feature>, challenge [--deep] <topic>, prototype <description> (proto alias), options, ask <description>, setup, next, continue, status, help, doctor are agent skill modes; prototype builds or refines isolated external demos and hands approved concepts to development without automatic production changes; options ranks project actions and ask recommends an existing command, both read-only including external state and without execution; shaping uses native questions and state-write then implements unless discussion-only; plan saves a complexity-sized full-feature roadmap then stops, continue runs all ready phases until complete or blocked; challenge is read-only except external recommendations-write and never implements, continue resumes unfinished work, next starts one revalidated follow-up after completion' };
+    helperCommands: ['prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?}]}. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. Shared state remains under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, shape [--deep] <idea>, plan <feature>, challenge [--deep] <topic>, prototype <description> (proto alias), options, ask <description>, setup, next, continue, status, help, doctor are agent skill modes; prototype builds or refines isolated external demos and hands approved concepts to development without automatic production changes; options ranks project actions and ask recommends an existing command, both read-only including external state and without execution; shaping uses native questions and state-write then implements unless discussion-only; plan saves a complexity-sized full-feature roadmap then stops, continue runs all ready phases until complete or blocked; challenge is read-only except external recommendations-write and never implements, continue resumes unfinished work, next starts one revalidated follow-up after completion' };
   if (command === 'doctor') return doctor();
   const p = project(cwd);
   if (['setup', 'bootstrap', 'context-write', 'begin', 'prepare', 'commit', 'state-write', 'recommendations-write', 'state-recover'].includes(command)) requireExternalStorage(p);

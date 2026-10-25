@@ -1,5 +1,23 @@
 # Validation — 2026-10-25
 
+## Fast start for new projects
+
+- `begin` initializes Git on `main` only in a completely empty folder without
+  Git, overriding `init.defaultBranch`, and reports `gitInitialized`. An empty
+  repository reports `greenfield`. Non-empty non-Git folders are left alone
+  with a note to ask before `git init`; existing repositories are never
+  reinitialized and report neither flag.
+- `greenfield` loads the new `references/start.md`: choose a mainstream stack
+  without asking, commit the first working version, hand it over running.
+  SKILL.md adds the existing-project rule (keep stack, patterns and tooling)
+  and ends runnable work verified to start with its run command or URL. Two
+  redundant sentences were trimmed to stay under the 8000-byte budget (7966).
+- Focused tests cover empty-folder init through the first commit, user-created
+  empty repositories, existing repositories and non-empty non-Git folders.
+  Installed guidance and the installer allowlist include `start.md`.
+  `npm run check`: 67/67 passed. Fresh host smoke tests were not run for this
+  change.
+
 ## Persistent next-prompt directions
 
 - Explicit setup now adds a managed direction block to root AGENTS.md and

@@ -255,15 +255,54 @@ test('invalid or oversized state and missing recovery backup fail without overwr
   assert.equal(fs.readFileSync(file, 'utf8'), '{broken');
 });
 
-test('non-Git project supports state without creating project scaffolding', t => {
+test('non-empty non-Git project supports state without creating Git or scaffolding', t => {
   const f = fixture(t, false);
+  f.write('notes.txt', 'existing user file\n');
   const status = f.run(['status']);
   assert.equal(status.state, null);
   assert.equal(status.actual.head, null);
-  assert.equal(f.run(['begin', 'outside git']).baseline, null);
+  const begin = f.run(['begin', 'outside git']);
+  assert.equal(begin.baseline, null);
+  assert.match(begin.note, /Ask before running git init/);
+  assert.equal(begin.greenfield, undefined);
   f.state(f.run(['status']).revision, 'Non-Git task');
   assert.equal(f.run(['status']).state.task, 'Non-Git task');
-  assert.deepEqual(fs.readdirSync(f.root), []);
+  assert.deepEqual(fs.readdirSync(f.root), ['notes.txt']);
+});
+
+test('begin starts an empty folder on main and commits its first working version', t => {
+  const f = fixture(t, false);
+  f.git('config', '--global', 'init.defaultBranch', 'trunk');
+  const begin = f.run(['begin', 'new app']);
+  assert.ok(begin.baseline);
+  assert.equal(begin.branch, 'main');
+  assert.equal(begin.head, null);
+  assert.equal(begin.gitInitialized, true);
+  assert.equal(begin.greenfield, true);
+  assert.deepEqual(fs.readdirSync(f.root), ['.git']);
+  f.git('config', 'user.name', 'Neef isolated test');
+  f.git('config', 'user.email', 'neef-test@example.invalid');
+  f.write('index.html', '<h1>Hello</h1>\n');
+  const reviewed = f.prepare(begin.baseline, ['index.html'], 'Create first working version');
+  f.run(['commit', reviewed.token]);
+  assert.equal(f.git('show', 'HEAD:index.html'), '<h1>Hello</h1>');
+  const again = f.run(['begin', 'next feature']);
+  assert.equal(again.greenfield, undefined);
+  assert.equal(again.gitInitialized, undefined);
+});
+
+test('existing and empty Git repositories are never reinitialized', t => {
+  const existing = fixture(t);
+  const head = existing.git('rev-parse', 'HEAD');
+  const begin = existing.run(['begin', 'existing work']);
+  assert.equal(begin.head, head);
+  assert.equal(begin.greenfield, undefined);
+  assert.equal(begin.gitInitialized, undefined);
+  const empty = fixture(t, false);
+  empty.git('init', '-b', 'main');
+  const fresh = empty.run(['begin', 'user initialized']);
+  assert.equal(fresh.greenfield, true);
+  assert.equal(fresh.gitInitialized, undefined);
 });
 
 test('literal unusual filenames stage exactly, while traversal and Git metadata are refused', t => {
@@ -988,11 +1027,18 @@ test('both agent installations receive self-contained shaping guidance and prese
   f.install(true);
   const guidance = fs.readFileSync(path.join(f.home, 'references/shape.md'), 'utf8');
   const next = fs.readFileSync(path.join(f.home, 'references/next.md'), 'utf8');
+  const start = fs.readFileSync(path.join(f.home, 'references/start.md'), 'utf8');
   for (const agent of ['.claude', '.agents']) {
     assert.equal(fs.readFileSync(path.join(f.user, agent, 'skills/neef/references/shape.md'), 'utf8'), guidance);
     assert.equal(fs.readFileSync(path.join(f.user, agent, 'skills/neef/references/next.md'), 'utf8'), next);
-    assert.match(fs.readFileSync(path.join(f.user, agent, 'skills/neef/SKILL.md'), 'utf8'), /next.*read `references\/next.md`/);
+    assert.equal(fs.readFileSync(path.join(f.user, agent, 'skills/neef/references/start.md'), 'utf8'), start);
+    const skill = fs.readFileSync(path.join(f.user, agent, 'skills/neef/SKILL.md'), 'utf8');
+    assert.match(skill, /next.*read `references\/next.md`/);
+    assert.match(skill, /reports `greenfield`, read `references\/start.md`/);
+    assert.match(skill, /Keep existing stacks, patterns and tooling/);
   }
+  assert.match(start, /without asking/);
+  assert.match(start, /leave the app running on localhost/);
   assert.match(guidance, /at most five questions/);
   assert.match(guidance, /at most two targeted questions/);
   assert.match(guidance, /one question at a time/);
