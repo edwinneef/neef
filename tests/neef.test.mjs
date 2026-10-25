@@ -330,6 +330,47 @@ test('installer preserves edited managed files and unrelated agent content', t =
   assert.equal(fs.existsSync(path.join(f.home, 'install.lock')), false);
 });
 
+test('every command installs an explicit alias that routes through canonical Neef instructions', t => {
+  const f = installation(t);
+  const plan = f.install();
+  assert.equal(fs.existsSync(f.user), false);
+  f.install(true);
+  const commands = ['task', 'shape', 'challenge', 'setup', 'next', 'continue', 'status', 'help', 'doctor'];
+  for (const command of commands) {
+    for (const agent of ['.agents', '.claude']) {
+      const root = path.join(f.user, agent, 'skills', `neef-${command}`);
+      const skill = fs.readFileSync(path.join(root, 'SKILL.md'), 'utf8');
+      assert.match(skill, new RegExp(`name: neef-${command}\\n`));
+      assert.match(skill, /disable-model-invocation: true/);
+      assert.match(skill, /\.\.\/neef\/SKILL\.md/);
+      assert.match(skill, /supplied arguments/);
+      assert.ok(plan.files.some(file => file.target === path.join(root, 'SKILL.md')));
+    }
+    const metadata = fs.readFileSync(path.join(f.user, '.agents/skills', `neef-${command}`, 'agents/openai.yaml'), 'utf8');
+    assert.match(metadata, new RegExp(`\\$neef-${command}`));
+    assert.match(metadata, /allow_implicit_invocation: false/);
+  }
+  assert.deepEqual(f.run(['help']).aliases.codex, commands.map(command => `$neef-${command}`));
+  assert.deepEqual(f.run(['help']).aliases.claude, commands.map(command => `/neef-${command}`));
+});
+
+test('alias updates preserve edits, unowned folder content and shared task state', t => {
+  const f = installation(t);
+  f.install(true);
+  const saved = f.state('missing', 'Personal unfinished task');
+  const target = path.join(f.user, '.agents/skills/neef-next/SKILL.md');
+  const original = fs.readFileSync(target, 'utf8');
+  fs.writeFileSync(target, 'Personal alias edit');
+  f.install(true, /Unmanaged or edited file preserved/);
+  assert.equal(fs.readFileSync(target, 'utf8'), 'Personal alias edit');
+  fs.writeFileSync(target, original);
+  const extra = path.join(f.user, '.claude/skills/neef-setup/personal.txt');
+  fs.writeFileSync(extra, 'Personal guidance');
+  f.install(true, /Unmanaged skill content preserved/);
+  assert.equal(fs.readFileSync(extra, 'utf8'), 'Personal guidance');
+  assert.equal(f.run(['status']).revision, saved.revision);
+});
+
 test('installer refuses unowned skill files and an existing installation lock', t => {
   const f = installation(t);
   f.install(true);

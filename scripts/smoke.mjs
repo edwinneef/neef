@@ -11,6 +11,7 @@ const artifacts = path.join(source, '.test-artifacts', `hosts-${Date.now()}`);
 fs.mkdirSync(artifacts, { recursive: true });
 const shared = path.join(artifacts, 'shared');
 const setup = process.argv.includes('--setup');
+const aliases = process.argv.includes('--alias');
 const discovery = process.argv.includes('--next-discovery');
 const blocked = process.argv.includes('--next-blocked');
 const exhausted = process.argv.includes('--next-exhausted');
@@ -74,9 +75,12 @@ async function run(host) {
     }) });
     if (seeded.status) throw new Error(seeded.stdout + seeded.stderr);
   }
-  const prompt = next || active ? (host === 'claude' ? '/neef next' : '$neef next') : setup ? (host === 'claude' ? '/neef setup' : '$neef setup') : host === 'claude'
-    ? '/neef Change greet() to return "Hello, Neef!", update its existing test, verify and commit. Work only in this disposable project.'
-    : '$neef Add an optional name parameter to greet(name), defaulting to "world". Preserve greet() output, add a focused named-greeting test, verify and commit. Work only in this disposable project.';
+  const prefix = host === 'claude' ? '/neef' : '$neef';
+  const invoke = mode => `${prefix}${aliases ? '-' : ' '}${mode}`;
+  const task = aliases ? invoke('task') : prefix;
+  const prompt = next || active ? invoke('next') : setup ? invoke('setup') : host === 'claude'
+    ? `${task} Change greet() to return "Hello, Neef!", update its existing test, verify and commit. Work only in this disposable project.`
+    : `${task} Add an optional name parameter to greet(name), defaulting to "world". Preserve greet() output, add a focused named-greeting test, verify and commit. Work only in this disposable project.`;
   const args = host === 'claude'
     ? ['-p', '--output-format', 'stream-json', '--verbose', '--allowedTools', 'Read,Edit,Write,Bash,Skill']
     : ['exec', '--ephemeral', '--json', '--approve-for-me', '--add-dir', shared, '-'];
@@ -99,9 +103,9 @@ async function run(host) {
   const messages = fs.readFileSync(path.join(artifacts, `${host}.jsonl`), 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line));
   const finalMessage = host === 'claude' ? messages.findLast(message => message.type === 'result')?.result || ''
     : messages.findLast(message => message.item?.type === 'agent_message')?.item.text || '';
-  // Negated mentions ("Don't run /neef next") are not recommendations.
-  const advice = finalMessage.split('\n').filter(line => !/\b(don't|do not|avoid)\b/i.test(line)).join('\n');
-  result.continuationCommand = active ? /(?:\$neef|\/neef) continue/.test(advice) : /(?:\$neef|\/neef) next/.test(advice);
+  // Match the Run directive, not explanatory mentions of the command.
+  result.continuationCommand = active ? /(?:\$neef|\/neef) continue/.test(finalMessage)
+    : /(?:^|\n)\s*(?:[-*]\s*)?(?:\*\*)?(?:Run:?(?:\*\*)?\s*)?`?(?:\$neef|\/neef) next\b/i.test(finalMessage);
   result.contextDepth = saved?.context?.depth;
   if (exhausted) {
     result.passed = code === 0 && checks.status === 0 && result.head === initial && result.status === ''

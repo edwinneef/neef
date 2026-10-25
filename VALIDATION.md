@@ -1,5 +1,29 @@
 # Validation — 2026-10-25
 
+## Direct command subskills
+
+- `npm run check`: 47 tests pass, including alias generation for all nine commands
+  on both hosts, explicit-only metadata, help discovery, dry-run behavior and
+  preservation of edited aliases, unmanaged folder content and shared task state.
+- The installer generates `neef-task`, `neef-shape`, `neef-challenge`, `neef-setup`,
+  `neef-next`, `neef-continue`, `neef-status`, `neef-help` and `neef-doctor` from one
+  instruction template. Each reads canonical Neef instructions and forwards its
+  mode, arguments and flags. No separate runtime or state is introduced.
+- Fresh installed `/neef-setup` and `$neef-setup` runs read canonical instructions,
+  saved full context, preserved project files and HEAD, and executed no project
+  commands. Evidence: `.test-artifacts/hosts-1792905193936/`.
+- Fresh `/neef-next` and `$neef-next` runs resolved the unplanned roadmap dependency,
+  implemented and verified named greetings, committed owned files and saved
+  completion with exhausted goals. Evidence: `.test-artifacts/hosts-1792905206570/`.
+  The initial checker misclassified Claude's explanatory command mention; raw
+  transcripts and behavior were rechecked with the corrected Run-directive detector.
+  Both `*.postcheck.json` files pass; original results remain for traceability.
+- Reproduce with `node scripts/smoke.mjs --alias --setup` or
+  `node scripts/smoke.mjs --alias --next-discovery`. Other alias routes have deterministic
+  generation/routing coverage; they were not each invoked in a live host session.
+- A fresh reader found no routing or safety conflicts. The managed install passed
+  its dry run, backed up existing files and verified all 42 installed file hashes.
+
 ## Action-oriented next
 
 - `npm run check`: 45 tests pass. Five focused regressions cover unplanned-phase

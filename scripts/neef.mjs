@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 export const legacy = ['ed', 'ed-auto', 'ed-feature', 'ed-help', 'ed-next', 'ed-setup', 'ed-skills', 'ed-status'];
+export const commandNames = ['task', 'shape', 'challenge', 'setup', 'next', 'continue', 'status', 'help', 'doctor'];
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const fail = message => { throw new Error(message); };
 const home = () => path.resolve(process.env.NEEF_HOME || path.join(os.homedir(), '.neef'));
@@ -604,6 +605,7 @@ export async function main(args = process.argv.slice(2)) {
     name: 'NEEF', fullName: 'No-nonsense Engineering & Execution Framework', motto: 'Navigate → Execute → Evaluate → Follow-up',
     commands: ['<task>', 'shape [--deep] <idea>', 'challenge [--deep] <topic>', 'setup', 'next', 'continue', 'status', 'help', 'doctor'],
     invocation: { codex: '$neef <command>', claude: '/neef <command>' },
+    aliases: { codex: commandNames.map(command => `$neef-${command}`), claude: commandNames.map(command => `/neef-${command}`) },
     helperCommands: ['setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug>', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations})', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, shape [--deep] <idea>, challenge [--deep] <topic>, setup, next, continue, status, help, doctor are agent skill modes; shaping uses native questions and state-write then implements unless discussion-only; challenge is read-only except external recommendations-write and never implements, continue resumes unfinished work, next starts one revalidated follow-up after completion' };
   if (command === 'doctor') return doctor();
   const p = project(cwd);

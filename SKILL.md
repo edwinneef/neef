@@ -16,7 +16,7 @@ Use Node 20+ and Git with `~/.neef/neef.mjs`; resolve the actual home and quote 
 
 Match bare reserved modes exactly; recognize shape and challenge as leading command words before development. Ask for a missing subject. Other arguments are development requests.
 
-- `help`: run helper `help`; show name, fullName, motto and every commands entry with host syntax. Helper commands are internal.
+- `help`: run helper `help`; show name, fullName, motto, every commands entry and aliases with host syntax. Helper commands are internal.
 - `shape [--deep] <idea>`: read `references/shape.md`, clarify, save decisions and implement unless discussion-only. This mode is optional.
 - `challenge [--deep] <topic>`: read `references/challenge.md`. Project files and Git are read-only. The only permitted write is external `recommendations-write`; then report and stop. Skip all sections below in this mode.
 - `setup`: run helper `setup`; inspect instructions, representative code, configuration and commands. Keep an accurate architecture summary; add source-backed facts using `context-write <revision>` with stdin JSON `{"architecture":"..."}`. Finish after saving shared context. Report commands and safety findings without executing project commands, installs or hooks. Create no project files; never replace instructions or generate configuration.

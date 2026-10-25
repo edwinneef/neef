@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { commandNames } from './neef.mjs';
 
 const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const user = path.resolve(process.env.NEEF_USER_HOME || os.homedir());
@@ -35,12 +36,21 @@ export function install(apply = false) {
     ...['shape', 'challenge', 'next'].flatMap(mode => [shared, path.join(user, '.claude/skills/neef'), path.join(user, '.agents/skills/neef')]
       .map(root => [`references/${mode}.md`, path.join(root, `references/${mode}.md`)])),
   ];
+  for (const command of commandNames) {
+    for (const agent of ['.claude', '.agents']) {
+      const root = path.join(user, agent, 'skills', `neef-${command}`);
+      definitions.push(['references/command-alias.md', path.join(root, 'SKILL.md'), command]);
+      if (agent === '.agents') definitions.push(['agents/command-alias.yaml', path.join(root, 'agents/openai.yaml'), command]);
+    }
+  }
   const receiptPath = path.join(shared, 'install.json');
   noLinks(receiptPath);
   const previous = fs.existsSync(receiptPath) ? JSON.parse(fs.readFileSync(receiptPath, 'utf8')) : null;
-  const entries = definitions.map(([relative, target]) => {
+  const entries = definitions.map(([relative, target, command]) => {
     noLinks(target);
-    const bytes = fs.readFileSync(path.join(source, relative));
+    let bytes = fs.readFileSync(path.join(source, relative));
+    if (command) bytes = Buffer.from(bytes.toString('utf8').replaceAll('{{command}}', command)
+      .replaceAll('{{route}}', command === 'task' ? '`<task>` route (use the supplied development request as the task)' : `\`${command}\` route`));
     const old = fs.existsSync(target) ? fs.readFileSync(target) : null;
     if (old && previous?.files?.[target] !== digest(old)) throw new Error(`Unmanaged or edited file preserved: ${target}`);
     return { target, bytes, old, hash: digest(bytes) };
@@ -56,10 +66,10 @@ export function install(apply = false) {
     entries.push({ target, old, bytes: null, hash: null });
   }
   // Never silently activate files left in an existing Neef skill folder.
-  for (const agent of ['.claude', '.agents']) {
-    const root = path.join(user, agent, 'skills/neef');
+  for (const agent of ['.claude', '.agents']) for (const name of ['neef', ...commandNames.map(command => `neef-${command}`)]) {
+    const root = path.join(user, agent, 'skills', name);
     if (!fs.existsSync(root)) continue;
-    const allowed = agent === '.claude' ? ['SKILL.md', 'references'] : ['SKILL.md', 'agents', 'references'];
+    const allowed = ['SKILL.md', ...(agent === '.agents' ? ['agents'] : []), ...(name === 'neef' ? ['references'] : [])];
     for (const name of fs.readdirSync(root)) if (!allowed.includes(name)) throw new Error(`Unmanaged skill content preserved: ${path.join(root, name)}`);
     if (agent === '.agents' && fs.existsSync(path.join(root, 'agents'))) {
       for (const name of fs.readdirSync(path.join(root, 'agents'))) if (name !== 'openai.yaml') throw new Error(`Unmanaged agent metadata: ${name}`);
