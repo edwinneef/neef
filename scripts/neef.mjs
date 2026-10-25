@@ -29,6 +29,33 @@ function canonical(p) {
   return process.platform === 'win32' ? resolved.replace(/^\\\\\?\\/, '').toLowerCase() : resolved;
 }
 
+function storagePath(target) {
+  const missing = [];
+  let cursor = target;
+  while (true) {
+    try { return path.resolve(canonical(cursor), ...missing); }
+    catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      // A dangling link has no canonical target; refuse it rather than guess.
+      try { if (fs.lstatSync(cursor).isSymbolicLink()) fail(`Unresolved storage link: ${cursor}`); }
+      catch (linkError) { if (linkError.code !== 'ENOENT') throw linkError; }
+      const parent = path.dirname(cursor);
+      if (parent === cursor) throw error;
+      missing.unshift(path.basename(cursor));
+      cursor = parent;
+    }
+  }
+}
+
+function requireExternalStorage(p) {
+  for (const target of [home(), path.join(home(), 'state'), path.join(home(), 'baselines')]) {
+    const relative = path.relative(p.root, storagePath(target));
+    if (!relative || (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`))) {
+      fail('NEEF state storage must be outside the project');
+    }
+  }
+}
+
 export function project(cwd) {
   let root = canonical(cwd);
   let isGit = false;
@@ -360,8 +387,6 @@ function setup(p, minimal = false) {
   const before = stateRead(p);
   if (before.error) fail(before.error);
   if (minimal && before.state?.context) return { initialized: false, revision: before.revision };
-  const relativeHome = path.relative(p.root, home());
-  if (!relativeHome || (relativeHome !== '..' && !relativeHome.startsWith(`..${path.sep}`) && !path.isAbsolute(relativeHome))) fail('NEEF state storage must be outside the project');
   const { context, warnings } = discover(p, minimal);
   const safety = { projectReadable: !warnings.some(warning => warning === 'Unreadable directory: .'), runtime: Number(process.versions.node.split('.')[0]) >= 20,
     projectWritable: true, git: p.isGit, dirty: false, selectiveCommitAvailable: false, commandsExecuted: false };
@@ -581,6 +606,7 @@ export async function main(args = process.argv.slice(2)) {
     helperCommands: ['setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug>', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations})', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, shape [--deep] <idea>, challenge [--deep] <topic>, setup, next, continue, status, help, doctor are agent skill modes; shaping uses native questions and state-write then implements unless discussion-only; challenge is read-only except external recommendations-write and never implements, continue resumes unfinished work, next starts one revalidated follow-up after completion' };
   if (command === 'doctor') return doctor();
   const p = project(cwd);
+  if (['setup', 'bootstrap', 'context-write', 'begin', 'prepare', 'commit', 'state-write', 'recommendations-write', 'state-recover'].includes(command)) requireExternalStorage(p);
   const input = () => JSON.parse(fs.readFileSync(0, 'utf8'));
   if (command === 'setup') return setup(p);
   if (command === 'bootstrap') return bootstrap(p);

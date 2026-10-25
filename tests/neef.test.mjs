@@ -704,3 +704,59 @@ test('first challenge can save external advice without a task, context or Git ch
   assert.equal(f.run(['next']).candidates.length, 1);
   f.run(['recommendations-write', 'missing'], noRecommendation, /Stale state revision/);
 });
+
+
+test('every mutation rejects project-local storage before creating files or switching branches', t => {
+  const f = fixture(t);
+  const branch = f.git('branch', '--show-current');
+  const head = f.git('rev-parse', 'HEAD');
+  const paths = [f.root, path.join(f.root, 'new', 'shared')];
+  const alias = path.join(path.dirname(f.root), 'project-alias');
+  fs.symlinkSync(f.root, alias, process.platform === 'win32' ? 'junction' : 'dir');
+  paths.push(path.join(alias, 'new', 'shared'));
+  const mutations = ['setup', 'bootstrap', 'context-write', 'begin', 'prepare', 'commit', 'state-write', 'recommendations-write', 'state-recover'];
+  for (const home of paths) for (const command of mutations) {
+    const result = spawnSync(process.execPath, [helper, '--project', f.root, command], {
+      encoding: 'utf8', input: '{}', env: { ...process.env, NEEF_HOME: home },
+    });
+    assert.equal(result.status, 1, `${command}: ${result.stdout}${result.stderr}`);
+    assert.match(result.stdout, /storage must be outside the project/, command);
+  }
+  assert.deepEqual(fs.readdirSync(f.root).sort(), ['.git', 'owned.txt', 'user.txt']);
+  assert.equal(f.git('branch', '--show-current'), branch);
+  assert.equal(f.git('rev-parse', 'HEAD'), head);
+  assert.equal(f.git('status', '--porcelain'), '');
+  for (const command of ['status', 'next', 'help']) {
+    const result = spawnSync(process.execPath, [helper, '--project', f.root, command], {
+      encoding: 'utf8', env: { ...process.env, NEEF_HOME: path.join(f.root, 'new', 'shared') },
+    });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  }
+  assert.equal(fs.existsSync(path.join(f.root, 'new')), false);
+});
+
+test('external storage cannot redirect state or baselines into the project', t => {
+  const f = fixture(t);
+  fs.mkdirSync(f.home);
+  for (const name of ['state', 'baselines']) {
+    const link = path.join(f.home, name);
+    fs.symlinkSync(f.root, link, process.platform === 'win32' ? 'junction' : 'dir');
+    f.run(['recommendations-write', 'missing'], noRecommendation, /storage must be outside the project/);
+    f.run(['begin', 'blocked'], undefined, /storage must be outside the project/);
+    fs.unlinkSync(link);
+  }
+  assert.deepEqual(fs.readdirSync(f.home), []);
+  assert.equal(f.git('branch', '--show-current'), 'main');
+  assert.equal(f.git('status', '--porcelain'), '');
+});
+
+test('a linked external home outside the project still supports continuity', t => {
+  const f = fixture(t);
+  const target = path.join(path.dirname(f.root), 'actual-storage');
+  fs.mkdirSync(target);
+  fs.symlinkSync(target, f.home, process.platform === 'win32' ? 'junction' : 'dir');
+  const saved = f.run(['recommendations-write', 'missing'], noRecommendation);
+  assert.equal(saved.state.recommendations.primary, null);
+  assert.ok(fs.existsSync(path.join(target, 'state')));
+  assert.equal(f.git('status', '--porcelain'), '');
+});

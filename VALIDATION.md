@@ -1,5 +1,20 @@
 # Validation — 2026-10-25
 
+## External storage boundary
+
+- `npm run check`: all 40 tests pass, including three new storage-boundary
+  regressions.
+
+- All nine mutating helper commands validate storage before input handling,
+  locks, directories or branch changes. Read-only help, status and next remain
+  available with project-local storage configured.
+- Regression coverage checks the project root, nonexistent nested storage,
+  an external junction resolving into the project, redirected state/baselines
+  directories, and a valid external linked home. Rejected commands preserve
+  project files, branch and HEAD.
+- The existing setup-only check now lives in shared command dispatch. No new
+  dependencies, skill instructions or state schema were introduced.
+
 ## Shape and challenge
 
 - `npm run check`: 37 disposable-repository tests pass. Coverage includes agreed
