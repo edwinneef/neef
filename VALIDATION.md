@@ -1,5 +1,45 @@
 # Validation — 2026-10-25
 
+## Options and ask advisors
+
+- Added `options` and `ask <description>` plus generated explicit aliases for
+  Claude and Codex. Both share `references/advisor.md`, existing status/help and
+  project evidence. Advice changes neither project/Git nor external state.
+  Explicit numbered selection follows the selected canonical route in the chat.
+- `npm run check`: all 53 tests passed. An initial sandboxed run could not create
+  disposable Git/config and installer files; the same suite passed with the
+  required filesystem access. Three focused advisor/installation/prompt-budget
+  checks passed again after the guidance fix. The entrypoint remains below its
+  existing 8,000-byte cap; follow-up instructions moved verbatim into a required
+  reference. A fresh prose reader found no meaning drift or readability issues.
+  This repository uses Node tests; the external authoring guide's Bun guard
+  command and guide file are not present here.
+- Fresh installed-host runs on both hosts returned ranked, source-backed options
+  without executing project commands or creating state. Imperative `ask` goals
+  for matching active work recommended `continue` without executing it. Missing
+  prototype support was stated explicitly, with a discussion-only Shape fallback.
+- Resumed sessions on both hosts accepted the bare reply `1`, implemented the
+  chosen optional-name feature, passed default/named behavior checks and focused
+  tests, saved completed state and recommendations, and read the relocated
+  follow-up reference. Unrelated untracked `personal.txt` was preserved.
+- The exhausted-project case exposed Claude reviving committed goals that the
+  current working-tree README explicitly removed. Current requirements now take
+  precedence over history/cache, and ranking has an explicit no-work stop.
+  The fixture retains that uncommitted scope change as a regression case.
+- Managed global installation passed its dry run, preserved receipts and task
+  state, created rollback backups, and verified every installed hash. `doctor`
+  passed. Prototype/proto remains design-only in README, absent from command
+  discovery and the installed alias list.
+- Evidence: `.test-artifacts/advisors-1792916561979/` (initial advice and captured
+  failure), `advisors-1792916733002/` (both resumed selections),
+  `advisors-1792916897322/` (Codex prototype fallback),
+  `advisors-1792916944292/` (Claude no-work fix), and
+  `advisors-1792917025162/` (final cross-host no-menu checks). Reproduce with
+  `node scripts/advisor-smoke.mjs`, `--selection`, `--exhausted`, or `--prototype`;
+  `--claude` and `--codex` limit the host. Ordinary `npm test` never runs these
+  native checks. Advice checks compare project contents and full helper status
+  before/after; no-work checks reject even a one-item numbered menu.
+
 ## Adaptive plan mode
 
 - Added `plan <feature>` and the explicit `neef-plan` alias on both hosts. Planning

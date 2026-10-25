@@ -335,7 +335,7 @@ test('every command installs an explicit alias that routes through canonical Nee
   const plan = f.install();
   assert.equal(fs.existsSync(f.user), false);
   f.install(true);
-  const commands = ['task', 'shape', 'plan', 'challenge', 'setup', 'next', 'continue', 'status', 'help', 'doctor'];
+  const commands = ['task', 'shape', 'plan', 'challenge', 'options', 'ask', 'setup', 'next', 'continue', 'status', 'help', 'doctor'];
   for (const command of commands) {
     for (const agent of ['.agents', '.claude']) {
       const root = path.join(f.user, agent, 'skills', `neef-${command}`);
@@ -352,6 +352,44 @@ test('every command installs an explicit alias that routes through canonical Nee
   }
   assert.deepEqual(f.run(['help']).aliases.codex, commands.map(command => `$neef-${command}`));
   assert.deepEqual(f.run(['help']).aliases.claude, commands.map(command => `/neef-${command}`));
+});
+
+test('advisor aliases install shared read-only guidance without replacing unfinished work', t => {
+  const f = installation(t);
+  const saved = f.state('missing', 'Unfinished feature', { decisions: 'Preserve this task', next: 'Finish the feature' });
+  const before = f.run(['status']);
+  f.install(true);
+  const guidance = fs.readFileSync(path.join(f.home, 'references/advisor.md'), 'utf8');
+  const followUp = fs.readFileSync(path.join(f.home, 'references/follow-up.md'), 'utf8');
+  for (const agent of ['.agents', '.claude']) {
+    const root = path.join(f.user, agent, 'skills/neef');
+    const skill = fs.readFileSync(path.join(root, 'SKILL.md'), 'utf8');
+    assert.equal(fs.readFileSync(path.join(root, 'references/advisor.md'), 'utf8'), guidance);
+    assert.equal(fs.readFileSync(path.join(root, 'references/follow-up.md'), 'utf8'), followUp);
+    assert.match(skill, /`options` or `ask <description>`: read `references\/advisor.md`/);
+    assert.match(skill, /Advice is read-only, including external state/);
+    assert.match(skill, /After development, read `references\/follow-up.md`/);
+  }
+  const help = f.run(['help']);
+  assert.ok(help.commands.includes('options'));
+  assert.ok(help.commands.includes('ask <description>'));
+  assert.ok(!help.commands.some(command => /proto/.test(command)));
+  assert.deepEqual(f.run(['status']), before);
+  assert.equal(f.run(['next']).state.task, saved.state.task);
+  assert.match(guidance, /Advice ends before work begins/);
+  assert.match(guidance, /stop without a menu or selection prompt/);
+  assert.match(guidance, /explicit selection.*authorizes only/);
+  assert.match(guidance, /A question about a choice is still advice/);
+  assert.match(followUp, /alternatives: at most two|at most two useful alternatives/);
+});
+
+test('advisor installation refuses local edits to its managed reference', t => {
+  const f = installation(t);
+  f.install(true);
+  const target = path.join(f.user, '.agents/skills/neef/references/advisor.md');
+  fs.writeFileSync(target, 'Personal advisor constraints');
+  f.install(true, /Unmanaged or edited file preserved/);
+  assert.equal(fs.readFileSync(target, 'utf8'), 'Personal advisor constraints');
 });
 
 test('alias updates preserve edits, unowned folder content and shared task state', t => {

@@ -1,0 +1,9 @@
+# Evaluate what follows development
+
+After every development task, evaluate actual project state and established goals without being asked. Rank unfinished requirements, functional gaps and adjacent improvements by user value, relevance, effort and dependencies. Prefer functional progress over housekeeping. Choose one primary action and at most two useful alternatives; never invent filler.
+
+Label original unfinished scope REQUIRED, keep progress active and finish it when possible; use `continue` if blocked. Do not recast it as a completed task's follow-up. Use RECOMMENDED for the most valuable logical improvement and OPTIONAL for nonessential enhancements. Recommendations are advisory: generating them does not authorize implementing them in this invocation.
+
+Persist `recommendations` with `primary:{kind,action,reason}` and `alternatives:[...]`. Each action must specify the change and intended result; its reason must cite current code or an established goal. When none is supported, save `primary:null`, `alternatives:[]` and a brief `reason`. Finish each task with `state-write`, saving progress and this evaluation atomically. For revalidation without changing task progress, use `recommendations-write <current-revision>` with that JSON. The existing task `next` field remains only an unfinished task's next step. `next` must revalidate saved recommendations even when Git has not changed.
+
+Mark complete only when done. Report actual work, verification, relevant Git and the grounded next action. Show `Run: $neef next` (Codex) or `/neef next` (Claude) only after meaningful progress and when an executable recommendation remains. Otherwise report the concrete blocker or exhausted goals. Unfinished work reports REQUIRED scope and the host's `neef continue` command. Static checks do not prove native invocation.

@@ -14,12 +14,13 @@ Use Node 20+ and Git with `~/.neef/neef.mjs`; resolve the actual home and quote 
 
 ## Route the invocation
 
-Match bare modes exactly; route leading shape, plan and challenge commands first. Ask for missing subjects. Other arguments request development.
+Match bare modes exactly; route leading shape, plan, challenge and ask commands first. Ask for missing subjects. Other arguments request development.
 
 - `help`: run helper `help`; show name, fullName, motto, every commands entry and aliases with host syntax. Helper commands are internal.
 - `shape [--deep] <idea>`: read `references/shape.md`, clarify, save decisions and implement unless discussion-only.
 - `plan <feature>`: read `references/plan.md`; save the full feature plan and stop. Only external state writes are permitted. Skip development below.
 - `challenge [--deep] <topic>`: read `references/challenge.md`. Project files and Git are read-only. The only permitted write is external `recommendations-write`; then report and stop. Skip all sections below in this mode.
+- `options` or `ask <description>`: read `references/advisor.md`; inspect and recommend, then stop. Advice is read-only, including external state. Skip all sections below until the user explicitly selects work.
 - `setup`: run helper `setup`; inspect instructions, representative code, configuration and commands. Keep an accurate architecture summary; add source-backed facts using `context-write <revision>` with stdin JSON `{"architecture":"..."}`. Finish after saving shared context. Report commands and safety findings without executing project commands, installs or hooks. Create no project files; never replace instructions or generate configuration.
 - `doctor`: run helper `doctor`. Report failed checks and concrete fixes; do not repair implicitly.
 - `status`: run helper `status`; report task/progress, branch/commit, verification, unfinished steps, plan phases/dependencies, primary recommendation and blockers. No writes.
@@ -47,10 +48,4 @@ Run `prepare <baseline-id>` with stdin JSON `{"files":["relative/path"],"message
 
 ## Follow-up
 
-After every development task, evaluate actual project state and established goals without being asked. Rank unfinished requirements, functional gaps and adjacent improvements by user value, relevance, effort and dependencies. Prefer functional progress over housekeeping. Choose one primary action and at most two useful alternatives; never invent filler.
-
-Label original unfinished scope REQUIRED, keep progress active and finish it when possible; use `continue` if blocked. Do not recast it as a completed task's follow-up. Use RECOMMENDED for the most valuable logical improvement and OPTIONAL for nonessential enhancements. Recommendations are advisory: generating them does not authorize implementing them in this invocation.
-
-Persist `recommendations` with `primary:{kind,action,reason}` and `alternatives:[...]`. Each action must specify the change and intended result; its reason must cite current code or an established goal. When none is supported, save `primary:null`, `alternatives:[]` and a brief `reason`. Finish each task with `state-write`, saving progress and this evaluation atomically. For revalidation without changing task progress, use `recommendations-write <current-revision>` with that JSON. The existing task `next` field remains only an unfinished task's next step. `next` must revalidate saved recommendations even when Git has not changed.
-
-Mark complete only when done. Report actual work, verification, relevant Git and the grounded next action. Show `Run: $neef next` (Codex) or `/neef next` (Claude) only after meaningful progress and when an executable recommendation remains. Otherwise report the concrete blocker or exhausted goals. Unfinished work reports REQUIRED scope and the host's `neef continue` command. Static checks do not prove native invocation.
+After development, read `references/follow-up.md` to evaluate and save grounded recommendations with task progress and report the result.
