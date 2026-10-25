@@ -87,7 +87,7 @@ test('normal multi-file feature reuses its task branch and records verification'
   f.write('new feature.txt', 'new module\n');
   const prepared = f.prepare(begin.baseline, ['owned.txt', 'new feature.txt']);
   f.run(['commit', prepared.token]);
-  f.state(saved.revision, 'Add feature', { progress: 'complete', verification: 'Focused fixture assertions passed' });
+  f.state(saved.revision, 'Add feature', { progress: 'complete', verification: 'Focused fixture assertions passed', recommendations: { primary: null, alternatives: [], reason: 'The fixture feature is complete; no further user goal is defined.' } });
   const status = f.run(['status']);
   assert.equal(status.state.progress, 'complete');
   assert.equal(status.state.head, status.actual.head);
@@ -485,4 +485,113 @@ test('setup refreshes changed manifests and reports limits without executing mal
   assert.ok(refreshed.warnings.some(warning => warning.includes('Large file')));
   assert.ok(refreshed.context.instructions.includes('AGENTS.md'));
   assert.equal(refreshed.safety.commandsExecuted, false);
+});
+
+const recommendation = (action = 'Add a named greeting to owned.txt and verify its default behavior.', kind = 'RECOMMENDED') => ({
+  kind, action, reason: 'The established fixture goal uses owned.txt for behavior while user.txt holds unrelated data.',
+});
+const noRecommendation = { primary: null, alternatives: [], reason: 'The requested fixture goal is complete and no supported follow-up remains.' };
+
+test('completion requires an explicit recommendation evaluation and refuses unfinished required scope', t => {
+  const f = fixture(t);
+  const saved = f.state('missing', 'Original task');
+  const raw = fs.readFileSync(f.statePath(), 'utf8');
+  f.state(saved.revision, 'Original task', { progress: 'complete' }, /require evaluated recommendations/);
+  f.state(saved.revision, 'Original task', { progress: 'complete', recommendations: { primary: recommendation('Finish the original behavior.', 'REQUIRED'), alternatives: [] } }, /unfinished original task/);
+  assert.equal(fs.readFileSync(f.statePath(), 'utf8'), raw);
+  const active = f.state(saved.revision, 'Original task', { next: 'Finish owned.txt', recommendations: {
+    primary: recommendation(), alternatives: [recommendation('Finish the original behavior.', 'REQUIRED')],
+  } });
+  assert.equal(active.state.recommendations.primary.kind, 'REQUIRED');
+  const next = f.run(['next']);
+  assert.deepEqual(next.candidates, []);
+  assert.equal(next.resume, 'continue');
+  assert.equal(next.state.next, 'Finish owned.txt');
+});
+
+test('next returns ordered advisory candidates and inspects changed Git state without mutating it', t => {
+  const f = fixture(t);
+  const primary = recommendation();
+  const alternative = recommendation('Add an optional export to owned.txt.', 'OPTIONAL');
+  const saved = f.state('missing', 'Completed feature', { progress: 'complete', recommendations: { primary, alternatives: [alternative] } });
+  const raw = fs.readFileSync(f.statePath(), 'utf8');
+  f.write('user.txt', 'concurrent personal tuning\n');
+  const before = f.git('status', '--porcelain');
+  const next = f.run(['next']);
+  assert.deepEqual(next.candidates, [primary, alternative]);
+  assert.equal(next.requiresRevalidation, true);
+  assert.equal(next.state.progress, 'complete');
+  assert.equal(next.state.recommendations.basis.head, saved.state.head);
+  assert.equal(fs.readFileSync(f.statePath(), 'utf8'), raw);
+  assert.equal(f.git('status', '--porcelain'), before);
+  f.git('switch', '-c', 'another-task');
+  f.git('add', '--', 'user.txt');
+  f.git('commit', '-m', 'Independent user work');
+  const changed = f.run(['next']);
+  assert.deepEqual(changed.candidates, [primary, alternative]);
+  assert.ok(changed.discrepancies.some(message => message.includes('recommendations were saved')));
+  assert.equal(changed.requiresRevalidation, true);
+});
+
+test('recommendation refresh preserves task and context, supports alternatives and no-action evaluation', t => {
+  const f = fixture(t);
+  const setup = f.run(['setup']);
+  const saved = f.state(setup.revision, 'Completed feature', { progress: 'complete', recommendations: { primary: recommendation(), alternatives: [] } });
+  const replacement = { primary: recommendation('Add a focused greeting export in owned.txt.'), alternatives: [recommendation('Add an optional fixture example.', 'OPTIONAL')] };
+  const updated = f.run(['recommendations-write', saved.revision], replacement);
+  const { recommendations, ...task } = updated.state;
+  const { recommendations: oldRecommendations, ...oldTask } = saved.state;
+  assert.deepEqual(task, oldTask);
+  assert.equal(recommendations.primary.action, replacement.primary.action);
+  assert.equal(f.run(['setup']).context.depth, 'full');
+  assert.deepEqual(f.run(['status']).state.recommendations, recommendations);
+  const current = f.run(['status']);
+  f.run(['recommendations-write', saved.revision], noRecommendation, /Stale state revision/);
+  const cleared = f.run(['recommendations-write', current.revision], noRecommendation);
+  assert.equal(cleared.state.recommendations.primary, null);
+  assert.equal(f.run(['recommendations-write', cleared.revision], noRecommendation).revision, cleared.revision);
+  const next = f.run(['next']);
+  assert.deepEqual(next.candidates, []);
+  assert.equal(next.reason, noRecommendation.reason);
+  assert.ok(fs.readFileSync(f.statePath(), 'utf8').split('\n').length < 40);
+});
+
+test('recommendations enforce concise shape, two-alternative limit, kinds and uniqueness without overwriting state', t => {
+  const f = fixture(t);
+  const saved = f.state('missing');
+  const raw = fs.readFileSync(f.statePath(), 'utf8');
+  const invalid = [
+    { primary: recommendation(), alternatives: [recommendation('A'), recommendation('B'), recommendation('C')] },
+    { primary: recommendation('Unsupported category', 'URGENT'), alternatives: [] },
+    { primary: recommendation(), alternatives: [recommendation()] },
+    { primary: null, alternatives: [], reason: '' },
+    { primary: recommendation('x'.repeat(601)), alternatives: [] },
+  ];
+  for (const input of invalid) f.run(['recommendations-write', saved.revision], input, /Provide primary|Duplicate recommendations/);
+  assert.equal(fs.readFileSync(f.statePath(), 'utf8'), raw);
+  fs.writeFileSync(`${f.statePath()}.lock`, 'another writer');
+  f.run(['recommendations-write', saved.revision], noRecommendation, /Operation locked/);
+  assert.equal(fs.readFileSync(f.statePath(), 'utf8'), raw);
+});
+
+test('missing and legacy recommendation state stays read-only; recovery preserves saved advice', t => {
+  const f = fixture(t);
+  const missing = f.run(['next']);
+  assert.deepEqual(missing.candidates, []);
+  assert.equal(fs.existsSync(f.home), false);
+  const first = f.state('missing', 'Previous completed task', { progress: 'complete', recommendations: { primary: recommendation(), alternatives: [] } });
+  const second = f.state(first.revision, 'Current active task');
+  assert.deepEqual(second.state.recommendations, first.state.recommendations);
+  const file = f.statePath();
+  fs.writeFileSync(file, 'corrupt recommendation state');
+  const corrupt = f.run(['next']);
+  assert.match(corrupt.reason, /Invalid state preserved/);
+  assert.deepEqual(corrupt.candidates, []);
+  const recovered = f.run(['state-recover', corrupt.revision]);
+  assert.deepEqual(recovered.state.recommendations, first.state.recommendations);
+  const legacy = { ...recovered.state };
+  delete legacy.recommendations;
+  fs.writeFileSync(file, JSON.stringify(legacy));
+  assert.deepEqual(f.run(['next']).candidates, []);
+  assert.equal(fs.readFileSync(file, 'utf8'), JSON.stringify(legacy));
 });

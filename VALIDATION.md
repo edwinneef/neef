@@ -1,5 +1,28 @@
 # Validation — 2026-10-25
 
+## Proactive next-step orchestration
+
+- 31 disposable-repository tests pass. New coverage checks mandatory atomic
+  completion evaluations, REQUIRED work staying active, advisory ordering,
+  changed Git state, stale/locked updates, shape limits, no-action evaluations,
+  legacy state, recovery, and preservation of context and user edits.
+- Fresh Claude and Codex `neef next` invocations both identified an already
+  implemented primary recommendation, selected the relevant alternative from
+  the README goal, implemented named greetings, passed both tests, committed
+  safely, and saved a grounded no-further-action evaluation. They stopped after
+  one task and printed the host's executable `neef next` command even when no
+  further action was supported. `node scripts/smoke.mjs --next` reproduces this
+  opt-in smoke.
+- Active-task native checks exposed ambiguous redirect wording on Claude. The
+  skill now explicitly stops without edits or task-state changes and prints
+  `neef continue`. Both agents passed the corrected guard with their original
+  commits and project files intact. Run `node scripts/smoke.mjs --next-active`.
+- The skill remains under 8,000 bytes. A fresh reader checked the changed
+  routing and completion contract; no safety mandate was removed. Completed
+  task writes now require recommendations or an explicit grounded no-action
+  reason; legacy saved state remains readable. Recommendations are never
+  executed by the helper or treated as permission to expand the current task.
+
 ## Optional project setup
 
 - 26 disposable-repository tests pass, including setup discovery, idempotent

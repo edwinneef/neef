@@ -101,6 +101,7 @@ function validState(value, p) {
     && ['active', 'complete'].includes(value.progress) && typeof value.revision === 'string'
     && (value.context === undefined || (value.context?.version === 1
       && ['minimal', 'full'].includes(value.context.depth) && typeof value.context.fingerprint === 'string'))
+    && (value.recommendations === undefined || validRecommendations(value.recommendations))
     && ['decisions', 'verification', 'next', 'blockers'].every(key => typeof value[key] === 'string');
 }
 function stateRead(p) {
@@ -129,9 +130,11 @@ function saveState(p, current, value) {
   const file = stateFile(p);
   // Keep project context readable as one field without expanding a small state
   // file into a permanent discovery report.
-  const { context, ...task } = value;
+  const { context, recommendations, ...task } = value;
   let contents = JSON.stringify(task, null, 2);
-  if (context) contents = `${contents.slice(0, -2)},\n  "context": ${JSON.stringify(context)}\n}`;
+  for (const [key, field] of Object.entries({ context, recommendations })) {
+    if (field) contents = `${contents.slice(0, -2)},\n  "${key}": ${JSON.stringify(field)}\n}`;
+  }
   contents += '\n';
   if (Buffer.byteLength(contents) > 8192 || contents.split('\n').length > 40) fail('State must stay under 8 KiB and 40 lines');
   if (current.state) atomic(`${file}.bak`, read(file));
@@ -145,12 +148,15 @@ function stateWrite(p, expected, input) {
     const current = stateRead(p);
     if (current.error) fail(current.error);
     if (current.revision !== expected) fail('Stale state revision; reread and reconcile');
+    if (input.progress === 'complete' && !Object.hasOwn(input, 'recommendations')) fail('Completed tasks require evaluated recommendations; provide primary:null with a reason when none is supported');
     const actual = snapshot(p);
     const value = { version: 1, project: p.root, revision: crypto.randomUUID(), updated: new Date().toISOString(),
       task: input.task, progress: input.progress, branch: actual.branch, head: actual.head,
       baseline: input.baseline ?? (current.state?.task === input.task ? current.state.baseline : null) ?? null,
       ...(current.state?.context ? { context: current.state.context } : {}),
+      ...(current.state?.recommendations ? { recommendations: current.state.recommendations } : {}),
       decisions: input.decisions || '', verification: input.verification || '', next: input.next || '', blockers: input.blockers || '' };
+    if (Object.hasOwn(input, 'recommendations')) value.recommendations = recommendations(input.recommendations, value.progress, { task: value.task, branch: actual.branch, head: actual.head });
     if (value.baseline !== null) {
       const baseline = json(baselineFile(value.baseline));
       if (baseline.project !== p.root) fail('Baseline belongs to another project');
@@ -158,6 +164,51 @@ function stateWrite(p, expected, input) {
     if (!validState(value, p)) fail('Invalid state fields');
     return saveState(p, current, value);
   });
+}
+
+const actionKinds = ['REQUIRED', 'RECOMMENDED', 'OPTIONAL'];
+const shortText = (value, limit) => typeof value === 'string' && !!value.trim() && value.length <= limit;
+function validAction(value) {
+  return value && actionKinds.includes(value.kind) && shortText(value.action, 600) && shortText(value.reason, 400);
+}
+function validRecommendations(value) {
+  return value && (value.primary === null || validAction(value.primary))
+    && Array.isArray(value.alternatives) && value.alternatives.length <= 2 && value.alternatives.every(validAction)
+    && (value.primary !== null || (value.alternatives.length === 0 && shortText(value.reason, 400)));
+}
+function recommendations(input, progress, basis) {
+  if (!validRecommendations(input)) fail('Provide primary:{kind,action,reason} and up to two alternatives, or primary:null with reason and alternatives:[]');
+  const candidates = [input.primary, ...input.alternatives].filter(Boolean)
+    .map(({ kind, action, reason }) => ({ kind, action: action.trim(), reason: reason.trim() }))
+    .sort((a, b) => actionKinds.indexOf(a.kind) - actionKinds.indexOf(b.kind));
+  if (progress === 'complete' && candidates.some(item => item.kind === 'REQUIRED')) fail('Required work belongs to the unfinished original task; keep progress active and use continue');
+  if (new Set(candidates.map(item => item.action.toLowerCase())).size !== candidates.length) fail('Duplicate recommendations');
+  return { primary: candidates[0] || null, reason: candidates.length ? '' : input.reason.trim(), alternatives: candidates.slice(1), basis };
+}
+
+function recommendationsWrite(p, expected, input) {
+  return lock(stateFile(p), () => {
+    const current = stateRead(p);
+    if (current.error) fail(current.error);
+    if (current.revision !== expected) fail('Stale state revision; reread and reconcile');
+    if (!current.state) fail('No task state; record the development task first');
+    const actual = snapshot(p);
+    const value = recommendations(input, current.state.progress, { task: current.state.task, branch: actual.branch, head: actual.head });
+    if (JSON.stringify(value) === JSON.stringify(current.state.recommendations)) return current;
+    return saveState(p, current, { ...current.state, recommendations: value });
+  });
+}
+
+function next(p) {
+  const current = status(p);
+  if (current.error) return { ...current, candidates: [], reason: current.error, requiresRevalidation: true };
+  if (current.state?.progress === 'active') return { ...current, candidates: [], reason: 'Original task is unfinished; use neef continue', resume: 'continue', requiresRevalidation: true };
+  const saved = current.state?.recommendations;
+  const candidates = saved ? [saved.primary, ...saved.alternatives].filter(Boolean) : [];
+  const basis = saved?.basis;
+  if (basis && (basis.branch !== current.actual.branch || basis.head !== current.actual.head || basis.task !== current.state.task)) current.discrepancies.push('Project changed since recommendations were saved; inspect relevance before selecting');
+  return { ...current, candidates, requiresRevalidation: true,
+    reason: candidates.length ? 'Advisory candidates only; the agent must inspect current code and goals before implementing one' : saved?.reason || 'No supported next action is saved' };
 }
 
 function stateRecover(p, expected) {
@@ -519,7 +570,7 @@ export async function main(args = process.argv.slice(2)) {
   let cwd = process.cwd();
   if (option >= 0) { cwd = args[option + 1] || fail('Missing project path'); args.splice(option, 2); }
   const [command = 'help', argument] = args;
-  if (command === 'help') return { commands: ['setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'begin <slug>', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers})', 'state-recover <corrupt-revision>', 'doctor'], options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, setup, continue, status, help, doctor are agent skill modes; continue is implemented by the agent using status' };
+  if (command === 'help') return { commands: ['setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug>', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations})', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, setup, next, continue, status, help, doctor are agent skill modes; continue resumes unfinished work, next starts one revalidated follow-up after completion' };
   if (command === 'doctor') return doctor();
   const p = project(cwd);
   const input = () => JSON.parse(fs.readFileSync(0, 'utf8'));
@@ -527,8 +578,10 @@ export async function main(args = process.argv.slice(2)) {
   if (command === 'bootstrap') return bootstrap(p);
   if (command === 'context-write') return contextWrite(p, argument, input());
   if (command === 'status') return status(p);
+  if (command === 'next') return next(p);
   if (command === 'begin') return begin(p, argument);
   if (command === 'state-write') return stateWrite(p, argument, input());
+  if (command === 'recommendations-write') return recommendationsWrite(p, argument, input());
   if (command === 'state-recover') return stateRecover(p, argument);
   if (command === 'prepare') return prepare(p, argument, input());
   if (command === 'commit') return commit(p, argument);
