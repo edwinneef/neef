@@ -1,5 +1,34 @@
 # Validation — 2026-10-25
 
+## Action-oriented next
+
+- `npm run check`: 45 tests pass. Five focused regressions cover unplanned-phase
+  research, external orchestrator advice, inspectable dependencies, genuine user
+  blockers and repeated no-progress invocations. Installed reference parity is
+  checked for both hosts. These deterministic tests guard the helper handoff,
+  state persistence and shipped instructions; model behavior is checked separately.
+- Installed Claude and Codex each read the new guidance, inspected an unplanned
+  GSD roadmap and the greeting implementation, resolved the name-support dependency,
+  implemented and tested the required outcome, committed safely and saved completion.
+  Neither forwarded the seeded GSD commands or invented a follow-up after exhausting
+  the explicit goal. Evidence: `.test-artifacts/hosts-1792904642892/`.
+- Both hosts preserved project files and HEAD when a private service URL was missing,
+  saved an active blocker with the required user input and avoided a next-command loop.
+  Evidence: `.test-artifacts/hosts-1792904777304/`.
+- Both hosts rechecked a completed goal with a saved empty recommendation and stopped
+  without manufacturing work or recommending another invocation.
+  Evidence: `.test-artifacts/hosts-1792904765221/`.
+- Reproduce those opt-in host checks with `node scripts/smoke.mjs` and respectively
+  `--next-discovery`, `--next-blocked`, or `--next-exhausted`. An initial blocker
+  checker mistook a negated command warning for advice; the corrected checker and
+  rerun passed. Logs remain available in `.test-artifacts/hosts-1792904666905/`.
+- A fresh reader found no instruction conflicts. A subsequent clarification records
+  investigation state before task work and requires the Git baseline before project
+  edits, avoiding unnecessary branch creation for read-only research. The focused
+  contract checks were rerun after that clarification; live evidence above predates it.
+- Managed installation passed its dry run, preserved state, backed up previous files
+  and verified copied hashes. No Git safety implementation or state schema changed.
+
 ## External storage boundary
 
 - `npm run check`: all 40 tests pass, including three new storage-boundary

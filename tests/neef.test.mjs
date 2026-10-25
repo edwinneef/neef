@@ -553,8 +553,82 @@ test('recommendation refresh preserves task and context, supports alternatives a
   assert.equal(f.run(['recommendations-write', cleared.revision], noRecommendation).revision, cleared.revision);
   const next = f.run(['next']);
   assert.deepEqual(next.candidates, []);
-  assert.equal(next.reason, noRecommendation.reason);
+  assert.equal(next.savedReason, noRecommendation.reason);
+  assert.equal(next.discoveryRequired, true);
   assert.ok(fs.readFileSync(f.statePath(), 'utf8').split('\n').length < 40);
+});
+
+// The agent executes next; these guard its shipped contract and helper handoff,
+// not model judgment. Live host checks are separate from deterministic tests.
+const nextGuidance = () => fs.readFileSync(new URL('../references/next.md', import.meta.url), 'utf8');
+
+test('next discovers research work for an unplanned roadmap phase without changing Git or state', t => {
+  const f = fixture(t);
+  f.write('.planning/ROADMAP.md', '# Goal: named greetings\nPhase 2: support names. No plan yet; inspect the greeting API.\n');
+  const before = f.git('status', '--porcelain');
+  const next = f.run(['next']);
+  assert.equal(next.discoveryRequired, true);
+  assert.match(next.reason, /inspect.*goals/i);
+  assert.match(nextGuidance(), /missing plan.*research/i);
+  assert.equal(f.git('status', '--porcelain'), before);
+  assert.equal(fs.existsSync(f.home), false);
+});
+
+test('next revalidates external orchestrator advice as a goal rather than an execution command', t => {
+  const f = fixture(t);
+  const advice = recommendation('Run /gsd:verify-work and /gsd:plan-phase 2, then /neef next.');
+  f.run(['recommendations-write', 'missing'], { primary: advice, alternatives: [] });
+  const next = f.run(['next']);
+  assert.equal(next.requiresRevalidation, true);
+  assert.equal(next.discoveryRequired, true);
+  assert.deepEqual(next.candidates, [advice]); // Legacy advice stays advisory and readable.
+  assert.match(nextGuidance(), /Extract the intended outcome.*external orchestrator/i);
+  assert.match(nextGuidance(), /mandatory project instructions/i);
+});
+
+test('next treats an inspectable dependency as investigation work and can persist its evidence', t => {
+  const f = fixture(t);
+  const saved = f.run(['recommendations-write', 'missing'], { primary: recommendation('Determine whether owned.txt supports names before implementing named greetings.'), alternatives: [] });
+  assert.equal(f.run(['next']).discoveryRequired, true);
+  assert.match(nextGuidance(), /Resolve technical dependencies through code inspection.*focused verification/i);
+  const investigated = f.state(saved.revision, 'Investigate greeting support', {
+    progress: 'complete', verification: 'Inspected owned.txt: it contains only before; no greeting API exists.',
+    recommendations: { primary: recommendation('Implement a greeting API with default and named-output tests.'), alternatives: [] },
+  });
+  assert.match(investigated.state.verification, /Inspected owned.txt/);
+  assert.match(f.run(['next']).candidates[0].action, /Implement a greeting API/);
+});
+
+test('a genuine user blocker stays active with the smallest required input', t => {
+  const f = fixture(t);
+  const saved = f.state('missing', 'Integrate private greeting service', {
+    blockers: 'The service endpoint is absent from code, configuration and project documents. User must supply its URL.',
+    next: 'Provide the greeting service URL.',
+  });
+  const before = fs.readFileSync(f.statePath(), 'utf8');
+  const next = f.run(['next']);
+  assert.equal(next.resume, 'continue');
+  assert.equal(next.discoveryRequired, undefined);
+  assert.equal(next.state.blockers, saved.state.blockers);
+  assert.equal(fs.readFileSync(f.statePath(), 'utf8'), before);
+  assert.match(nextGuidance(), /smallest user action/i);
+  assert.match(nextGuidance(), /Never invent findings/i);
+});
+
+test('repeated next calls without progress require discovery instead of repeating a no-action conclusion', t => {
+  const f = fixture(t);
+  f.run(['recommendations-write', 'missing'], noRecommendation);
+  const before = fs.readFileSync(f.statePath(), 'utf8');
+  for (let i = 0; i < 2; i++) {
+    const next = f.run(['next']);
+    assert.equal(next.discoveryRequired, true);
+    assert.equal(next.savedReason, noRecommendation.reason);
+    assert.match(next.reason, /execute/i);
+  }
+  assert.equal(fs.readFileSync(f.statePath(), 'utf8'), before);
+  assert.match(nextGuidance(), /Never recommend.*neef next.*no meaningful action/i);
+  const skill = fs.readFileSync(new URL('../SKILL.md', import.meta.url), 'utf8');
+  assert.doesNotMatch(skill, /no action is supported.*retain `Run`/i);
 });
 
 test('recommendations enforce concise shape, two-alternative limit, kinds and uniqueness without overwriting state', t => {
@@ -622,8 +696,11 @@ test('both agent installations receive self-contained shaping guidance and prese
   const f = installation(t);
   f.install(true);
   const guidance = fs.readFileSync(path.join(f.home, 'references/shape.md'), 'utf8');
+  const next = fs.readFileSync(path.join(f.home, 'references/next.md'), 'utf8');
   for (const agent of ['.claude', '.agents']) {
     assert.equal(fs.readFileSync(path.join(f.user, agent, 'skills/neef/references/shape.md'), 'utf8'), guidance);
+    assert.equal(fs.readFileSync(path.join(f.user, agent, 'skills/neef/references/next.md'), 'utf8'), next);
+    assert.match(fs.readFileSync(path.join(f.user, agent, 'skills/neef/SKILL.md'), 'utf8'), /next.*read `references\/next.md`/);
   }
   assert.match(guidance, /at most five questions/);
   assert.match(guidance, /at most two targeted questions/);

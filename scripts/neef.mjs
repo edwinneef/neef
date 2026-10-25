@@ -238,8 +238,9 @@ function next(p) {
   const candidates = saved ? [saved.primary, ...saved.alternatives].filter(Boolean) : [];
   const basis = saved?.basis;
   if (basis && (basis.branch !== current.actual.branch || basis.head !== current.actual.head || basis.task !== current.state.task)) current.discrepancies.push('Project changed since recommendations were saved; inspect relevance before selecting');
-  return { ...current, candidates, requiresRevalidation: true,
-    reason: candidates.length ? 'Advisory candidates only; the agent must inspect current code and goals before implementing one' : saved?.reason || 'No supported next action is saved' };
+  return { ...current, candidates, requiresRevalidation: true, discoveryRequired: true,
+    savedReason: saved?.reason || null,
+    reason: 'Inspect current code, goals and project instructions; revalidate advice, investigate uncertainties and execute the highest-value safe action. Saved advice or its absence does not establish that no work remains.' };
 }
 
 function stateRecover(p, expected) {
