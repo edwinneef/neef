@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -599,30 +600,30 @@ test('missing and legacy recommendation state stays read-only; recovery preserve
 test('agreed decisions survive same-task progress and completion, without leaking into new tasks', t => {
   const f = fixture(t);
   const setup = f.run(['setup']);
-  const first = f.state(setup.revision, 'Grill greeting behavior', {
-    decisions: 'Preserve greet() output. Accept an optional name.', next: 'grill standard: 1/5 asked; awaiting choice of empty-name behavior',
+  const first = f.state(setup.revision, 'Shape greeting behavior', {
+    decisions: 'Preserve greet() output. Accept an optional name.', next: 'shape standard: 1/5 asked; awaiting choice of empty-name behavior',
   });
-  const checkpoint = f.state(first.revision, 'Grill greeting behavior', { verification: 'Rechecked the relevant source' });
+  const checkpoint = f.state(first.revision, 'Shape greeting behavior', { verification: 'Rechecked the relevant source' });
   assert.equal(checkpoint.state.next, first.state.next);
-  const resumed = f.state(checkpoint.revision, 'Grill greeting behavior', { next: 'Implement agreed greeting behavior' });
+  const resumed = f.state(checkpoint.revision, 'Shape greeting behavior', { next: 'Implement agreed greeting behavior' });
   assert.equal(resumed.state.decisions, first.state.decisions);
   assert.deepEqual(resumed.state.context, first.state.context);
-  const answered = f.state(resumed.revision, 'Grill greeting behavior', { decisions: `${resumed.state.decisions} Empty names use the default.` });
-  const completed = f.state(answered.revision, 'Grill greeting behavior', { progress: 'complete', recommendations: noRecommendation });
+  const answered = f.state(resumed.revision, 'Shape greeting behavior', { decisions: `${resumed.state.decisions} Empty names use the default.` });
+  const completed = f.state(answered.revision, 'Shape greeting behavior', { progress: 'complete', recommendations: noRecommendation });
   assert.equal(completed.state.decisions, answered.state.decisions);
   const newTask = f.state(completed.revision, 'Unrelated task');
   assert.equal(newTask.state.decisions, '');
   assert.equal(newTask.state.next, '');
-  f.state(completed.revision, 'Grill greeting behavior', { decisions: 'Stale answer' }, /Stale state revision/);
+  f.state(completed.revision, 'Shape greeting behavior', { decisions: 'Stale answer' }, /Stale state revision/);
   assert.equal(f.run(['status']).state.task, 'Unrelated task');
 });
 
-test('both agent installations receive self-contained grilling guidance and preserve unmanaged references', t => {
+test('both agent installations receive self-contained shaping guidance and preserve unmanaged references', t => {
   const f = installation(t);
   f.install(true);
-  const guidance = fs.readFileSync(path.join(f.home, 'references/grill.md'), 'utf8');
+  const guidance = fs.readFileSync(path.join(f.home, 'references/shape.md'), 'utf8');
   for (const agent of ['.claude', '.agents']) {
-    assert.equal(fs.readFileSync(path.join(f.user, agent, 'skills/neef/references/grill.md'), 'utf8'), guidance);
+    assert.equal(fs.readFileSync(path.join(f.user, agent, 'skills/neef/references/shape.md'), 'utf8'), guidance);
   }
   assert.match(guidance, /at most five questions/);
   assert.match(guidance, /at most two targeted questions/);
@@ -633,4 +634,73 @@ test('both agent installations receive self-contained grilling guidance and pres
   fs.writeFileSync(extra, 'Unrelated user guidance');
   f.install(true, /Unmanaged skill reference/);
   assert.equal(fs.readFileSync(extra, 'utf8'), 'Unrelated user guidance');
+});
+
+
+test('challenge advice preserves active work and becomes advisory next candidates', t => {
+  const f = fixture(t);
+  const first = f.state('missing', 'Existing task', { decisions: 'Keep the API', next: 'Finish existing work' });
+  const before = f.git('status', '--porcelain');
+  const head = f.git('rev-parse', 'HEAD');
+  const advice = { primary: recommendation(), alternatives: [] };
+  const saved = f.run(['recommendations-write', first.revision], advice);
+  for (const key of ['task', 'progress', 'decisions', 'next', 'baseline', 'context']) assert.deepEqual(saved.state[key], first.state[key]);
+  assert.equal(f.run(['next']).resume, 'continue');
+  assert.equal(f.git('status', '--porcelain'), before);
+  assert.equal(f.git('rev-parse', 'HEAD'), head);
+  const complete = f.state(saved.revision, 'Existing task', { progress: 'complete', recommendations: advice });
+  assert.equal(f.run(['next']).candidates[0].action, complete.state.recommendations.primary.action);
+});
+
+test('challenge routing stops before development in both installed copies', t => {
+  const f = installation(t);
+  f.install(true);
+  for (const agent of ['.claude', '.agents']) {
+    const root = path.join(f.user, agent, 'skills/neef');
+    const skill = fs.readFileSync(path.join(root, 'SKILL.md'), 'utf8');
+    const guidance = fs.readFileSync(path.join(root, 'references/challenge.md'), 'utf8');
+    assert.match(skill, /challenge.*Project files and Git are read-only/);
+    assert.match(skill, /then report and stop/);
+    assert.match(guidance, /External recommendation state is the only permitted write/);
+    assert.match(guidance, /next revalidates advice/);
+  }
+});
+
+
+test('installer retires only receipt-owned unchanged references and backs them up', t => {
+  const f = installation(t);
+  f.install(true);
+  const receiptPath = path.join(f.home, 'install.json');
+  const receipt = JSON.parse(fs.readFileSync(receiptPath));
+  const target = path.join(f.user, '.agents/skills/neef/references/grill.md');
+  fs.writeFileSync(target, 'Old managed reference');
+  f.install(true, /Unmanaged or edited file preserved/);
+  receipt.files[target] = crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex');
+  fs.writeFileSync(receiptPath, JSON.stringify(receipt));
+  const raw = fs.readFileSync(receiptPath, 'utf8');
+  f.install();
+  assert.equal(fs.readFileSync(receiptPath, 'utf8'), raw);
+  assert.equal(fs.readFileSync(target, 'utf8'), 'Old managed reference');
+  const installed = f.install(true);
+  assert.equal(fs.existsSync(target), false);
+  const restored = JSON.parse(fs.readFileSync(path.join(installed.backup, 'restore.json'))).find(entry => entry.target === target);
+  assert.equal(fs.readFileSync(path.join(installed.backup, restored.backup), 'utf8'), 'Old managed reference');
+  assert.equal(JSON.parse(fs.readFileSync(receiptPath)).files[target], undefined);
+  assert.ok(f.install(true).verified);
+});
+
+test('first challenge can save external advice without a task, context or Git changes', t => {
+  const f = fixture(t);
+  const head = f.git('rev-parse', 'HEAD');
+  const branch = f.git('branch', '--show-current');
+  const saved = f.run(['recommendations-write', 'missing'], { primary: recommendation(), alternatives: [] });
+  assert.equal(saved.state.task, '');
+  assert.equal(saved.state.progress, 'complete');
+  assert.equal(saved.state.baseline, null);
+  assert.equal(saved.state.context, undefined);
+  assert.equal(f.git('rev-parse', 'HEAD'), head);
+  assert.equal(f.git('branch', '--show-current'), branch);
+  assert.equal(f.git('status', '--porcelain'), '');
+  assert.equal(f.run(['next']).candidates.length, 1);
+  f.run(['recommendations-write', 'missing'], noRecommendation, /Stale state revision/);
 });

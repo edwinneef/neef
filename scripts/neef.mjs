@@ -194,11 +194,12 @@ function recommendationsWrite(p, expected, input) {
     const current = stateRead(p);
     if (current.error) fail(current.error);
     if (current.revision !== expected) fail('Stale state revision; reread and reconcile');
-    if (!current.state) fail('No task state; record the development task first');
     const actual = snapshot(p);
-    const value = recommendations(input, current.state.progress, { task: current.state.task, branch: actual.branch, head: actual.head });
-    if (JSON.stringify(value) === JSON.stringify(current.state.recommendations)) return current;
-    return saveState(p, current, { ...current.state, recommendations: value });
+    const state = current.state || { version: 1, project: p.root, revision: crypto.randomUUID(), updated: new Date().toISOString(),
+      task: '', progress: 'complete', branch: actual.branch, head: actual.head, baseline: null, decisions: '', verification: '', next: '', blockers: '' };
+    const value = recommendations(input, state.progress, { task: state.task, branch: actual.branch, head: actual.head });
+    if (JSON.stringify(value) === JSON.stringify(state.recommendations)) return current;
+    return saveState(p, current, { ...state, recommendations: value });
   });
 }
 
@@ -573,7 +574,7 @@ export async function main(args = process.argv.slice(2)) {
   let cwd = process.cwd();
   if (option >= 0) { cwd = args[option + 1] || fail('Missing project path'); args.splice(option, 2); }
   const [command = 'help', argument] = args;
-  if (command === 'help') return { commands: ['setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug>', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations})', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, grill [--deep] <task>, setup, next, continue, status, help, doctor are agent skill modes; grilling uses native questions and state-write, continue resumes unfinished work, next starts one revalidated follow-up after completion' };
+  if (command === 'help') return { commands: ['setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug>', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations})', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, shape [--deep] <idea>, challenge [--deep] <topic>, setup, next, continue, status, help, doctor are agent skill modes; shaping uses native questions and state-write then implements unless discussion-only; challenge is read-only except external recommendations-write and never implements, continue resumes unfinished work, next starts one revalidated follow-up after completion' };
   if (command === 'doctor') return doctor();
   const p = project(cwd);
   const input = () => JSON.parse(fs.readFileSync(0, 'utf8'));

@@ -1,30 +1,46 @@
 # Validation — 2026-10-25
 
-## Adaptive grilling
+## Shape and challenge
 
-- 33 isolated tests pass, including same-task decision/pending-step preservation,
-  clearing unrelated constraints for new tasks, stale revision rejection, and
-  synchronized self-contained grilling references with unmanaged-file protection.
-- Fresh Claude and Codex standard interviews inspected the published API, asked
-  one concrete policy question with a recommendation, and waited without changing
-  code. A real scripted answer resumed each conversation; both saved constraints,
-  implemented the policy, passed focused tests, committed, and saved the next-step
-  evaluation without asking for a new plan or implementation approval.
-- Both hosts honored deep discussion-only across the answer and left project
-  files/HEAD unchanged. One initial deep Claude run asked about out-of-scope input
-  behavior; the guidance now explicitly preserves behavior outside the requested
-  change. Both corrected runs ended after the relevant policy was settled.
-- Explicit deep grilling of a fully specified change asked zero questions and
-  implemented directly on both hosts. Ordinary clear requests did the same.
-- Reproduce with `node scripts/grill-smoke.mjs`, `--deep --discussion-only`,
-  `--deep --clear`, or `--automatic`. These are opt-in headless host conversations
-  using the chat-question fallback, not live native question-widget UI tests.
-  Numeric question limits are checked in guidance; exhaustive five-/two-question
-  conversations were not run. A fresh reader found the fresh-session interview
-  resume gap; `continue` now requires the integrated reference for saved interviews.
-- Agreed constraints use the existing `decisions` field; mode/count/pending
-  question and discussion-only boundaries use task `next`. No interview engine,
-  dependency, separate skill or formal specification document was introduced.
+- `npm run check`: 37 disposable-repository tests pass. Coverage includes agreed
+  decision/pending-step preservation, first-use external recommendations without
+  a development task, active-task protection, next candidates, revision conflicts,
+  installation parity, and receipt-owned retirement with backup and edit protection.
+- Both global host installations contain identical shape/challenge guidance and
+  runtime hashes. Managed previous-mode references are backed up and removed;
+  only migration code and its regression fixture retain the old filename.
+- Fresh installed Claude and Codex challenge and challenge --deep runs preserved
+  project files, branch and HEAD, saved grounded advice from a project with no
+  task state, and stopped. A separate explicit next invocation revalidated and
+  implemented the recommendation, verified behavior, committed and saved completion.
+  Evidence: `.test-artifacts/shape-1792899188465/` and
+  `.test-artifacts/shape-1792899269088/`.
+- Clear shape invocations asked zero questions, implemented only the requested
+  default greeting change, verified, committed and saved decisions on both hosts.
+  Evidence: `.test-artifacts/shape-1792899230893/`.
+- Final standard shape runs saved pending questions, resumed actual answers, persisted
+  decisions and implemented with focused tests and safe commits. Deep discussion-only
+  runs saved answers and stopped questioning without project edits on both hosts.
+  Evidence: `.test-artifacts/shape-1792899446896/` and
+  `.test-artifacts/shape-1792899432610/`.
+- Standard shape and deep discussion-only runs are reproduced with
+  `node scripts/shape-smoke.mjs` and `--deep --discussion-only`. Challenge runs use
+  `--challenge` or `--deep --challenge`; clear requests use `--clear`.
+- Native testing found and fixed missing first-use recommendation persistence.
+  Deep Claude testing also reopened explicitly preserved behavior; the shaping
+  rule now states that preservation settles that decision and deep adds depth,
+  not scope. Explicit baseline:null guidance also closes an observed failure to save
+  pending discussion state before beginning implementation. Initial nested Codex sandbox runs prevented disposable Git commits;
+  this opt-in smoke now runs Codex without that nested sandbox, in isolated fixtures.
+- The skill stays below 8,000 bytes. A fresh reader checked the mode boundary and
+  decision-summary requirement. No dependency, state schema, formal specification
+  or separate skill was introduced. Repository-specific Bun skill guards are not
+  available in this Node-only project; its own regression suite is used instead.
+- Read-only challenge is a skill instruction boundary, not an OS-enforced sandbox.
+  The helper only persists recommendations; it never executes them. Host smokes
+  provide observed restraint, not a universal guarantee against model violations.
+  Question UI widgets and exhaustive five-question conversations were not tested;
+  headless runs exercise chat fallback and real answer resumption.
 
 ## Proactive next-step orchestration
 

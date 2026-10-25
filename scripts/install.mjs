@@ -32,9 +32,8 @@ export function install(apply = false) {
     ['SKILL.md', path.join(user, '.claude/skills/neef/SKILL.md')],
     ['SKILL.md', path.join(user, '.agents/skills/neef/SKILL.md')],
     ['agents/openai.yaml', path.join(user, '.agents/skills/neef/agents/openai.yaml')],
-    ['references/grill.md', path.join(shared, 'references/grill.md')],
-    ['references/grill.md', path.join(user, '.claude/skills/neef/references/grill.md')],
-    ['references/grill.md', path.join(user, '.agents/skills/neef/references/grill.md')],
+    ...['shape', 'challenge'].flatMap(mode => [shared, path.join(user, '.claude/skills/neef'), path.join(user, '.agents/skills/neef')]
+      .map(root => [`references/${mode}.md`, path.join(root, `references/${mode}.md`)])),
   ];
   const receiptPath = path.join(shared, 'install.json');
   noLinks(receiptPath);
@@ -46,6 +45,16 @@ export function install(apply = false) {
     if (old && previous?.files?.[target] !== digest(old)) throw new Error(`Unmanaged or edited file preserved: ${target}`);
     return { target, bytes, old, hash: digest(bytes) };
   });
+  // Retire only receipt-owned references from the previous mode, with backup/rollback.
+  const retired = [shared, path.join(user, '.claude/skills/neef'), path.join(user, '.agents/skills/neef')]
+    .map(root => path.join(root, 'references/grill.md'));
+  for (const target of retired) {
+    noLinks(target);
+    if (!fs.existsSync(target)) continue;
+    const old = fs.readFileSync(target);
+    if (previous?.files?.[target] !== digest(old)) throw new Error(`Unmanaged or edited file preserved: ${target}`);
+    entries.push({ target, old, bytes: null, hash: null });
+  }
   // Never silently activate files left in an existing Neef skill folder.
   for (const agent of ['.claude', '.agents']) {
     const root = path.join(user, agent, 'skills/neef');
@@ -56,7 +65,7 @@ export function install(apply = false) {
       for (const name of fs.readdirSync(path.join(root, 'agents'))) if (name !== 'openai.yaml') throw new Error(`Unmanaged agent metadata: ${name}`);
     }
     if (fs.existsSync(path.join(root, 'references'))) {
-      for (const name of fs.readdirSync(path.join(root, 'references'))) if (name !== 'grill.md') throw new Error(`Unmanaged skill reference: ${name}`);
+      for (const name of fs.readdirSync(path.join(root, 'references'))) if (!['shape.md', 'challenge.md'].includes(name) && !retired.includes(path.join(root, 'references', name))) throw new Error(`Unmanaged skill reference: ${name}`);
     }
   }
   noLinks(path.join(shared, 'state'));
@@ -80,13 +89,14 @@ export function install(apply = false) {
     for (const [i, entry] of entries.entries()) if (entry.old) fs.writeFileSync(path.join(backup, `${i}.bak`), entry.old);
     if (oldReceipt) fs.writeFileSync(path.join(backup, 'install.json.bak'), oldReceipt);
     for (const entry of entries) {
-      replace(entry.target, entry.bytes);
+      if (entry.bytes === null) fs.unlinkSync(entry.target);
+      else replace(entry.target, entry.bytes);
       changed.push(entry);
-      if (digest(fs.readFileSync(entry.target)) !== entry.hash) throw new Error(`Copy verification failed: ${entry.target}`);
+      if (entry.bytes === null ? fs.existsSync(entry.target) : digest(fs.readFileSync(entry.target)) !== entry.hash) throw new Error(`Copy verification failed: ${entry.target}`);
     }
     fs.mkdirSync(path.join(shared, 'state'), { recursive: true });
     replace(receiptPath, JSON.stringify({ version: 1, source, installed: new Date().toISOString(), backup,
-      files: Object.fromEntries(entries.map(entry => [entry.target, entry.hash])) }, null, 2));
+      files: Object.fromEntries(entries.filter(entry => entry.bytes !== null).map(entry => [entry.target, entry.hash])) }, null, 2));
     return { ...result, backup, verified: true };
   } catch (error) {
     for (const entry of changed.reverse()) {
