@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { meaning, modes, moments, PHASES, scenarios, temptations } from './content';
+import { meaning, modes, moments, PHASES, questions, scenarios, temptations } from './content';
 import { Cmd, Hx, hostName, prefix, usePage } from './host';
 import { Mark } from './Logo';
 import { order, Reveal, useInView } from './motion';
@@ -111,6 +111,16 @@ export function Modes() {
     <Reveal as="ul" group className="modes">{modes.map(([command, what, effect], i) => <li key={command} style={order(i)}>
       <code><Cmd text={command} /></code><span>{what}<br /><span className={`badge${effect === 'changes your project' ? ' yes' : ''}`}>{effect}</span></span>
     </li>)}</Reveal>
+  </div></section>;
+}
+
+/** Fair questions: every answer visible, nothing to open. */
+export function Faq() {
+  return <section id="faq"><div className="wrap">
+    <Head title="Fair questions.">What people usually want to know before they try it.</Head>
+    <Reveal as="dl" group className="faq">{questions.map(({ question, answer }, i) => <div key={question} style={order(i)}>
+      <dt>{question}</dt><dd>{answer}</dd>
+    </div>)}</Reveal>
   </div></section>;
 }
 

@@ -37,6 +37,7 @@ The build type-checks the frontend and writes a static site to `site/dist/`. The
   - Where you're needed;
   - Next morning;
   - Every way to ask;
+  - Fair questions (six newcomer questions, all answers visible);
   - Install (copy buttons).
 
 Code: data lives in `src/content.ts`. The other files are:

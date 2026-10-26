@@ -32,7 +32,7 @@ export function useInView<T extends Element>(ref: RefObject<T | null>, rootMargi
  * With `group`, its direct children follow one after another (set `--i` on each child for the order).
  * Hidden only while `html.motion` is set, so reduced motion and no-JS show everything at once.
  */
-export function Reveal({ as = 'div', children, className = '', group = false, style }: { as?: 'div' | 'ul' | 'ol'; children: ReactNode; className?: string; group?: boolean; style?: CSSProperties }) {
+export function Reveal({ as = 'div', children, className = '', group = false, style }: { as?: 'div' | 'ul' | 'ol' | 'dl'; children: ReactNode; className?: string; group?: boolean; style?: CSSProperties }) {
   const ref = useRef<HTMLElement>(null);
   const seen = useInView(ref);
   return createElement(as, { ref, style, className: `${group ? 'reveal-group' : 'reveal'}${seen ? ' in' : ''}${className ? ` ${className}` : ''}` }, children);

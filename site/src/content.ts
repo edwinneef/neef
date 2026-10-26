@@ -114,6 +114,16 @@ export const moments = [
   ['Before anything goes public', 'Everything is saved on your computer. Pushing and publishing wait for you.'],
 ] as const;
 
+/** Newcomer questions; where to get NEEF is answered by the install section right below. */
+export const questions = [
+  { question: 'Is NEEF an AI?', answer: 'No. It’s a set of working rules and a small helper program for the AI assistant you already use: Claude Code or Codex. The assistant does the building; NEEF gives it a consistent way to work.' },
+  { question: 'Do I need to be a programmer?', answer: 'You can describe what you want in normal words. NEEF reports what it changed, what it checked and what comes next. You do need Claude Code or Codex, Node.js 20 or newer, and Git installed.' },
+  { question: 'Do I have to set anything up for each project?', answer: 'Install NEEF once. In a completely empty folder, it sets up Git automatically to save your work in steps you can undo. If a folder already has files but doesn’t use Git, it asks before setting that up. Projects already using Git keep their existing setup.' },
+  { question: 'Can I use it on an existing project?', answer: 'Yes. Add features, fix bugs or improve what you have. NEEF follows your project’s existing tools and code style, makes focused changes and preserves your unfinished edits.' },
+  { question: 'Will I be able to open what it builds?', answer: 'It checks that the app or tool starts. When the assistant can leave it running, you get a local address to open in your browser. Otherwise, you get the exact command to run it. Publishing online is a separate request.' },
+  { question: 'How fast is “fast”?', answer: 'The building goes as fast as your AI assistant and the job allow. NEEF reduces repeated explanations and routine approval steps. It still asks when a real decision or extra authority is needed.' },
+];
+
 export type Effect = 'changes your project' | 'scratch folder only' | 'changes nothing';
 export const modes: [command: string, what: string, effect: Effect][] = [
   ['{neef} <what you want>', 'Build or change something.', 'changes your project'],
