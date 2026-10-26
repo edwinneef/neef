@@ -157,9 +157,9 @@ export default function App() {
             <p className="eyebrow hero-enter">For new ideas and projects already underway</p>
             <h1 className="hero-enter">From idea to a working app. <em>Fast.</em></h1>
             <div className="hero-copy hero-enter">
-              <p className="lead">Describe what you want in plain words. NEEF gets your AI assistant (<strong>Claude Code</strong> or <strong>Codex</strong>) building it right away. Start something new or improve a project you already have. It builds, checks and saves your work, then gives you a running app or the exact command to start it.</p>
+              <p className="lead">Describe it in plain words. NEEF gets <strong>Claude Code</strong> or <strong>Codex</strong> building, checking and saving it, then hands you a running app.</p>
               <div className="hero-actions"><a href="#start" className="button primary">Start in 3 steps <span aria-hidden="true">↗</span></a><a href="#why" className="button">Why it’s fast</a></div>
-              <ul className="hero-facts"><li>Starts in an empty folder</li><li>Fits your existing project</li><li>Keeps going by itself</li></ul>
+              <ul className="hero-facts"><li>Starts in an empty folder</li><li>Fits your existing project</li></ul>
             </div>
           </div>
           <Replay reduced={reduced} />

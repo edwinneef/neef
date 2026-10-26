@@ -44,6 +44,15 @@ export default function Conversation({ messages, session, reduced, started, paus
 
   return <div className={`feed${paused ? ' is-paused' : ''}`} id="session-panel" role="tabpanel" aria-labelledby={`session-${session}`} tabIndex={0}>
     <span className="sr-only" role="status">{complete ? 'Example complete' : paused ? 'Example paused' : 'Example playing'}</span>
+    {/* An invisible copy of the finished conversation reserves exactly its height at every width. */}
+    <div className="feed-reserve" aria-hidden="true">
+      {messages.map((message, index) => <p className={`message ${message.kind}`} key={index}>
+        {message.kind === 'tick' && <span className="check">✓</span>}
+        {message.kind === 'live' && <span className="live-dot" />}
+        {message.text}
+      </p>)}
+    </div>
+    <div className="feed-live">
     {messages.map((message, index) => {
       const step = steps[index];
       if (!reduced && elapsed < step.writing) return null;
@@ -62,5 +71,6 @@ export default function Conversation({ messages, session, reduced, started, paus
       </p>;
     })}
     {typing && <div className="typing-indicator" aria-hidden="true"><span /><span /><span /></div>}
+    </div>
   </div>;
 }
