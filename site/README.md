@@ -60,6 +60,17 @@ Every section uses one basic pattern: content fades and rises once, the first ti
 
 To animate a new component, wrap its block in `<Reveal>`, or its list in `<Reveal as="ul" group>` with `order(i)` on each item. No other setup is needed.
 
+## Deployment
+
+The page is deployed free on Netlify: https://neef-landing.netlify.app (Netlify project `neef-landing`; the repo stays private). It is a manual deploy of the built `site/dist/`, not a Git integration:
+
+```powershell
+npm run site:build
+npx netlify-cli deploy --prod --dir site/dist --no-build
+```
+
+This needs a one-time `npx netlify-cli login`. The local `.netlify/` link folder is gitignored. Cloudflare Pages is the equivalent free option if Netlify is ever not wanted.
+
 ## Notes
 
 - **Installation:** the copy is intentionally source-only, because this repository has no public remote or download URL. The buttons copy the real installer dry-run and apply commands; they don't run them.
