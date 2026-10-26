@@ -13,16 +13,28 @@ const commandCatalog = [
   { name: 'plan', usage: 'plan <feature>', intent: 'explore', changes: 'External task state only', stops: 'Plan saved; continue runs ready phases until complete or blocked' },
   { name: 'challenge', usage: 'challenge [--deep] <topic>', intent: 'choose', changes: 'May save external recommendations; project/Git unchanged', stops: 'Evidence-based critique and improvements; no implementation' },
   { name: 'prototype', usage: 'prototype <description>', aliases: ['proto'], intent: 'explore', changes: 'External scratch demo and README; source/Git/task state unchanged', stops: 'Working demo and handoff; no automatic production promotion' },
-  { name: 'options', usage: 'options', intent: 'choose', changes: 'Nothing during advice (read-only)', stops: 'Ranked choices; a later explicit selection can execute its action' },
-  { name: 'ask', usage: 'ask <description>', intent: 'choose', changes: 'Nothing (read-only)', stops: 'Best-fit command and why; never invokes it' },
+  { name: 'options', usage: 'options [goal]', aliases: ['ask'], intent: 'choose', changes: 'Nothing during advice (read-only)', stops: 'Ranked choices, or the best-fit command for a goal; never invokes it. A later explicit selection can execute its action' },
   { name: 'setup', usage: 'setup', intent: 'inspect', changes: 'External context and managed AGENTS.md/CLAUDE.md directions', stops: 'Context and next-prompt rule saved; no project commands run' },
-  { name: 'next', usage: 'next', intent: 'build', changes: 'Project files and task state; safe local commits', stops: 'One useful action; active tasks require continue instead' },
-  { name: 'continue', usage: 'continue', intent: 'build', changes: 'Existing task and scoped project work; frequent safe local commits', stops: 'Scoped work complete, or no further progress without user input' },
+  { name: 'next', usage: 'next', aliases: ['continue'], intent: 'build', changes: 'Project files and task state; frequent safe local commits', stops: 'Unfinished task resumed until complete or blocked; otherwise one useful follow-up done' },
   { name: 'status', usage: 'status', intent: 'inspect', changes: 'Nothing (read-only)', stops: 'Progress, Git, verification and blockers reported' },
   { name: 'help', usage: 'help', intent: 'inspect', changes: 'Nothing (read-only)', stops: 'Grouped command guide and aliases displayed' },
-  { name: 'doctor', usage: 'doctor', intent: 'inspect', changes: 'Nothing; no implicit repairs', stops: 'Installation health checks and concrete fixes reported' },
+  { name: 'doctor', usage: 'doctor', subskill: false, intent: 'inspect', changes: 'Nothing; no implicit repairs', stops: 'Installation health checks and concrete fixes reported' },
 ];
 export const commandNames = commandCatalog.flatMap(({ name, aliases = [] }) => [name, ...aliases]);
+// Direct subskills: canonical commands only; aliases and rare commands stay inside /neef.
+export const subskillNames = commandCatalog.filter(command => command.subskill !== false).map(({ name }) => name);
+export const commandDescriptions = {
+  task: 'Implement and verify a development task',
+  shape: 'Clarify an idea, then build the agreed solution',
+  plan: 'Save an implementation plan without changing code',
+  challenge: 'Critique an approach and suggest improvements',
+  prototype: 'Build an isolated demo to test an idea',
+  options: 'Rank next actions, or find the best command for a goal',
+  setup: 'Discover the project and save its context',
+  next: 'Resume unfinished work, or do the next useful thing',
+  status: 'Show progress, verification and blockers',
+  help: 'Explain NEEF commands and when to use them',
+};
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const fail = message => { throw new Error(message); };
 const home = () => path.resolve(process.env.NEEF_HOME || path.join(os.homedir(), '.neef'));
@@ -298,7 +310,7 @@ function recommendations(input, progress, basis) {
   const candidates = [input.primary, ...input.alternatives].filter(Boolean)
     .map(({ kind, action, reason }) => ({ kind, action: action.trim(), reason: reason.trim() }))
     .sort((a, b) => actionKinds.indexOf(a.kind) - actionKinds.indexOf(b.kind));
-  if (progress === 'complete' && candidates.some(item => item.kind === 'REQUIRED')) fail('Required work belongs to the unfinished original task; keep progress active and use continue');
+  if (progress === 'complete' && candidates.some(item => item.kind === 'REQUIRED')) fail('Required work belongs to the unfinished original task; keep progress active and use next');
   if (new Set(candidates.map(item => item.action.toLowerCase())).size !== candidates.length) fail('Duplicate recommendations');
   return { primary: candidates[0] || null, reason: candidates.length ? '' : input.reason.trim(), alternatives: candidates.slice(1), basis };
 }
@@ -320,7 +332,7 @@ function recommendationsWrite(p, expected, input) {
 function next(p) {
   const current = status(p);
   if (current.error) return { ...current, candidates: [], reason: current.error, requiresRevalidation: true };
-  if (current.state?.progress === 'active') return { ...current, candidates: [], reason: 'Original task is unfinished; use neef continue', resume: 'continue', requiresRevalidation: true };
+  if (current.state?.progress === 'active') return { ...current, candidates: [], reason: 'Original task is unfinished; resume it before choosing new work', resume: 'continue', requiresRevalidation: true };
   const saved = current.state?.recommendations;
   const candidates = saved ? [saved.primary, ...saved.alternatives].filter(Boolean) : [];
   const basis = saved?.basis;
@@ -471,9 +483,9 @@ function discover(p, minimal) {
   return { context, warnings: [...new Set(warnings)].slice(0, 8) };
 }
 
-const directionRule = 'End each final reply about this project with one next-prompt direction, including replies to ordinary prompts without a NEEF invocation. The direction is always a copyable NEEF skill command in the current host\'s syntax (`/neef ...` in Claude Code, `$neef ...` in Codex), never a bare prose prompt. Put the concrete request inside the command, for example `/neef add retry with backoff to the upload client and cover it with a test`, followed by a short note on its intended result. Choose the fitting mode (task, shape, plan, challenge, prototype, ask, continue, next) from current work and established goals; prefer a specific request over a bare `neef next`. When waiting for input, put the needed answer in the command, for example `/neef <your answer>`. When no useful work remains, say so and suggest `/neef shape <next goal>` rather than inventing work. Use one closing direction, without repeating it elsewhere.';
+const directionRule = 'End each final reply about this project with one next-prompt direction, including replies to ordinary prompts without a NEEF invocation. The direction is always a copyable NEEF skill command in the current host\'s syntax (`/neef ...` in Claude Code, `$neef ...` in Codex), never a bare prose prompt. Put the concrete request inside the command, for example `/neef add retry with backoff to the upload client and cover it with a test`, followed by a short note on its intended result. Choose the fitting mode (task, shape, plan, challenge, prototype, options, next) from current work and established goals; prefer a specific request over a bare `neef next`. When waiting for input, put the needed answer in the command, for example `/neef <your answer>`. When no useful work remains, say so and suggest `/neef shape <next goal>` rather than inventing work. Use one closing direction, without repeating it elsewhere.';
 // Unedited blocks from earlier releases are upgraded in place by setup.
-const legacyDirectionRules = ['End each final reply about this project with one useful next-prompt direction, including replies to ordinary prompts without a NEEF invocation. Give a concrete, copyable prompt or the appropriate NEEF command in the current host\'s syntax, with enough detail to explain its intended result. Base it on current work and established goals; prefer the actual action over a bare "neef next". When waiting for input, make the needed answer the direction. When no useful work remains, say so and invite the next goal rather than inventing work. Use one closing direction, without repeating it elsewhere.'];
+const legacyDirectionRules = [directionRule.replace('prototype, options, next)', 'prototype, ask, continue, next)'), 'End each final reply about this project with one useful next-prompt direction, including replies to ordinary prompts without a NEEF invocation. Give a concrete, copyable prompt or the appropriate NEEF command in the current host\'s syntax, with enough detail to explain its intended result. Base it on current work and established goals; prefer the actual action over a bare "neef next". When waiting for input, make the needed answer the direction. When no useful work remains, say so and invite the next goal rather than inventing work. Use one closing direction, without repeating it elsewhere.'];
 const directionBlockFor = rule => `<!-- neef:next-prompt:start -->
 ## Next prompt
 
@@ -753,8 +765,8 @@ export async function main(args = process.argv.slice(2)) {
       .map(([id, intent]) => ({ intent, commands: commandCatalog.filter(command => command.intent === id)
         .map(({ usage, changes, stops, aliases = [] }) => ({ command: usage, changes, stops, aliases })) })),
     invocation: { codex: '$neef <command>', claude: '/neef <command>' },
-    aliases: { codex: commandNames.map(command => `$neef-${command}`), claude: commandNames.map(command => `/neef-${command}`) },
-    helperCommands: ['prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?}]}. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. Shared state remains under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, shape [--deep] <idea>, plan <feature>, challenge [--deep] <topic>, prototype <description> (proto alias), options, ask <description>, setup, next, continue, status, help, doctor are agent skill modes; prototype builds or refines isolated external demos and hands approved concepts to development without automatic production changes; options ranks project actions and ask recommends an existing command, both read-only including external state and without execution; shaping uses native questions and state-write then implements unless discussion-only; plan saves a complexity-sized full-feature roadmap then stops, continue runs all ready phases until complete or blocked; challenge is read-only except external recommendations-write and never implements, continue resumes unfinished work, next starts one revalidated follow-up after completion' };
+    aliases: { codex: subskillNames.map(command => `$neef-${command}`), claude: subskillNames.map(command => `/neef-${command}`) },
+    helperCommands: ['prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?}]}. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. Shared state remains under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, shape [--deep] <idea>, plan <feature>, challenge [--deep] <topic>, prototype <description> (proto alias), options [goal] (ask alias), setup, next (continue alias), status, help, doctor are agent skill modes; prototype builds or refines isolated external demos and hands approved concepts to development without automatic production changes; options ranks project actions, or with a goal recommends an existing command, read-only including external state and without execution; shaping uses native questions and state-write then implements unless discussion-only; plan saves a complexity-sized full-feature roadmap then stops; challenge is read-only except external recommendations-write and never implements; next resumes unfinished work and runs all ready plan phases until complete or blocked, otherwise starts one revalidated follow-up' };
   if (command === 'doctor') return doctor();
   const p = project(cwd);
   if (['setup', 'bootstrap', 'context-write', 'begin', 'prepare', 'commit', 'state-write', 'recommendations-write', 'state-recover'].includes(command)) requireExternalStorage(p);

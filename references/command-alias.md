@@ -1,6 +1,6 @@
 ---
 name: neef-{{command}}
-description: "Run Neef's {{command}} command. Use only when explicitly invoked."
+description: "{{description}}. Use only when explicitly invoked."
 disable-model-invocation: true
 ---
 

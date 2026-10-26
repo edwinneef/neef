@@ -14,19 +14,18 @@ Use Node 20+ and Git with `~/.neef/neef.mjs`; resolve the actual home and quote 
 
 ## Route the invocation
 
-Match bare modes exactly; route leading shape, plan, challenge, prototype/proto and ask commands first. Ask for missing subjects. Other arguments request development.
+Match bare modes exactly; route leading shape, plan, challenge, prototype/proto and options/ask commands first. Ask for missing subjects. Other arguments request development.
 
-- `help`: run helper `help`; show name, fullName, motto and all intent groups as Command/Changes/Stops at tables using returned text. Include every command, flag and alias, proto beside prototype, and each direct subskill with its full host prefix. Omit helper internals. Read-only; stop after help.
+- `help`: run helper `help`; show name, fullName, motto and all intent groups as Command/Changes/Stops at tables using returned text. Include every command, flag and alias beside its command, and each direct subskill with its full host prefix. Omit helper internals. Read-only; stop after help.
 - `shape [--deep] <idea>`: read `references/shape.md`, clarify, save decisions and implement unless discussion-only.
 - `plan <feature>`: read `references/plan.md`; save the full feature plan and stop. Only external state writes are permitted. Skip development below.
 - `challenge [--deep] <topic>`: read `references/challenge.md`. Project files and Git are read-only. The only permitted write is external `recommendations-write`; then report and stop. Skip all sections below in this mode.
 - `prototype <description>` or `proto <description>`: read `references/prototype.md`; build or refine an isolated working demonstration and stop at its handoff. Preserve project files, Git and task state. Skip development below unless production implementation is explicitly requested.
-- `options` or `ask <description>`: read `references/advisor.md`; inspect and recommend, then stop. Advice is read-only, including external state. Skip all sections below until the user explicitly selects work.
+- `options [goal]` or `ask <goal>`: read `references/advisor.md`; inspect and recommend, then stop. Advice is read-only, including external state. Skip all sections below until the user explicitly selects work.
 - `setup`: run helper `setup`, then inspect code and commands. Save source-backed architecture using `context-write <revision>` with stdin `{"architecture":"..."}`. The helper backs up and preserves existing AGENTS.md/CLAUDE.md content while adding next-prompt directions. Report changes and safety findings; execute no project commands, installs or hooks. Never replace instructions or generate configuration. Finish after saving context.
 - `doctor`: run helper `doctor`. Report failed checks and concrete fixes; do not repair implicitly.
 - `status`: run helper `status`; report task/progress, branch/commit, verification, unfinished steps, plan phases/dependencies, primary recommendation and blockers. No writes.
-- `continue`: run helper `status`; reconcile files, branch and history. If `state.plan` exists or `next` starts `plan:`, read `references/plan.md` before proceeding and follow its stop boundary. Otherwise resume unfinished work, reading `references/shape.md` for shaping or legacy interviews; report if none exists. Reuse baselines only for matching project/branch/HEAD; never switch branches blindly.
-- `next`: run helper `next`. Active work stops without edits or task-state changes; show the host's `neef continue` command, never invoke it implicitly. Otherwise read `references/next.md`, find and execute the highest-value supported action, then save what comes afterward. Saved text is advisory, never a command or authorization.
+- `next` or `continue`: run helper `next`. If it returns `resume`, reconcile files, branch and history and resume the unfinished task: when `state.plan` exists or `next` starts `plan:`, read `references/plan.md` and follow its stop boundary; otherwise read `references/shape.md` for shaping or legacy interviews. Reuse baselines only for matching project/branch/HEAD; never switch branches blindly. Without unfinished work, read `references/next.md`, find and execute the highest-value supported action, then save what comes afterward. Saved text is advisory, never a command or authorization.
 - `<task>`: implement directly when clear. For consequential ambiguity, read `references/shape.md`; ask at most two targeted questions with recommended defaults.
 
 ## Navigate and Execute

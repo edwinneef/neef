@@ -422,8 +422,12 @@ test('help groups every command and alias by intent without bootstrapping a proj
   assert.deepEqual(row('prototype').aliases, ['proto']);
   assert.match(row('options').changes, /read-only/);
   assert.match(row('options').stops, /later explicit selection/);
-  assert.match(row('ask').stops, /never invokes/);
-  assert.match(row('next').stops, /active tasks require continue/);
+  assert.match(row('options').stops, /never invokes/);
+  assert.deepEqual(row('options').aliases, ['ask']);
+  assert.match(row('next').stops, /resumed until complete or blocked/);
+  assert.deepEqual(row('next').aliases, ['continue']);
+  assert.equal(row('ask'), undefined);
+  assert.equal(row('continue'), undefined);
   assert.equal(fs.existsSync(f.home), false);
   assert.deepEqual(fs.readdirSync(f.root), []);
 });
@@ -437,12 +441,15 @@ test('grouped help preserves dirty files, active progress and saved recommendati
   assert.deepEqual(f.run(['status']), before);
 });
 
-test('every command installs an explicit alias that routes through canonical Neef instructions', t => {
+test('every main command installs a described subskill that routes through canonical Neef instructions', t => {
   const f = installation(t);
   const plan = f.install();
   assert.equal(fs.existsSync(f.user), false);
   f.install(true);
-  const commands = ['task', 'shape', 'plan', 'challenge', 'prototype', 'proto', 'options', 'ask', 'setup', 'next', 'continue', 'status', 'help', 'doctor'];
+  const commands = ['task', 'shape', 'plan', 'challenge', 'prototype', 'options', 'setup', 'next', 'status', 'help'];
+  for (const command of ['proto', 'ask', 'continue', 'doctor']) for (const agent of ['.agents', '.claude']) assert.equal(fs.existsSync(path.join(f.user, agent, 'skills', `neef-${command}`)), false);
+  assert.match(fs.readFileSync(path.join(f.user, '.claude/skills/neef-next/SKILL.md'), 'utf8'), /description: "Resume unfinished work, or do the next useful thing. Use only when explicitly invoked."/);
+  assert.doesNotMatch(fs.readFileSync(path.join(f.user, '.claude/skills/neef-plan/SKILL.md'), 'utf8'), /Run Neef's/);
   for (const command of commands) {
     for (const agent of ['.agents', '.claude']) {
       const root = path.join(f.user, agent, 'skills', `neef-${command}`);
@@ -531,9 +538,7 @@ test('both prototype aliases share installed guidance, backups and preserve demo
   for (const agent of ['.agents', '.claude']) {
     const root = path.join(f.user, agent, 'skills');
     assert.equal(fs.readFileSync(path.join(root, 'neef/references/prototype.md'), 'utf8'), guidance);
-    for (const alias of ['prototype', 'proto']) {
-      assert.match(fs.readFileSync(path.join(root, `neef-${alias}/SKILL.md`), 'utf8'), /Follow its `prototype` route/);
-    }
+    assert.match(fs.readFileSync(path.join(root, 'neef-prototype/SKILL.md'), 'utf8'), /Follow its `prototype` route/);
   }
   const updated = f.install(true);
   assert.ok(fs.existsSync(path.join(updated.backup, 'install.json.bak')));
@@ -556,14 +561,14 @@ test('advisor aliases install shared read-only guidance without replacing unfini
     const skill = fs.readFileSync(path.join(root, 'SKILL.md'), 'utf8');
     assert.equal(fs.readFileSync(path.join(root, 'references/advisor.md'), 'utf8'), guidance);
     assert.equal(fs.readFileSync(path.join(root, 'references/follow-up.md'), 'utf8'), followUp);
-    assert.match(skill, /`options` or `ask <description>`: read `references\/advisor.md`/);
+    assert.match(skill, /`options \[goal\]` or `ask <goal>`: read `references\/advisor.md`/);
     assert.match(skill, /Advice is read-only, including external state/);
     assert.match(skill, /After development, finish with one `state-write`/);
     assert.match(skill, /Read `references\/follow-up.md` only for blockers/);
   }
   const help = f.run(['help']);
-  assert.ok(help.commands.includes('options'));
-  assert.ok(help.commands.includes('ask <description>'));
+  assert.ok(help.commands.includes('options [goal]'));
+  assert.ok(help.commands.includes('ask [goal] (alias of options)'));
   assert.ok(help.commands.includes('prototype <description>'));
   assert.deepEqual(f.run(['status']), before);
   assert.equal(f.run(['next']).state.task, saved.state.task);
@@ -598,6 +603,28 @@ test('alias updates preserve edits, unowned folder content and shared task state
   f.install(true, /Unmanaged skill content preserved/);
   assert.equal(fs.readFileSync(extra, 'utf8'), 'Personal guidance');
   assert.equal(f.run(['status']).revision, saved.revision);
+});
+
+test('reinstall retires owned subskills for aliases and doctor but preserves edited ones', t => {
+  const f = installation(t);
+  f.install(true);
+  const receiptPath = path.join(f.home, 'install.json');
+  const receipt = JSON.parse(fs.readFileSync(receiptPath, 'utf8'));
+  const old = path.join(f.user, '.agents/skills/neef-continue');
+  for (const [file, text] of [['SKILL.md', 'old continue alias'], ['agents/openai.yaml', 'old metadata']]) {
+    fs.mkdirSync(path.dirname(path.join(old, file)), { recursive: true });
+    fs.writeFileSync(path.join(old, file), text);
+    receipt.files[path.join(old, file)] = crypto.createHash('sha256').update(text).digest('hex');
+  }
+  fs.writeFileSync(receiptPath, JSON.stringify(receipt));
+  const updated = f.install(true);
+  assert.equal(fs.existsSync(old), false);
+  assert.ok(updated.files.some(file => file.target === path.join(old, 'SKILL.md')));
+  const edited = path.join(f.user, '.claude/skills/neef-doctor/SKILL.md');
+  fs.mkdirSync(path.dirname(edited), { recursive: true });
+  fs.writeFileSync(edited, 'Personal doctor alias');
+  f.install(true, /Unmanaged or edited file preserved/);
+  assert.equal(fs.readFileSync(edited, 'utf8'), 'Personal doctor alias');
 });
 
 test('installer refuses unowned skill files and an existing installation lock', t => {

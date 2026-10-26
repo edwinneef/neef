@@ -121,15 +121,15 @@ async function run(host) {
     result.reply = finalMessage;
     result.passed = code === 0 && result.head === beforeDirections.head && result.status === ''
       && status.stdout === beforeDirections.state && /Hello, world!/.test(finalMessage)
-      && /next|prompt|you can|try|ask|would you/i.test(finalMessage);
+      && /[/$]neef[ -]\w/.test(finalMessage);
   } else if (help) {
     result.help = { text: finalMessage, stateUnchanged: status.stdout === beforeHelp };
     result.passed = code === 0 && result.head === initial && result.status === '' && result.help.stateUnchanged
       && /Changes/i.test(finalMessage) && /Stops/i.test(finalMessage)
       && /Choose what to do/i.test(finalMessage) && /Explore before building/i.test(finalMessage)
       && /Build or keep moving/i.test(finalMessage) && /Understand the project/i.test(finalMessage)
-      && /--deep/.test(finalMessage) && /neef-proto\b/.test(finalMessage)
-      && /neef-doctor\b/.test(finalMessage) && /discussion.only/.test(finalMessage)
+      && /--deep/.test(finalMessage) && /\bproto\b/.test(finalMessage) && /\bdoctor\b/.test(finalMessage)
+      && !/neef-(proto|ask|continue|doctor)\b/.test(finalMessage) && /discussion.only/.test(finalMessage)
       && !/state-write|recommendations-write|prototype-workspace/.test(finalMessage);
   } else if (exhausted) {
     result.passed = code === 0 && checks.status === 0 && result.head === initial && result.status === ''

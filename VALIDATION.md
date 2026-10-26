@@ -1,5 +1,22 @@
 # Validation — 2026-10-25
 
+## Smaller command surface with picker descriptions
+
+- `continue` is now an alias of `next`: with an active task the helper still
+  returns `resume`, and the route resumes it instead of redirecting. `ask` is
+  an alias of `options [goal]`. `proto`, `ask`, `continue` and `doctor` keep
+  working through `/neef`/`$neef` but no longer get their own subskills.
+- Claude subskill frontmatter now carries each command's description instead
+  of "Run Neef's X command"; descriptions live in the shared catalog.
+- Reinstall retires receipt-owned old subskill files with backup and removes
+  emptied folders; edited ones are refused and preserved. The direction rule's
+  mode list changed, so the previous block is upgraded in place by setup.
+- `npm run check`: 69/69 passed, including a new retirement test. Install dry
+  run, backed-up apply and doctor passed; the picker now lists 10 described
+  subskills. Setup upgraded this repository's AGENTS.md and CLAUDE.md. Host
+  smoke tests (`scripts/smoke.mjs`, help and directions checks updated) were
+  not run.
+
 ## Next prompt is always a NEEF command
 
 - The managed direction rule now requires the closing suggestion to be a

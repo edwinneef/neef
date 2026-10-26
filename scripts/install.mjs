@@ -4,28 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { commandNames } from './neef.mjs';
+import { commandNames, commandDescriptions, subskillNames } from './neef.mjs';
 
 const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const user = path.resolve(process.env.NEEF_USER_HOME || os.homedir());
 const shared = path.resolve(process.env.NEEF_HOME || path.join(user, '.neef'));
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
-const commandDescriptions = {
-  task: 'Implement and verify a development task',
-  shape: 'Clarify an idea, then build the agreed solution',
-  plan: 'Save an implementation plan without changing code',
-  challenge: 'Critique an approach and suggest improvements',
-  prototype: 'Build an isolated demo to test an idea',
-  proto: 'Build an isolated demo to test an idea',
-  options: 'Compare useful next actions for this project',
-  ask: 'Find the best NEEF command for your goal',
-  setup: 'Discover the project and save its context',
-  next: 'Implement one useful follow-up after completion',
-  continue: 'Resume unfinished work until complete or blocked',
-  status: 'Show progress, verification and blockers',
-  help: 'Explain NEEF commands and when to use them',
-  doctor: 'Check installation health and report fixes',
-};
 
 function noLinks(target) {
   for (let cursor = target; cursor !== path.dirname(cursor); cursor = path.dirname(cursor)) {
@@ -52,7 +36,7 @@ export function install(apply = false) {
     ...['shape', 'plan', 'challenge', 'prototype', 'advisor', 'next', 'follow-up', 'start'].flatMap(mode => [shared, path.join(user, '.claude/skills/neef'), path.join(user, '.agents/skills/neef')]
       .map(root => [`references/${mode}.md`, path.join(root, `references/${mode}.md`)])),
   ];
-  for (const command of commandNames) {
+  for (const command of subskillNames) {
     for (const agent of ['.claude', '.agents']) {
       const root = path.join(user, agent, 'skills', `neef-${command}`);
       definitions.push(['references/command-alias.md', path.join(root, 'SKILL.md'), command]);
@@ -67,7 +51,7 @@ export function install(apply = false) {
     let bytes = fs.readFileSync(path.join(source, relative));
     if (command) bytes = Buffer.from(bytes.toString('utf8').replaceAll('{{command}}', command)
       .replaceAll('{{description}}', commandDescriptions[command])
-      .replaceAll('{{route}}', command === 'task' ? '`<task>` route (use the supplied development request as the task)' : `\`${command === 'proto' ? 'prototype' : command}\` route`));
+      .replaceAll('{{route}}', command === 'task' ? '`<task>` route (use the supplied development request as the task)' : `\`${command}\` route`));
     const old = fs.existsSync(target) ? fs.readFileSync(target) : null;
     if (old && previous?.files?.[target] !== digest(old)) throw new Error(`Unmanaged or edited file preserved: ${target}`);
     return { target, bytes, old, hash: digest(bytes) };
@@ -75,6 +59,11 @@ export function install(apply = false) {
   // Retire only receipt-owned references from the previous mode, with backup/rollback.
   const retired = [shared, path.join(user, '.claude/skills/neef'), path.join(user, '.agents/skills/neef')]
     .map(root => path.join(root, 'references/grill.md'));
+  // Aliases and rare commands no longer get their own subskill folders.
+  for (const command of commandNames.filter(name => !subskillNames.includes(name))) for (const agent of ['.claude', '.agents']) {
+    const root = path.join(user, agent, 'skills', `neef-${command}`);
+    retired.push(path.join(root, 'SKILL.md'), ...(agent === '.agents' ? [path.join(root, 'agents/openai.yaml')] : []));
+  }
   for (const target of retired) {
     noLinks(target);
     if (!fs.existsSync(target)) continue;
@@ -120,6 +109,10 @@ export function install(apply = false) {
       else replace(entry.target, entry.bytes);
       changed.push(entry);
       if (entry.bytes === null ? fs.existsSync(entry.target) : digest(fs.readFileSync(entry.target)) !== entry.hash) throw new Error(`Copy verification failed: ${entry.target}`);
+    }
+    // Drop subskill folders emptied by retirement; anything else left inside keeps them.
+    for (const entry of entries.filter(entry => entry.bytes === null)) {
+      for (let dir = path.dirname(entry.target); /[\\/]neef-[\w-]+([\\/]agents)?$/.test(dir) && fs.existsSync(dir) && !fs.readdirSync(dir).length; dir = path.dirname(dir)) fs.rmdirSync(dir);
     }
     fs.mkdirSync(path.join(shared, 'state'), { recursive: true });
     replace(receiptPath, JSON.stringify({ version: 1, source, installed: new Date().toISOString(), backup,
