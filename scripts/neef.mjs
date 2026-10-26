@@ -471,13 +471,17 @@ function discover(p, minimal) {
   return { context, warnings: [...new Set(warnings)].slice(0, 8) };
 }
 
-const directionBlock = `<!-- neef:next-prompt:start -->
+const directionRule = 'End each final reply about this project with one next-prompt direction, including replies to ordinary prompts without a NEEF invocation. The direction is always a copyable NEEF skill command in the current host\'s syntax (`/neef ...` in Claude Code, `$neef ...` in Codex), never a bare prose prompt. Put the concrete request inside the command, for example `/neef add retry with backoff to the upload client and cover it with a test`, followed by a short note on its intended result. Choose the fitting mode (task, shape, plan, challenge, prototype, ask, continue, next) from current work and established goals; prefer a specific request over a bare `neef next`. When waiting for input, put the needed answer in the command, for example `/neef <your answer>`. When no useful work remains, say so and suggest `/neef shape <next goal>` rather than inventing work. Use one closing direction, without repeating it elsewhere.';
+// Unedited blocks from earlier releases are upgraded in place by setup.
+const legacyDirectionRules = ['End each final reply about this project with one useful next-prompt direction, including replies to ordinary prompts without a NEEF invocation. Give a concrete, copyable prompt or the appropriate NEEF command in the current host\'s syntax, with enough detail to explain its intended result. Base it on current work and established goals; prefer the actual action over a bare "neef next". When waiting for input, make the needed answer the direction. When no useful work remains, say so and invite the next goal rather than inventing work. Use one closing direction, without repeating it elsewhere.'];
+const directionBlockFor = rule => `<!-- neef:next-prompt:start -->
 ## Next prompt
 
-End each final reply about this project with one useful next-prompt direction, including replies to ordinary prompts without a NEEF invocation. Give a concrete, copyable prompt or the appropriate NEEF command in the current host's syntax, with enough detail to explain its intended result. Base it on current work and established goals; prefer the actual action over a bare "neef next". When waiting for input, make the needed answer the direction. When no useful work remains, say so and invite the next goal rather than inventing work. Use one closing direction, without repeating it elsewhere.
+${rule}
 
 Suggestions are advisory. Invoke NEEF only when the user explicitly requests it; setup does not authorize automatic workflows or executing suggested prompts.
 <!-- neef:next-prompt:end -->`;
+const directionBlock = directionBlockFor(directionRule);
 
 function projectDirections(p) {
   const entries = ['AGENTS.md', 'CLAUDE.md'].map(name => {
@@ -485,10 +489,12 @@ function projectDirections(p) {
     const digest = fileState(p.root, name);
     const old = digest === null ? null : fs.readFileSync(file);
     const text = old?.toString('utf8') || '';
-    const block = directionBlock.replaceAll('\n', text.includes('\r\n') ? '\r\n' : '\n');
+    const eol = text.includes('\r\n') ? '\r\n' : '\n';
+    const block = directionBlock.replaceAll('\n', eol);
     if (text.includes('<!-- neef:next-prompt:')) {
-      if (!text.includes(block) || text.split('<!-- neef:next-prompt:').length !== 3) fail(`Edited or malformed NEEF direction block: ${name}; preserve it and reconcile manually`);
-      return { name, file, old, bytes: old };
+      const legacy = legacyDirectionRules.map(rule => directionBlockFor(rule).replaceAll('\n', eol)).find(value => text.includes(value));
+      if (!(text.includes(block) || legacy) || text.split('<!-- neef:next-prompt:').length !== 3) fail(`Edited or malformed NEEF direction block: ${name}; preserve it and reconcile manually`);
+      return { name, file, old, bytes: legacy ? Buffer.from(text.replace(legacy, () => block)) : old };
     }
     const newline = text.includes('\r\n') ? '\r\n' : '\n';
     return { name, file, old, bytes: Buffer.concat([old || Buffer.alloc(0), Buffer.from(`${text ? (text.endsWith('\n') ? newline : newline + newline) : ''}${block}${newline}`)]) };

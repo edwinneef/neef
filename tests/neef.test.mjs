@@ -699,11 +699,28 @@ test('setup directions preserve bytes, back up originals and remain idempotent',
   assert.ok(claude.toString().includes('settings.\r\n\r\n<!-- neef:'));
   assert.match(agent.toString(), /ordinary prompts without a NEEF invocation/);
   assert.match(agent.toString(), /Suggestions are advisory/);
+  assert.match(agent.toString(), /always a copyable NEEF skill command/);
   assert.deepEqual(fs.readFileSync(path.join(first.directions.backup, '1.bak')), original);
   const second = f.run(['setup']);
   assert.deepEqual(second.directions, { files: [], backup: null });
   assert.deepEqual(fs.readFileSync(path.join(f.root, 'CLAUDE.md')), claude);
   assert.deepEqual(fs.readFileSync(path.join(f.root, 'AGENTS.md')), agent);
+});
+
+test('setup upgrades an unedited earlier direction block in place', t => {
+  const f = fixture(t);
+  const legacy = '<!-- neef:next-prompt:start -->\r\n## Next prompt\r\n\r\nEnd each final reply about this project with one useful next-prompt direction, including replies to ordinary prompts without a NEEF invocation. Give a concrete, copyable prompt or the appropriate NEEF command in the current host\'s syntax, with enough detail to explain its intended result. Base it on current work and established goals; prefer the actual action over a bare "neef next". When waiting for input, make the needed answer the direction. When no useful work remains, say so and invite the next goal rather than inventing work. Use one closing direction, without repeating it elsewhere.\r\n\r\nSuggestions are advisory. Invoke NEEF only when the user explicitly requests it; setup does not authorize automatic workflows or executing suggested prompts.\r\n<!-- neef:next-prompt:end -->';
+  const original = `# Mine\r\n\r\n${legacy}\r\nAfter.\r\n`;
+  f.write('CLAUDE.md', original);
+  const first = f.run(['setup']);
+  assert.deepEqual(first.directions.files, ['AGENTS.md', 'CLAUDE.md']);
+  const claude = fs.readFileSync(path.join(f.root, 'CLAUDE.md'), 'utf8');
+  assert.ok(claude.startsWith('# Mine\r\n\r\n<!-- neef:next-prompt:start -->\r\n'));
+  assert.ok(claude.endsWith('<!-- neef:next-prompt:end -->\r\nAfter.\r\n'));
+  assert.match(claude, /always a copyable NEEF skill command/);
+  assert.doesNotMatch(claude, /one useful next-prompt direction/);
+  assert.equal(fs.readFileSync(path.join(first.directions.backup, '1.bak'), 'utf8'), original);
+  assert.deepEqual(f.run(['setup']).directions, { files: [], backup: null });
 });
 
 test('setup refuses unsafe or edited instructions before changing either instruction file', t => {

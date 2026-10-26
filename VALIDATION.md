@@ -1,5 +1,19 @@
 # Validation — 2026-10-25
 
+## Next prompt is always a NEEF command
+
+- The managed direction rule now requires the closing suggestion to be a
+  copyable NEEF command in host syntax (`/neef ...` or `$neef ...`) carrying the
+  concrete request, never a bare prose prompt. Waiting replies put the needed
+  answer in the command; exhausted goals suggest `neef shape <next goal>`.
+- Setup upgrades an unedited earlier block in place, preserving surrounding
+  bytes and line endings, backing up the original and staying idempotent on
+  repeat. Hand-edited or malformed blocks are still refused.
+- `npm run check`: 68/68 passed, including the new legacy-upgrade test.
+  Managed install passed dry run, backed-up apply and doctor; rerunning setup
+  upgraded this repository's AGENTS.md and CLAUDE.md. Fresh host smoke tests
+  of the new wording were not run.
+
 ## Fast start for new projects
 
 - `begin` initializes Git on `main` only in a completely empty folder without
