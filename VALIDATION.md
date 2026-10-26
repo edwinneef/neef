@@ -333,6 +333,31 @@
 - Managed installation passed its dry run, preserved state, backed up previous files
   and verified copied hashes. No Git safety implementation or state schema changed.
 
+## Permission and policy denials
+
+- Source: a live thread where automatic approval review refused an input-capable
+  session ("blocked by policy"). NEEF suggested diagnosing the rejection, repeated
+  it twice without progress, and an earlier pause gave no reason. Causes: `next.md`
+  asked for investigation of any repeated no-progress recommendation, the
+  next-prompt rule forced user-only steps into NEEF commands, and no guidance
+  separated host denials from missing information.
+- `npm run check`: 71 tests pass. New contract checks cover the denial guidance in
+  SKILL.md, follow-up, next and plan references, plus the setup upgrade from the
+  previous NEEF-command direction block to the rule with user-unblock guidance.
+- `node scripts/smoke.mjs --next-denied` seeds an active task whose saved blocker is
+  a policy denial of `node launch.mjs --input` and whose saved advice is "diagnose
+  the rejection"; running `launch.mjs` leaves a marker that counts as a retry.
+  First run: Claude passed; Codex did not retry or diagnose but omitted the exact
+  step, because the trimmed SKILL.md rule no longer named it, and the checker
+  misread a skill file path as a command. After restoring "name the exact input or
+  user step needed and what to report back" in SKILL.md and matching only
+  commands, both hosts passed: no retry, no diagnose or retry suggestion, the
+  denial and `node launch.mjs --input` named, a resume command with result
+  placeholders, task still active with the blocker saved.
+  Evidence: `.test-artifacts/hosts-1793002591442/` (first run: `hosts-1793002402743/`).
+- Managed installation passed its dry run, backed up the previous files and
+  installed copies identical to source.
+
 ## External storage boundary
 
 - `npm run check`: all 40 tests pass, including three new storage-boundary

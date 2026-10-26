@@ -750,6 +750,19 @@ test('setup upgrades an unedited earlier direction block in place', t => {
   assert.deepEqual(f.run(['setup']).directions, { files: [], backup: null });
 });
 
+test('setup adds user-unblock guidance to the previous NEEF-command direction block', t => {
+  const f = fixture(t);
+  const unblock = / When only the user can unblock the work[^\n]*?policy denial\./;
+  const current = fs.readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+  assert.match(current, unblock);
+  const previous = current.replace(unblock, '');
+  f.write('CLAUDE.md', previous);
+  assert.deepEqual(f.run(['setup']).directions.files, ['AGENTS.md', 'CLAUDE.md']);
+  const claude = fs.readFileSync(path.join(f.root, 'CLAUDE.md'), 'utf8');
+  assert.equal(claude, current);
+  assert.match(claude, /placeholders list what NEEF needs reported back/);
+});
+
 test('setup refuses unsafe or edited instructions before changing either instruction file', t => {
   const f = fixture(t);
   f.write('CLAUDE.md', '<!-- neef:next-prompt:start -->\nPersonal edit\n');
@@ -987,6 +1000,29 @@ test('a genuine user blocker stays active with the smallest required input', t =
   assert.equal(fs.readFileSync(f.statePath(), 'utf8'), before);
   assert.match(nextGuidance(), /smallest user action/i);
   assert.match(nextGuidance(), /Never invent findings/i);
+});
+
+test('a host permission or policy denial is handed to the user instead of diagnosed or retried', t => {
+  const f = fixture(t);
+  const saved = f.state('missing', 'Run bounded native checks', {
+    blockers: 'Automatic approval review rejected the input-capable session: blocked by policy.',
+    next: 'User runs check 1 on P3 and reports pass/fail and the log path.',
+  });
+  const next = f.run(['next']);
+  assert.equal(next.resume, 'continue');
+  assert.equal(next.state.blockers, saved.state.blockers);
+  const skill = fs.readFileSync(new URL('../SKILL.md', import.meta.url), 'utf8');
+  const followUp = fs.readFileSync(new URL('../references/follow-up.md', import.meta.url), 'utf8');
+  const plan = fs.readFileSync(new URL('../references/plan.md', import.meta.url), 'utf8');
+  assert.match(skill, /name the exact input or user step needed and what to report back/);
+  assert.match(skill, /never diagnose, retry or bypass a permission or policy denial, or repeat an unchanged blocker/);
+  assert.match(followUp, /resume command whose placeholders list what NEEF needs back/);
+  assert.match(nextGuidance(), /Chat authorization does not override a host decision/);
+  assert.match(followUp, /reason in one line, keep preconditions in prose/);
+  assert.match(followUp, /Never suggest diagnosing or retrying a permission or policy denial/);
+  assert.match(nextGuidance(), /policy denial.*do not diagnose it, retry it or seek another route/);
+  assert.match(nextGuidance(), /same saved blocker, report it unchanged and stop/);
+  assert.match(plan, /denial is never resolved by another `neef next`/);
 });
 
 test('repeated next calls without progress require discovery instead of repeating a no-action conclusion', t => {
