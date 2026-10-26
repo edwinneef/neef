@@ -1,2 +1,4 @@
 .test-artifacts/
 inventory.json
+site/node_modules/
+site/dist/

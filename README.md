@@ -47,4 +47,6 @@ Development prioritizes fast, scoped changes and focused checks on main, with fr
 
 Run `npm run check` for focused disposable-repository tests. Installed configuration checks do not prove fresh agent discovery or native invocation; those require separate host smoke tests.
 
+The [landing page](site/README.md) uses the approved Tobacco light/dark design with reduced-motion support. Run `npm --prefix site ci`, then `npm run site:dev` to open it locally at http://127.0.0.1:4378. `npm run site:build` creates the static site in `site/dist/`.
+
 Explicit-only metadata follows [Claude Code skills](https://code.claude.com/docs/en/skills) and [OpenAI skill conventions](https://learn.chatgpt.com/docs/build-skills). The two installations share the same instructions and runtime. Native agent delegation is chosen by the agent when independent work benefits from it.
