@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { examples, questions, sessions } from './content';
+import Conversation from './Conversation';
 
 function useReducedMotion() {
   const [reduced, setReduced] = useState(() => matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -36,28 +37,17 @@ function TabList({ id, label, names, selected, select, className }: {
   </div>;
 }
 
-function Conversation({ session, reduced, started }: { session: number; reduced: boolean; started: boolean }) {
-  const messages = sessions[session].messages;
-  const [visible, setVisible] = useState(reduced ? messages.length : 1);
-  useEffect(() => {
-    setVisible(reduced ? messages.length : 1);
-    if (reduced || !started) return;
-    const timers = messages.slice(1).map((_, index) => window.setTimeout(() => setVisible(index + 2), (index + 1) * 580));
-    return () => timers.forEach(window.clearTimeout);
-  }, [messages, reduced, started]);
-  return <div className="feed" id="session-panel" role="tabpanel" aria-labelledby={`session-${session}`} tabIndex={0}>
-    {messages.slice(0, visible).map((message, index) => <p className={`message ${message.kind}`} key={index}>
-      {message.kind === 'tick' && <span className="check" aria-hidden="true">✓</span>}
-      {message.kind === 'live' && <span className="live-dot" aria-hidden="true" />}
-      {message.text}
-    </p>)}
-  </div>;
-}
-
 function Replay({ reduced }: { reduced: boolean }) {
   const [selected, setSelected] = useState(0);
   const [replay, setReplay] = useState(0);
   const [started, setStarted] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [complete, setComplete] = useState(false);
+  const finish = useCallback(() => setComplete(true), []);
+  function selectSession(index: number) {
+    if (index === selected) return;
+    setSelected(index); setPaused(false); setComplete(false);
+  }
   const card = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!('IntersectionObserver' in window)) { setStarted(true); return; }
@@ -69,16 +59,19 @@ function Replay({ reduced }: { reduced: boolean }) {
   }, []);
   return <div className="replay-card" ref={card}>
     <TabList id="session" label="Example project" names={sessions.map(session => session.name)}
-      selected={selected} select={setSelected} className="session-tabs" />
+      selected={selected} select={selectSession} className="session-tabs" />
     <div className="replay-caption">
       <p className="small-label">Illustrative session</p>
       <p className="session-title">{sessions[selected].title}</p>
-      <button className="replay-button" type="button" onClick={() => { setStarted(true); setReplay(value => value + 1); }}>
+      <div className="replay-controls"><button className="replay-button" type="button" onClick={() => { setStarted(true); setPaused(false); setComplete(false); setReplay(value => value + 1); }}>
         <svg viewBox="0 0 20 20" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M4 7a6 6 0 1 1-1 5M3 3v5h5" /></svg>
         Replay
       </button>
+      {!reduced && <button className="replay-button playback-toggle" type="button" disabled={complete} onClick={() => setPaused(value => !value)}>{paused ? 'Resume' : 'Pause'}</button>}
+      </div>
     </div>
-    <Conversation key={`${selected}-${replay}`} session={selected} reduced={reduced} started={started} />
+    <Conversation key={`${selected}-${replay}`} messages={sessions[selected].messages} session={selected}
+      reduced={reduced} started={started} paused={paused} onComplete={finish} />
   </div>;
 }
 
