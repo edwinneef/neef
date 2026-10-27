@@ -1,3 +1,5 @@
+Use the `frontend-design` skill whenever creating an interactive prototype or design, unless the user explicitly says not to.
+
 <!-- neef:next-prompt:start -->
 ## Next prompt
 

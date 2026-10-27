@@ -14,6 +14,8 @@ Use Node 20+ and Git with `~/.neef/neef.mjs`; resolve the actual home and quote 
 
 ## Route the invocation
 
+UI work: read `references/personal-design.md`.
+
 Match bare modes exactly; route leading shape, plan, challenge, prototype/proto and options/ask commands first. Ask for missing subjects. Other arguments request development.
 
 - `help`: run helper `help`; show name, fullName, motto and all intent groups as Command/Changes/Stops at tables using returned text. Include every command, flag and alias beside its command, and each direct subskill with its full host prefix. Omit helper internals. Read-only; stop after help.
