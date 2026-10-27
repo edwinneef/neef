@@ -1,6 +1,6 @@
 # Evaluate what follows development
 
-After every development task, evaluate actual project state and established goals without being asked. Rank unfinished requirements, functional gaps and adjacent improvements by user value, relevance, effort and dependencies. Prefer functional progress over housekeeping. Choose one primary action and at most two useful alternatives; never invent filler.
+After task work, including verification-only runs, evaluate actual project state and established goals without being asked. Rank unfinished requirements, functional gaps and adjacent improvements by user value, relevance, effort and dependencies. Prefer functional progress over housekeeping. Choose one primary action and at most two useful alternatives; never invent filler. Preserve the read-only stop boundaries of status, help and advice modes.
 
 Label original unfinished scope REQUIRED, keep progress active and finish it when possible; use `next` if blocked. Do not recast it as a completed task's follow-up. Use RECOMMENDED for the most valuable logical improvement and OPTIONAL for nonessential enhancements. Recommendations are advisory: generating them does not authorize implementing them in this invocation.
 

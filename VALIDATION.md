@@ -1,5 +1,12 @@
 # Validation — 2026-10-27
 
+## Follow-up after verification-only work
+
+- Root cause: the main follow-up instruction said “After development”, leaving verification-only task work implicit. Main, completion and follow-up guidance now explicitly cover it and keep recommendations in the existing final `state-write`. Status/help/advice stop boundaries remain read-only. No runtime/schema change or extra save.
+- The focused `--continuity` smoke now requires an active task with a saved REQUIRED recommendation whose action names the missing owner/device acceptance, in addition to its existing evidence/blocker/no-project-change assertions. The earlier Claude fixture lacked this recommendation and would fail that assertion.
+- Fresh Claude and Codex regressions both passed without regrading: `.test-artifacts/hosts-1793063825942/claude.result.json` and `codex.result.json`. Both verified current default/named behavior, retained the unavailable owner result, saved REQUIRED follow-up and left project files and Git unchanged. These are verification-only checks, not native commit acceptance.
+- Three focused installation/recommendation-state tests passed. Smoke syntax, diff checks and the 7,995-byte main-skill budget passed; fresh-reader review found no meaning drift. Managed install passed dry run and backed-up apply; all installed completion/follow-up reference hashes matched source. `.gitignore` is untouched.
+
 ## Continuity across longer work
 
 - Same-task state saves now retain omitted `verification`, as they already retained decisions. Active same-task saves also retain omitted `blockers`, matching next-step preservation. Explicit empty strings clear notes; explicitly supplied values replace them. Omitted notes start empty for a different task. No schema, command, history store, size-limit or save-cadence change.

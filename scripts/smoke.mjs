@@ -160,7 +160,9 @@ async function run(host) {
     result.passed = code === 0 && checks.status === 0 && result.head === continuityHead && result.status === ''
       && saved?.progress === 'active' && /Welcome/.test(saved.decisions) && /owner.*(?:wording|choice|chose)/i.test(saved.decisions)
       && /test|assert|check/i.test(saved.verification) && /default|world/i.test(saved.verification) && /nam|Ada/i.test(saved.verification)
-      && /owner|device/i.test(saved.next) && /owner|device/i.test(saved.blockers);
+      && /owner|device/i.test(saved.next) && /owner|device/i.test(saved.blockers)
+      && saved.recommendations?.primary?.kind === 'REQUIRED'
+      && /owner|device/i.test(saved.recommendations.primary.action);
   } else if (completion) {
     const behavior = spawnSync(process.execPath, ['--input-type=module', '-e', 'import assert from "node:assert/strict"; import {greet} from "./index.mjs"; assert.equal(greet(), "Hello, world!"); assert.equal(greet("Ada"), "Hello, Ada!");'], { cwd: root, encoding: 'utf8' });
     result.completion = { decisions: saved?.decisions, verification: saved?.verification, progress: saved?.progress, next: saved?.next, blockers: saved?.blockers, reply: finalMessage };
