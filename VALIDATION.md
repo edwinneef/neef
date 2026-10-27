@@ -1,5 +1,13 @@
 # Validation — 2026-10-27
 
+## Supervised resumption of the real greenfield check
+
+- User explicitly authorized scoped cleanup and resumption. Approved inspection filtered Node test/server candidates, checked their process working directories against the exact preserved fixture, and found no matching processes remaining. No unrelated process was stopped. Final inspection after the checks also found zero matches.
+- The preserved generated test reproduced its stall under a 20-second bound. Its cleanup waited for a second `exit` event from a child already terminated by signal: `exitCode` remains null after signal termination. The fixture test now checks `signalCode` too and has a 20-second timeout. Its booking/validation/concurrent-write/restart test then passed (1/1).
+- The independent checker passed against the preserved model-generated app: served form, HTTP booking creation/listing, and persistence after restarting the server, using a new disposable data file. Both checker-owned servers stopped. Seven reviewed generated files were committed on main as `b69c4bb` using the original clean fixture baseline and scoped Git approval; fixture working tree is clean. Fixture state is complete with evidence and an optional browser-check recommendation.
+- Evidence: `.test-artifacts/greenfield-1793067008284/codex.resumed.result.json` and `codex.resumed.behavior.json`. The original failed `codex.result.json` remains intact. This is a **supervised resumed pass**, including a generated-test fix and approved execution; it is not an untouched unattended native pass. Browser interaction, visual quality and a speed benchmark remain unverified.
+- Source `.gitignore` and generated booking data are preserved. No global permissions or sandbox settings were changed.
+
 ## Scoped Git approval in the greenfield checker
 
 - Codex launch arguments now explicitly select `workspace-write`, on-request approvals and automatic approval review. The prompt requests scoped escalation for the exact Git-writing NEEF `begin`/`prepare`/`commit` operation before touching protected metadata, prohibits broad prefixes and stops on refusal. No bypass/full-access mode or global configuration change. `--skip-git-repo-check` permits an empty-folder start; it does not grant filesystem access.
