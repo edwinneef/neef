@@ -24,6 +24,20 @@ These are examples of effective communication, not reusable slogans. Write fresh
 - A subject-specific focal point: the timeline makes Navigate → Execute → Evaluate → Follow-up visible through a concrete booking example. Interaction helps the visitor understand the work.
 - A coherent atmosphere: Tobacco colors, restrained rules and the four-step mark tie the page together. They support the content without competing with it.
 
+## Motion and interaction
+
+The user requested motion guidance with an interactive emphasis. A particular pace, animation style or amount of motion has not been selected as a universal preference.
+
+- Give motion a job: show what changed, connect an action to its result, or explain a process. Prefer user-triggered feedback, such as a newly added booking becoming easy to find, an expanded detail keeping its relationship to its trigger, or a timeline responding to scrubbing.
+- Keep the main action responsive. Motion must not delay saving, add artificial waiting, or prevent another action. Loading and progress indicators reflect actual work; a visual demo must be identified as illustrative.
+- Choose the movement and duration for the subject and the size of the change. Keep surrounding elements quiet so attention lands on the useful change. The first build needs only the feedback that makes its core flow clear; extra choreography can wait for a brief that needs it.
+- Respect `prefers-reduced-motion` and preserve understandable states without animation. Support keyboard interaction and visible focus; do not make essential information depend on hover, movement or color alone.
+- Reuse the current stack and native CSS/browser capabilities when enough. Judge the interaction by trying it, including its reduced-motion state when changed; a stylesheet containing transitions is not evidence that the experience works.
+
+### Interactive reference
+
+When a motion reference would help, inspect the approved [NEEF timeline](https://neef-landing.netlify.app/#top). Try Replay, dragging the playhead or picking a log step: the movement connects elapsed time, phase and the work being shown. Claude/Codex and New/Existing project switches show how a changed choice updates the example. This is an optional interactive explanation of NEEF's subject, not a template every product should copy or a browsing step for every task. Its autoplay is an existing page choice, not a requirement for future work. Source and local run instructions are in `site/README.md` in the NEEF checkout.
+
 ## Adapt rather than clone
 
 For each new brief, decide the message, information order, visual focal point, type and palette from that subject. Keep the clarity and hierarchy; choose the appropriate layout and interaction. A timeline fits a process, while a different subject may need a comparison, editor, image or no interactive centerpiece.
