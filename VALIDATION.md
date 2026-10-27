@@ -1,4 +1,16 @@
-# Validation — 2026-10-25
+# Validation — 2026-10-27
+
+## Lightweight completion evidence
+
+- Development keeps requested outcomes in existing `decisions` and maps them to actual evidence in `verification`. Required gaps remain active with the missing result in `next` and its reason in `blockers`; optional checks create no gate. No new state fields, commands, approval steps or separate verification round.
+- `references/completion.md` is installed for both hosts and the shared runtime. Main instructions also state the outcome/evidence rule at development and state saving. This placement matters: early Claude trials saved only test totals, so the state-save instruction was clarified. A fresh reader checked the changed paragraphs for meaning drift.
+- `npm run check`: 71/71 passed, including installed-reference parity. Final prose-only clarifications preserved syntax and the skill budget (7,996 bytes); diff checks passed. Managed install passed dry run, backup and verification; copied completion references matched source hashes.
+- Live Claude ordinary completion passed: default and named greeting outcomes, two passing tests, scoped commit, clean fixture and complete state. Evidence: `.test-artifacts/hosts-1793062312962/claude.result.json`.
+- Live Claude missing-acceptance check passed: local code and tests were committed, while required owner-device output remained active with a REQUIRED recommendation. Evidence: `.test-artifacts/hosts-1793062245258/claude.result.json`.
+- Initial Codex trials recorded outcomes and local default/named evidence, and retained missing owner acceptance correctly, but the host denied `.git/objects` writes in both disposable projects. Neither end-to-end scenario passed its commit criterion. No retry of that denied capability was made. Final clarified prose was not rerun on Codex; cross-host end-to-end acceptance remains unverified. Evidence: `.test-artifacts/hosts-1793062132844/codex.result.json` and `.test-artifacts/hosts-1793062145631/codex.result.json`.
+- These live examples show observed behavior, not a guarantee that the helper independently validates evidence. Existing state schema and runtime validation are unchanged. The user's `.gitignore` is untouched.
+
+# Earlier validation — 2026-10-25
 
 ## Smaller command surface with picker descriptions
 

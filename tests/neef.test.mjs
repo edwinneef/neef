@@ -1108,10 +1108,12 @@ test('both agent installations receive self-contained shaping guidance and prese
   const guidance = fs.readFileSync(path.join(f.home, 'references/shape.md'), 'utf8');
   const next = fs.readFileSync(path.join(f.home, 'references/next.md'), 'utf8');
   const start = fs.readFileSync(path.join(f.home, 'references/start.md'), 'utf8');
+  const completion = fs.readFileSync(path.join(f.home, 'references/completion.md'), 'utf8');
   for (const agent of ['.claude', '.agents']) {
     assert.equal(fs.readFileSync(path.join(f.user, agent, 'skills/neef/references/shape.md'), 'utf8'), guidance);
     assert.equal(fs.readFileSync(path.join(f.user, agent, 'skills/neef/references/next.md'), 'utf8'), next);
     assert.equal(fs.readFileSync(path.join(f.user, agent, 'skills/neef/references/start.md'), 'utf8'), start);
+    assert.equal(fs.readFileSync(path.join(f.user, agent, 'skills/neef/references/completion.md'), 'utf8'), completion);
     const skill = fs.readFileSync(path.join(f.user, agent, 'skills/neef/SKILL.md'), 'utf8');
     assert.match(skill, /next.*read `references\/next.md`/);
     assert.match(skill, /reports `greenfield`, read `references\/start.md`/);

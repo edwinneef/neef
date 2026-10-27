@@ -20,6 +20,8 @@ const exhausted = process.argv.includes('--next-exhausted');
 const denied = process.argv.includes('--next-denied');
 const next = process.argv.includes('--next') || discovery || blocked || exhausted;
 const active = process.argv.includes('--next-active');
+const completionOpen = process.argv.includes('--completion-open');
+const completion = process.argv.includes('--completion') || completionOpen;
 const helper = path.join(os.homedir(), '.neef/neef.mjs');
 
 function git(root, args) {
@@ -31,7 +33,7 @@ function git(root, args) {
 async function run(host) {
   const root = path.join(artifacts, host);
   fs.mkdirSync(root);
-  git(root, ['init', '-q']);
+  git(root, ['init', '-q', '-b', 'main']);
   git(root, ['config', 'user.name', 'Neef Smoke']);
   git(root, ['config', 'user.email', 'neef-smoke@example.invalid']);
   git(root, ['config', 'commit.gpgsign', 'false']);
@@ -105,7 +107,9 @@ async function run(host) {
   const prefix = host === 'claude' ? '/neef' : '$neef';
   const invoke = mode => `${prefix}${aliases ? '-' : ' '}${mode}`;
   const task = aliases ? invoke('task') : prefix;
-  const prompt = directions ? 'Read index.mjs and explain what greet() returns. Do not change files or run workflows.' : help ? invoke('help') : next || active || denied ? invoke('next') : setup ? invoke('setup') : host === 'claude'
+  const prompt = completion
+    ? `${task} Add an optional name parameter to greet(name), defaulting to "world". Preserve greet() output, cover a named greeting, verify and commit. ${completionOpen ? 'A required acceptance condition is the owner running the changed greeting on their separate device and supplying its output; that result is not available in this fixture. Do the independent local work now, then record the missing acceptance result.' : 'No external acceptance is required. An additional test framework would be optional and is not wanted.'} Work only in this disposable project.`
+    : directions ? 'Read index.mjs and explain what greet() returns. Do not change files or run workflows.' : help ? invoke('help') : next || active || denied ? invoke('next') : setup ? invoke('setup') : host === 'claude'
     ? `${task} Change greet() to return "Hello, Neef!", update its existing test, verify and commit. Work only in this disposable project.`
     : `${task} Add an optional name parameter to greet(name), defaulting to "world". Preserve greet() output, add a focused named-greeting test, verify and commit. Work only in this disposable project.`;
   const args = host === 'claude'
@@ -134,7 +138,15 @@ async function run(host) {
   result.continuationCommand = active ? /(?:\$neef|\/neef) continue/.test(finalMessage)
     : /(?:^|\n)\s*(?:[-*]\s*)?(?:\*\*)?(?:Run:?(?:\*\*)?\s*)?`?(?:\$neef|\/neef) next\b/i.test(finalMessage);
   result.contextDepth = saved?.context?.depth;
-  if (directions) {
+  if (completion) {
+    const behavior = spawnSync(process.execPath, ['--input-type=module', '-e', 'import assert from "node:assert/strict"; import {greet} from "./index.mjs"; assert.equal(greet(), "Hello, world!"); assert.equal(greet("Ada"), "Hello, Ada!");'], { cwd: root, encoding: 'utf8' });
+    result.completion = { decisions: saved?.decisions, verification: saved?.verification, progress: saved?.progress, next: saved?.next, blockers: saved?.blockers, reply: finalMessage };
+    result.passed = code === 0 && checks.status === 0 && behavior.status === 0 && result.head !== initial && result.status === ''
+      && /default|world/i.test(saved?.decisions || '') && /nam|Ada/i.test(saved?.decisions || '')
+      && /test|assert|check/i.test(saved?.verification || '') && /default|world/i.test(saved?.verification || '') && /nam|Ada/i.test(saved?.verification || '')
+      && (completionOpen ? saved?.progress === 'active' && /owner|device/i.test(saved.next) && /owner|device/i.test(saved.blockers)
+        && saved.recommendations?.primary?.kind === 'REQUIRED' : saved?.progress === 'complete');
+  } else if (directions) {
     result.reply = finalMessage;
     result.passed = code === 0 && result.head === beforeDirections.head && result.status === ''
       && status.stdout === beforeDirections.state && /Hello, world!/.test(finalMessage)
