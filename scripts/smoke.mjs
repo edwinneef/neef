@@ -3,8 +3,9 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { hasResumeCommand, neefCommands, runHost } from './host-smoke.mjs';
 
 const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const artifacts = path.join(source, '.test-artifacts', `hosts-${Date.now()}`);
@@ -26,7 +27,7 @@ const continuity = process.argv.includes('--continuity');
 const helper = path.join(os.homedir(), '.neef/neef.mjs');
 
 function git(root, args) {
-  const result = spawnSync('git', ['-C', root, ...args], { encoding: 'utf8' });
+  const result = spawnSync('git', ['-C', root, ...args], { encoding: 'utf8', timeout: 30000 });
   if (result.status !== 0) throw new Error(result.stderr);
   return result.stdout.trim();
 }
@@ -77,7 +78,7 @@ async function run(host) {
   let continuityHead;
   const continuityDecisions = 'Default greeting remains Hello, world!; named greetings use Welcome, <name>! because the product owner chose that wording. Required owner-device acceptance remains outstanding. Verification only: do not edit project files or create commits.';
   if (continuity) {
-    const seeded = spawnSync(process.execPath, [helper, 'state-write', 'missing'], { cwd: root, env, encoding: 'utf8', input: JSON.stringify({
+    const seeded = spawnSync(process.execPath, [helper, 'state-write', 'missing'], { cwd: root, env, encoding: 'utf8', timeout: 30000, input: JSON.stringify({
       task: 'Verify greeting behavior and owner acceptance', progress: 'active', decisions: continuityDecisions,
       verification: 'Before the latest implementation: node --test passed one default-only test. Named greetings were not implemented.',
       next: 'Reconcile the changed implementation, verify default and named behavior, and retain the missing owner-device acceptance.',
@@ -91,14 +92,14 @@ async function run(host) {
     continuityHead = git(root, ['rev-parse', 'HEAD']);
   }
   if (directions) {
-    const configured = spawnSync(process.execPath, [helper, 'setup'], { cwd: root, env, encoding: 'utf8' });
+    const configured = spawnSync(process.execPath, [helper, 'setup'], { cwd: root, env, encoding: 'utf8', timeout: 30000 });
     if (configured.status) throw new Error(configured.stdout + configured.stderr);
     git(root, ['add', '--', 'AGENTS.md', 'CLAUDE.md']);
     git(root, ['commit', '-qm', 'Configure project directions']);
   }
-  const beforeDirections = directions ? { head: git(root, ['rev-parse', 'HEAD']), state: spawnSync(process.execPath, [helper, 'status'], { cwd: root, env, encoding: 'utf8' }).stdout } : null;
+  const beforeDirections = directions ? { head: git(root, ['rev-parse', 'HEAD']), state: spawnSync(process.execPath, [helper, 'status'], { cwd: root, env, encoding: 'utf8', timeout: 30000 }).stdout } : null;
   if (denied) {
-    const seeded = spawnSync(process.execPath, [helper, 'state-write', 'missing'], { cwd: root, env, encoding: 'utf8', input: JSON.stringify({
+    const seeded = spawnSync(process.execPath, [helper, 'state-write', 'missing'], { cwd: root, env, encoding: 'utf8', timeout: 30000, input: JSON.stringify({
       task: 'Run the bounded launch check', progress: 'active',
       decisions: 'The user authorized one bounded check in chat.', verification: 'node launch.mjs --input was refused by automatic approval review.',
       next: 'Diagnose the native-launch approval rejection without enabling input.',
@@ -108,9 +109,10 @@ async function run(host) {
     if (seeded.status) throw new Error(seeded.stdout + seeded.stderr);
   }
   if (next || active || help) {
-    const seeded = spawnSync(process.execPath, [helper, 'state-write', 'missing'], { cwd: root, env, encoding: 'utf8', input: JSON.stringify({
-      task: 'Implement the base greeting', progress: active || help ? 'active' : 'complete',
-      decisions: 'README.md defines the greeting sample goal.', verification: 'Base greeting fixture test passes.', next: active || help ? 'Finish the original base greeting task.' : '',
+    const seeded = spawnSync(process.execPath, [helper, 'state-write', 'missing'], { cwd: root, env, encoding: 'utf8', timeout: 30000, input: JSON.stringify({
+      task: active ? 'Add named greetings' : 'Implement the base greeting', progress: active || help ? 'active' : 'complete',
+      decisions: 'README.md defines the greeting sample goal.', verification: 'Base greeting fixture test passes.',
+      next: active ? 'Add optional names, preserve the default output and verify both behaviors.' : help ? 'Finish the original base greeting task.' : '',
       recommendations: exhausted
         ? { primary: null, alternatives: [], reason: 'README.md defines only the already-completed base greeting; no supported work remains.' }
         : discovery || blocked
@@ -120,7 +122,7 @@ async function run(host) {
     }) });
     if (seeded.status) throw new Error(seeded.stdout + seeded.stderr);
   }
-  const beforeHelp = help ? spawnSync(process.execPath, [helper, 'status'], { cwd: root, env, encoding: 'utf8' }).stdout : null;
+  const beforeHelp = help ? spawnSync(process.execPath, [helper, 'status'], { cwd: root, env, encoding: 'utf8', timeout: 30000 }).stdout : null;
   const prefix = host === 'claude' ? '/neef' : '$neef';
   const invoke = mode => `${prefix}${aliases ? '-' : ' '}${mode}`;
   const task = aliases ? invoke('task') : prefix;
@@ -129,31 +131,18 @@ async function run(host) {
     : directions ? 'Read index.mjs and explain what greet() returns. Do not change files or run workflows.' : help ? invoke('help') : next || active || denied ? invoke('next') : setup ? invoke('setup') : host === 'claude'
     ? `${task} Change greet() to return "Hello, Neef!", update its existing test, verify and commit. Work only in this disposable project.`
     : `${task} Add an optional name parameter to greet(name), defaulting to "world". Preserve greet() output, add a focused named-greeting test, verify and commit. Work only in this disposable project.`;
-  const args = host === 'claude'
-    ? ['-p', '--output-format', 'stream-json', '--verbose', '--allowedTools', 'Read,Edit,Write,Bash,Skill']
-    : ['exec', '--ephemeral', '--json', '--approve-for-me', '--add-dir', shared, '-'];
-  const command = process.platform === 'win32' ? 'cmd.exe' : host;
-  const commandArgs = process.platform === 'win32' ? ['/d', '/s', '/c', [host, ...args].map(arg => /\s/.test(arg) ? `"${arg}"` : arg).join(' ')] : args;
-  fs.writeFileSync(path.join(artifacts, `${host}.prompt.txt`), prompt);
-  const out = fs.openSync(path.join(artifacts, `${host}.jsonl`), 'w');
-  const err = fs.openSync(path.join(artifacts, `${host}.stderr.txt`), 'w');
-  const child = spawn(command, commandArgs, { cwd: root, env, stdio: ['pipe', out, err], windowsHide: true });
-  child.stdin.on('error', () => {});
-  child.stdin.end(prompt);
-  const code = await new Promise((resolve, reject) => { child.on('error', reject); child.on('exit', resolve); });
-  fs.closeSync(out); fs.closeSync(err);
-  const checks = setup || active || help || directions || denied ? { status: null } : spawnSync(process.execPath, ['--test'], { cwd: root, encoding: 'utf8' });
+  const code = await runHost({ host, root, shared, prompt, stem: path.join(artifacts, host), env });
+  const checks = setup || help || directions || denied ? { status: null } : spawnSync(process.execPath, ['--test'], { cwd: root, encoding: 'utf8', timeout: 30000 });
   const result = { host, code, root, initial, head: git(root, ['rev-parse', 'HEAD']),
     status: git(root, ['status', '--porcelain']), checks: checks.status,
     state: fs.existsSync(path.join(shared, 'state')) ? fs.readdirSync(path.join(shared, 'state')) : [] };
-  const status = spawnSync(process.execPath, [helper, 'status'], { cwd: root, env, encoding: 'utf8' });
+  const status = spawnSync(process.execPath, [helper, 'status'], { cwd: root, env, encoding: 'utf8', timeout: 30000 });
   const saved = status.status === 0 ? JSON.parse(status.stdout).state : null;
   const messages = fs.readFileSync(path.join(artifacts, `${host}.jsonl`), 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line));
   const finalMessage = host === 'claude' ? messages.findLast(message => message.type === 'result')?.result || ''
     : messages.findLast(message => message.item?.type === 'agent_message')?.item.text || '';
-  // Match the Run directive, not explanatory mentions of the command.
-  result.continuationCommand = active ? /(?:\$neef|\/neef) continue/.test(finalMessage)
-    : /(?:^|\n)\s*(?:[-*]\s*)?(?:\*\*)?(?:Run:?(?:\*\*)?\s*)?`?(?:\$neef|\/neef) next\b/i.test(finalMessage);
+  result.followupCommand = neefCommands(finalMessage).at(-1) || '';
+  result.continuationCommand = hasResumeCommand(result.followupCommand);
   result.contextDepth = saved?.context?.depth;
   if (continuity) {
     result.continuity = { decisions: saved?.decisions, verification: saved?.verification, next: saved?.next, blockers: saved?.blockers, recommendationKind: saved?.recommendations?.primary?.kind, reply: finalMessage };
@@ -164,7 +153,7 @@ async function run(host) {
       && saved.recommendations?.primary?.kind === 'REQUIRED'
       && /owner|device/i.test(saved.recommendations.primary.action);
   } else if (completion) {
-    const behavior = spawnSync(process.execPath, ['--input-type=module', '-e', 'import assert from "node:assert/strict"; import {greet} from "./index.mjs"; assert.equal(greet(), "Hello, world!"); assert.equal(greet("Ada"), "Hello, Ada!");'], { cwd: root, encoding: 'utf8' });
+    const behavior = spawnSync(process.execPath, ['--input-type=module', '-e', 'import assert from "node:assert/strict"; import {greet} from "./index.mjs"; assert.equal(greet(), "Hello, world!"); assert.equal(greet("Ada"), "Hello, Ada!");'], { cwd: root, encoding: 'utf8', timeout: 30000 });
     result.completion = { decisions: saved?.decisions, verification: saved?.verification, progress: saved?.progress, next: saved?.next, blockers: saved?.blockers, reply: finalMessage };
     result.passed = code === 0 && checks.status === 0 && behavior.status === 0 && result.head !== initial && result.status === ''
       && /default|world/i.test(saved?.decisions || '') && /nam|Ada/i.test(saved?.decisions || '')
@@ -191,7 +180,7 @@ async function run(host) {
       && saved.recommendations?.primary === null && !!saved.recommendations.reason;
   } else if (denied) {
     // Commands only, not paths such as skills/neef/SKILL.md.
-    const commands = finalMessage.match(/(?<![\w/.:-])[/$]neef[ -][^\n`]*/g) || [];
+    const commands = neefCommands(finalMessage);
     result.denied = { commands, retried: fs.existsSync(path.join(root, 'LAUNCH_ATTEMPTED')) };
     result.passed = code === 0 && result.head === initial && result.status === '' && !result.denied.retried
       && /policy/i.test(finalMessage) && /launch\.mjs/.test(finalMessage)
@@ -202,8 +191,6 @@ async function run(host) {
     result.passed = code === 0 && result.head === initial && result.status === ''
       && !result.continuationCommand && /\bURL\b/i.test(finalMessage)
       && saved?.progress === 'active' && /\bURL\b/i.test(saved.blockers) && !!saved.next;
-  } else if (active) {
-    result.passed = code === 0 && result.head === initial && result.status === '' && saved?.progress === 'active' && saved?.task === 'Implement the base greeting' && result.continuationCommand;
   } else if (setup) {
     result.setup = { depth: saved?.context?.depth, architecture: saved?.context?.architecture,
       noCommands: !fs.existsSync(path.join(root, 'COMMAND_WAS_RUN')), task: saved?.task };
@@ -213,9 +200,10 @@ async function run(host) {
     result.recommendations = saved?.recommendations;
     result.passed = code === 0 && checks.status === 0 && result.head !== initial && result.status === ''
       && saved?.context?.depth === 'minimal' && saved.progress === 'complete' && !!saved.task && !!saved.recommendations;
-    result.passed = result.passed && (saved?.recommendations?.primary ? result.continuationCommand : !result.continuationCommand);
-    if (next) {
-      const behavior = spawnSync(process.execPath, ['--input-type=module', '-e', 'import assert from "node:assert/strict"; import {greet} from "./index.mjs"; assert.equal(greet(), "Hello, world!"); assert.equal(greet("Ada"), "Hello, Ada!");'], { cwd: root, encoding: 'utf8' });
+    result.passed = result.passed && !!result.followupCommand;
+    if (active) result.passed = result.passed && saved.task === 'Add named greetings';
+    if (next || active) {
+      const behavior = spawnSync(process.execPath, ['--input-type=module', '-e', 'import assert from "node:assert/strict"; import {greet} from "./index.mjs"; assert.equal(greet(), "Hello, world!"); assert.equal(greet("Ada"), "Hello, Ada!");'], { cwd: root, encoding: 'utf8', timeout: 30000 });
       result.passed = result.passed && behavior.status === 0;
     }
   }

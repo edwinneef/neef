@@ -4,8 +4,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { hasResumeCommand, runHost } from './host-smoke.mjs';
 
 const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const artifacts = path.join(source, '.test-artifacts', `advisors-${Date.now()}`);
@@ -23,13 +24,13 @@ async function run(host) {
   const env = { ...process.env, NEEF_HOME: shared };
   delete env.CLAUDECODE;
   const command = (program, args, input) => {
-    const result = spawnSync(program, args, { cwd: root, env, input, encoding: 'utf8', windowsHide: true });
+    const result = spawnSync(program, args, { cwd: root, env, input, encoding: 'utf8', timeout: 30000, windowsHide: true });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     return result.stdout.trim();
   };
   const git = (...args) => command('git', args);
   const status = () => command(process.execPath, [helper, 'status']);
-  git('init', '-q');
+  git('init', '-q', '-b', 'main');
   git('config', 'user.name', 'Neef Advisor Smoke');
   git('config', 'user.email', 'neef-advisor@example.invalid');
   git('config', 'commit.gpgsign', 'false');
@@ -55,20 +56,7 @@ async function run(host) {
       .map(name => [name, fs.readFileSync(path.join(root, name), 'utf8')]));
     const original = files();
     const stem = path.join(artifacts, `${host}-${label}`);
-    fs.writeFileSync(`${stem}.prompt.txt`, prompt);
-    const out = fs.openSync(`${stem}.jsonl`, 'w');
-    const err = fs.openSync(`${stem}.stderr.txt`, 'w');
-    let args = host === 'claude'
-      ? ['-p', '--output-format', 'stream-json', '--verbose', '--allowedTools', 'Read,Edit,Write,Bash,Skill', '--disallowedTools', 'AskUserQuestion', ...(execute ? ['--resume', session] : [])]
-      : ['exec', ...(!selection ? ['--ephemeral'] : []), '--json', '--approve-for-me', '--add-dir', shared, ...(execute ? ['resume', session] : []), '-'];
-    const program = process.platform === 'win32' ? 'cmd.exe' : host;
-    if (process.platform === 'win32') args = ['/d', '/s', '/c', [host, ...args].map(arg => /\s/.test(arg) ? `"${arg}"` : arg).join(' ')];
-    const child = spawn(program, args, { cwd: root, env, stdio: ['pipe', out, err], windowsHide: true });
-    child.stdin.on('error', () => {});
-    child.stdin.end(prompt);
-    const code = await new Promise((resolve, reject) => { child.on('error', reject); child.on('exit', resolve); });
-    fs.closeSync(out);
-    fs.closeSync(err);
+    const code = await runHost({ host, root, shared, prompt, stem, env, session: execute ? session : undefined, ephemeral: !selection, chatQuestions: true });
     const events = fs.readFileSync(`${stem}.jsonl`, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line));
     const final = host === 'claude' ? events.findLast(event => event.type === 'result')?.result || ''
       : events.findLast(event => event.item?.type === 'agent_message')?.item.text || '';
@@ -113,11 +101,11 @@ async function run(host) {
       }));
       if (!prototypeOnly) {
         const ask = await turn('ask-active', `${prefix} ask Implement the unfinished named-greeting feature`);
-        assert.match(ask, new RegExp(`${host === 'claude' ? '/' : '\\$'}neef(?:-continue| continue)`));
+        assert.ok(hasResumeCommand(ask), 'Advice should point to next or its continue alias');
       }
 
-      const prototype = await turn('ask-prototype', `${prefix}-ask Explore an isolated interactive prototype of three different greeting APIs before deciding what to build`);
-      assert.match(prototype, new RegExp(`${host === 'claude' ? '/' : '\\$'}neef(?:-prototype| prototype|-proto| proto)\\b`));
+      const prototype = await turn('ask-prototype', `${prefix} ask Explore an isolated interactive prototype of three different greeting APIs before deciding what to build`);
+      assert.match(prototype, new RegExp(`${host === 'claude' ? '/' : '\\$'}neef(?:-prototype| prototype| proto)\\b`));
       assert.doesNotMatch(prototype, /no installed.*proto|proto.*(?:unavailable|future capability)/i);
     }
 

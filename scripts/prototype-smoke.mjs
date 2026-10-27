@@ -4,8 +4,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { runHost } from './host-smoke.mjs';
 
 const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const artifacts = path.join(source, '.test-artifacts', `prototypes-${Date.now()}`);
@@ -21,14 +22,14 @@ async function run(host) {
   const env = { ...process.env, NEEF_HOME: shared };
   delete env.CLAUDECODE;
   const command = (cwd, program, args, input) => {
-    const result = spawnSync(program, args, { cwd, env, input, encoding: 'utf8', windowsHide: true });
+    const result = spawnSync(program, args, { cwd, env, input, encoding: 'utf8', timeout: 30000, windowsHide: true });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     return result.stdout.trim();
   };
   const git = (...args) => command(root, 'git', args);
   const status = () => command(root, process.execPath, [helper, 'status']);
   const workspaces = () => JSON.parse(command(root, process.execPath, [helper, 'prototype-workspace'])).workspaces;
-  git('init', '-q');
+  git('init', '-q', '-b', 'main');
   git('config', 'user.name', 'Neef Prototype Smoke');
   git('config', 'user.email', 'neef-prototype@example.invalid');
   git('config', 'commit.gpgsign', 'false');
@@ -51,20 +52,7 @@ async function run(host) {
 
   async function turn(label, prompt, session) {
     const stem = path.join(artifacts, `${host}-${label}`);
-    fs.writeFileSync(`${stem}.prompt.txt`, prompt);
-    const out = fs.openSync(`${stem}.jsonl`, 'w');
-    const err = fs.openSync(`${stem}.stderr.txt`, 'w');
-    let args = host === 'claude'
-      ? ['-p', '--output-format', 'stream-json', '--verbose', '--allowedTools', 'Read,Edit,Write,Bash,Skill', '--disallowedTools', 'AskUserQuestion', ...(session ? ['--resume', session] : [])]
-      : ['exec', '--json', '--approve-for-me', '--add-dir', shared, ...(session ? ['resume', session] : []), '-'];
-    const program = process.platform === 'win32' ? 'cmd.exe' : host;
-    if (process.platform === 'win32') args = ['/d', '/s', '/c', [host, ...args].map(arg => /\s/.test(arg) ? `"${arg}"` : arg).join(' ')];
-    const child = spawn(program, args, { cwd: root, env, stdio: ['pipe', out, err], windowsHide: true });
-    child.stdin.on('error', () => {});
-    child.stdin.end(prompt);
-    const code = await new Promise((resolve, reject) => { child.on('error', reject); child.on('exit', resolve); });
-    fs.closeSync(out);
-    fs.closeSync(err);
+    const code = await runHost({ host, root, shared, prompt, stem, env, session, ephemeral: false, chatQuestions: true });
     const events = fs.readFileSync(`${stem}.jsonl`, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line));
     const final = host === 'claude' ? events.findLast(event => event.type === 'result')?.result || ''
       : events.findLast(event => event.item?.type === 'agent_message')?.item.text || '';
@@ -96,7 +84,7 @@ async function run(host) {
     assert.match(approved.final, new RegExp(`${host === 'claude' ? '/' : '\\$'}neef(?:-task|\\s)`));
     assert.match(fs.readFileSync(demo.readme, 'utf8'), /acceptance|handoff/i);
 
-    const algorithm = await turn('algorithm', `${prefix}-proto Compare linear search and binary search in a runnable Node demo.mjs using built-ins. Search the sorted synthetic array [2,4,6,8,10] for 6; print JSON with numeric linear and binary fields containing each resulting zero-based index. This is a new question, separate from the task-picker.`);
+    const algorithm = await turn('algorithm', `${prefix} proto Compare linear search and binary search in a runnable Node demo.mjs using built-ins. Search the sorted synthetic array [2,4,6,8,10] for 6; print JSON with numeric linear and binary fields containing each resulting zero-based index. This is a new question, separate from the task-picker.`);
     const second = workspaces();
     assert.equal(second.length, 2, algorithm.final);
     algorithmDemo = second.find(item => item.workspace !== demo.workspace);

@@ -1,4 +1,11 @@
-# Validation — 2026-10-27
+# Validation — 2026-10-28
+
+## Safe, bounded installed-host smoke runners
+
+- All six live runners now use the same explicit workspace sandbox and on-request automatic approval review for Codex, including resumed sessions. Authorized fixture Git writes request scoped approval first and stop on refusal. Shape, advisor and prototype fixtures explicitly initialize main. Retired `neef-ask` and `neef-proto` calls now use their canonical command forms.
+- Active-next validation now resumes a genuinely unfinished named-greeting task and checks the resulting behavior and commit. Completed tasks accept a concrete follow-up command instead of requiring another `next` invocation; advice accepts the current next/continue forms.
+- Host turns time out after ten minutes by default, with an optional `NEEF_SMOKE_TIMEOUT_MS` override. Only the retained host is signalled once, with a two-second shutdown bound; unconfirmed shutdown releases checker references and is reported as a failure. Logs close on success and launch/timeout failure. Other local subprocess checks have thirty-second bounds. Windows resolves native executables instead of launching cmd/npm wrappers. Child tools started by a timed-out host are not claimed stopped.
+- Eighteen focused tests passed: safe fresh/resumed arguments, native Windows resolution, literal argument/stdin delivery, log closure and launch failure, bounded timeout with an unrelated child still running, one-shot unconfirmed cleanup, signal/nonzero outcomes, current follow-up forms and six-runner contract coverage, plus all existing greenfield checks. `npm run check` passed all 95 tests; the final follow-up matcher refinement passed all eight host-check tests. Both installed CLIs accepted the generated arguments through help-only parsing, including Codex resume. Seven smoke modules passed syntax checks and `git diff --check` passed. No model conversation was launched; these results do not establish fresh-host workflow acceptance.
 
 ## Bounded first-build checks and repeat-safe owned-server cleanup
 

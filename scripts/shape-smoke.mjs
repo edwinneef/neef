@@ -3,8 +3,9 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { runHost } from './host-smoke.mjs';
 
 const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const artifacts = path.join(source, '.test-artifacts', `shape-${Date.now()}`);
@@ -18,8 +19,8 @@ const automatic = process.argv.includes('--automatic');
 fs.mkdirSync(shared, { recursive: true });
 
 function git(root, args) {
-  const result = spawnSync('git', ['-C', root, ...args], { encoding: 'utf8' });
-  if (result.status) throw new Error(result.stderr);
+  const result = spawnSync('git', ['-C', root, ...args], { encoding: 'utf8', timeout: 30000 });
+  if (result.status !== 0) throw new Error(result.stderr);
   return result.stdout.trim();
 }
 
@@ -28,7 +29,7 @@ async function run(host) {
   fs.mkdirSync(root);
   const env = { ...process.env, NEEF_HOME: shared };
   delete env.CLAUDECODE;
-  git(root, ['init', '-q']);
+  git(root, ['init', '-q', '-b', 'main']);
   git(root, ['config', 'user.name', 'Neef Shape Smoke']);
   git(root, ['config', 'user.email', 'neef-shape@example.invalid']);
   git(root, ['config', 'commit.gpgsign', 'false']);
@@ -43,26 +44,14 @@ async function run(host) {
   const initial = git(root, ['rev-parse', 'HEAD']);
   const initialBranch = git(root, ['branch', '--show-current']);
   const state = () => {
-    const result = spawnSync(process.execPath, [helper, 'status'], { cwd: root, env, encoding: 'utf8' });
-    if (result.status) throw new Error(result.stdout);
+    const result = spawnSync(process.execPath, [helper, 'status'], { cwd: root, env, encoding: 'utf8', timeout: 30000 });
+    if (result.status !== 0) throw new Error(result.stdout);
     return JSON.parse(result.stdout).state;
   };
   async function turn(prompt, number, session) {
-    let args = host === 'claude'
-      ? ['-p', '--output-format', 'stream-json', '--verbose', '--allowedTools', 'Read,Edit,Write,Bash,Skill', '--disallowedTools', 'AskUserQuestion', ...(session ? ['--resume', session] : [])]
-      : ['exec', '--json', '--dangerously-bypass-approvals-and-sandbox', '--add-dir', shared, ...(session ? ['resume', session] : []), '-'];
     // Headless conversations exercise the documented chat-question fallback.
-    const command = process.platform === 'win32' ? 'cmd.exe' : host;
-    if (process.platform === 'win32') args = ['/d', '/s', '/c', [host, ...args].map(arg => /\s/.test(arg) ? `"${arg}"` : arg).join(' ')];
     const stem = path.join(artifacts, `${host}-${number}`);
-    fs.writeFileSync(`${stem}.prompt.txt`, prompt);
-    const out = fs.openSync(`${stem}.jsonl`, 'w');
-    const err = fs.openSync(`${stem}.stderr.txt`, 'w');
-    const child = spawn(command, args, { cwd: root, env, stdio: ['pipe', out, err], windowsHide: true });
-    child.stdin.on('error', () => {});
-    child.stdin.end(prompt);
-    const code = await new Promise((resolve, reject) => { child.on('error', reject); child.on('exit', resolve); });
-    fs.closeSync(out); fs.closeSync(err);
+    const code = await runHost({ host, root, shared, prompt, stem, env, session, ephemeral: false, chatQuestions: true });
     const events = fs.readFileSync(`${stem}.jsonl`, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line));
     const final = host === 'claude' ? events.findLast(event => event.type === 'result')?.result || ''
       : events.findLast(event => event.item?.type === 'agent_message')?.item.text || '';
@@ -90,7 +79,7 @@ async function run(host) {
       && inspection.status === '' && !!advice?.recommendations?.primary && !advice?.task && !advice?.baseline;
     const followup = readOnly ? await turn(`${invocation} next`, 2) : null;
     const saved = state();
-    const behavior = spawnSync(process.execPath, ['--input-type=module', '-e', 'import assert from "node:assert/strict"; import {greet} from "./index.mjs"; assert.equal(greet(), "Hello, Neef!"); assert.equal(greet("Ada"), "Hello, Ada!");'], { cwd: root, encoding: 'utf8' });
+    const behavior = spawnSync(process.execPath, ['--input-type=module', '-e', 'import assert from "node:assert/strict"; import {greet} from "./index.mjs"; assert.equal(greet(), "Hello, Neef!"); assert.equal(greet("Ada"), "Hello, Ada!");'], { cwd: root, encoding: 'utf8', timeout: 30000 });
     const passed = readOnly && followup?.code === 0 && behavior.status === 0 && saved?.progress === 'complete'
       && git(root, ['rev-parse', 'HEAD']) !== initial && git(root, ['status', '--porcelain']) === '';
     fs.writeFileSync(path.join(artifacts, `${host}.result.json`), JSON.stringify({ host, root, passed, first, inspection, followup, saved }, null, 2));
@@ -105,10 +94,10 @@ async function run(host) {
     result.passed = first.code === 0 && second?.code === 0 && waiting?.head === initial && waiting.status === ''
       && result.head === initial && result.status === '' && saved?.progress === 'active' && !!saved.decisions && !/\?/.test(second.final);
   } else {
-    const tests = spawnSync(process.execPath, ['--test'], { cwd: root, encoding: 'utf8' });
+    const tests = spawnSync(process.execPath, ['--test'], { cwd: root, encoding: 'utf8', timeout: 30000 });
     const expression = clear || automatic ? 'assert.equal(greet(), "Hello, Neef!"); assert.equal(greet("Ada"), "Hello, Ada!");'
       : 'assert.equal(greet(""), "Hello, world!"); assert.equal(greet("  "), "Hello, world!"); assert.equal(greet("Ada"), "Hello, Ada!");';
-    const behavior = spawnSync(process.execPath, ['--input-type=module', '-e', `import assert from "node:assert/strict"; import {greet} from "./index.mjs"; ${expression}`], { cwd: root, encoding: 'utf8' });
+    const behavior = spawnSync(process.execPath, ['--input-type=module', '-e', `import assert from "node:assert/strict"; import {greet} from "./index.mjs"; ${expression}`], { cwd: root, encoding: 'utf8', timeout: 30000 });
     result.passed = first.code === 0 && result.head !== initial && result.status === '' && tests.status === 0 && behavior.status === 0
       && saved?.progress === 'complete' && !!saved.recommendations;
     if (!clear && !automatic) result.passed = result.passed && second?.code === 0 && waiting?.head === initial && waiting.status === '' && !!saved.decisions;

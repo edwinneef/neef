@@ -4,8 +4,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { runHost } from './host-smoke.mjs';
 
 const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const artifacts = path.join(source, '.test-artifacts', `plan-${Date.now()}`);
@@ -14,7 +15,7 @@ const shared = path.join(artifacts, 'shared');
 fs.mkdirSync(shared, { recursive: true });
 
 function command(root, program, args, env) {
-  const result = spawnSync(program, args, { cwd: root, env, encoding: 'utf8', windowsHide: true });
+  const result = spawnSync(program, args, { cwd: root, env, encoding: 'utf8', timeout: 30000, windowsHide: true });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   return result.stdout.trim();
 }
@@ -42,21 +43,8 @@ async function run(host, scale) {
   const prefix = host === 'claude' ? '/neef' : '$neef';
 
   async function turn(prompt, label) {
-    let args = host === 'claude'
-      ? ['-p', '--output-format', 'stream-json', '--verbose', '--allowedTools', 'Read,Edit,Write,Bash,Skill', '--disallowedTools', 'AskUserQuestion']
-      : ['exec', '--json', '--dangerously-bypass-approvals-and-sandbox', '--add-dir', shared, '-'];
-    const program = process.platform === 'win32' ? 'cmd.exe' : host;
-    if (process.platform === 'win32') args = ['/d', '/s', '/c', [host, ...args].map(arg => /\s/.test(arg) ? `"${arg}"` : arg).join(' ')];
     const stem = path.join(artifacts, `${host}-${scale}-${label}`);
-    fs.writeFileSync(`${stem}.prompt.txt`, prompt);
-    const out = fs.openSync(`${stem}.jsonl`, 'w');
-    const err = fs.openSync(`${stem}.stderr.txt`, 'w');
-    const child = spawn(program, args, { cwd: root, env, stdio: ['pipe', out, err], windowsHide: true });
-    child.stdin.on('error', () => {});
-    child.stdin.end(prompt);
-    const code = await new Promise((resolve, reject) => { child.on('error', reject); child.on('exit', resolve); });
-    fs.closeSync(out);
-    fs.closeSync(err);
+    const code = await runHost({ host, root, shared, prompt, stem, env, chatQuestions: true });
     const events = fs.readFileSync(`${stem}.jsonl`, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line));
     const final = host === 'claude' ? events.findLast(event => event.type === 'result')?.result || ''
       : events.findLast(event => event.item?.type === 'agent_message')?.item.text || '';
