@@ -47,6 +47,8 @@ Development prioritizes fast, scoped changes and focused checks on main, with fr
 
 Development carries requested outcomes in the existing `decisions` notes and connects them to actual evidence in `verification`. Required outcomes lacking evidence stay unfinished; optional checks add no gate. This uses the same commands and normal state saves, without extra plans or approval steps. See [completion guidance](references/completion.md).
 
+Longer work uses those same notes: same-task saves retain omitted decisions and evidence, and active same-task saves retain omitted next steps and blockers. Explicit empty strings clear resolved or obsolete notes; omitted notes start empty for a different task. On resumption, reconcile saved progress with current files and Git, retain settled decisions, and rerun only checks whose evidence is affected by changes. No extra command, history store or checkpoint step is needed.
+
 Run `npm run check` for focused disposable-repository tests. Installed configuration checks do not prove fresh agent discovery or native invocation; those require separate host smoke tests.
 
 The [landing page](site/README.md) uses the approved Tobacco light/dark design with reduced-motion support. Run `npm --prefix site ci`, then `npm run site:dev` to open it locally at http://127.0.0.1:4378. `npm run site:build` creates the static site in `site/dist/`.

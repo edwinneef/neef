@@ -22,6 +22,7 @@ const next = process.argv.includes('--next') || discovery || blocked || exhauste
 const active = process.argv.includes('--next-active');
 const completionOpen = process.argv.includes('--completion-open');
 const completion = process.argv.includes('--completion') || completionOpen;
+const continuity = process.argv.includes('--continuity');
 const helper = path.join(os.homedir(), '.neef/neef.mjs');
 
 function git(root, args) {
@@ -73,6 +74,22 @@ async function run(host) {
   const env = { ...process.env, NEEF_HOME: shared };
   delete env.CLAUDECODE;
   fs.mkdirSync(shared, { recursive: true });
+  let continuityHead;
+  const continuityDecisions = 'Default greeting remains Hello, world!; named greetings use Welcome, <name>! because the product owner chose that wording. Required owner-device acceptance remains outstanding. Verification only: do not edit project files or create commits.';
+  if (continuity) {
+    const seeded = spawnSync(process.execPath, [helper, 'state-write', 'missing'], { cwd: root, env, encoding: 'utf8', input: JSON.stringify({
+      task: 'Verify greeting behavior and owner acceptance', progress: 'active', decisions: continuityDecisions,
+      verification: 'Before the latest implementation: node --test passed one default-only test. Named greetings were not implemented.',
+      next: 'Reconcile the changed implementation, verify default and named behavior, and retain the missing owner-device acceptance.',
+      blockers: 'Owner-device acceptance output is required and unavailable.',
+    }) });
+    if (seeded.status) throw new Error(seeded.stdout + seeded.stderr);
+    fs.writeFileSync(path.join(root, 'index.mjs'), 'export function greet(name) { return name === undefined ? "Hello, world!" : `Welcome, ${name}!`; }\n');
+    fs.appendFileSync(path.join(root, 'index.test.mjs'), 'test("named greeting", () => assert.equal(greet("Ada"), "Welcome, Ada!"));\n');
+    git(root, ['add', '--', 'index.mjs', 'index.test.mjs']);
+    git(root, ['commit', '-qm', 'Implement the agreed named greeting']);
+    continuityHead = git(root, ['rev-parse', 'HEAD']);
+  }
   if (directions) {
     const configured = spawnSync(process.execPath, [helper, 'setup'], { cwd: root, env, encoding: 'utf8' });
     if (configured.status) throw new Error(configured.stdout + configured.stderr);
@@ -107,7 +124,7 @@ async function run(host) {
   const prefix = host === 'claude' ? '/neef' : '$neef';
   const invoke = mode => `${prefix}${aliases ? '-' : ' '}${mode}`;
   const task = aliases ? invoke('task') : prefix;
-  const prompt = completion
+  const prompt = continuity ? `${invoke('next')} Resume the saved verification-only task. Do not edit project files or create commits. Owner-device output is still unavailable.` : completion
     ? `${task} Add an optional name parameter to greet(name), defaulting to "world". Preserve greet() output, cover a named greeting, verify and commit. ${completionOpen ? 'A required acceptance condition is the owner running the changed greeting on their separate device and supplying its output; that result is not available in this fixture. Do the independent local work now, then record the missing acceptance result.' : 'No external acceptance is required. An additional test framework would be optional and is not wanted.'} Work only in this disposable project.`
     : directions ? 'Read index.mjs and explain what greet() returns. Do not change files or run workflows.' : help ? invoke('help') : next || active || denied ? invoke('next') : setup ? invoke('setup') : host === 'claude'
     ? `${task} Change greet() to return "Hello, Neef!", update its existing test, verify and commit. Work only in this disposable project.`
@@ -138,7 +155,13 @@ async function run(host) {
   result.continuationCommand = active ? /(?:\$neef|\/neef) continue/.test(finalMessage)
     : /(?:^|\n)\s*(?:[-*]\s*)?(?:\*\*)?(?:Run:?(?:\*\*)?\s*)?`?(?:\$neef|\/neef) next\b/i.test(finalMessage);
   result.contextDepth = saved?.context?.depth;
-  if (completion) {
+  if (continuity) {
+    result.continuity = { decisions: saved?.decisions, verification: saved?.verification, next: saved?.next, blockers: saved?.blockers, recommendationKind: saved?.recommendations?.primary?.kind, reply: finalMessage };
+    result.passed = code === 0 && checks.status === 0 && result.head === continuityHead && result.status === ''
+      && saved?.progress === 'active' && /Welcome/.test(saved.decisions) && /owner.*(?:wording|choice|chose)/i.test(saved.decisions)
+      && /test|assert|check/i.test(saved.verification) && /default|world/i.test(saved.verification) && /nam|Ada/i.test(saved.verification)
+      && /owner|device/i.test(saved.next) && /owner|device/i.test(saved.blockers);
+  } else if (completion) {
     const behavior = spawnSync(process.execPath, ['--input-type=module', '-e', 'import assert from "node:assert/strict"; import {greet} from "./index.mjs"; assert.equal(greet(), "Hello, world!"); assert.equal(greet("Ada"), "Hello, Ada!");'], { cwd: root, encoding: 'utf8' });
     result.completion = { decisions: saved?.decisions, verification: saved?.verification, progress: saved?.progress, next: saved?.next, blockers: saved?.blockers, reply: finalMessage };
     result.passed = code === 0 && checks.status === 0 && behavior.status === 0 && result.head !== initial && result.status === ''

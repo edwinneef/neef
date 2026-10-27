@@ -1,5 +1,15 @@
 # Validation — 2026-10-27
 
+## Continuity across longer work
+
+- Same-task state saves now retain omitted `verification`, as they already retained decisions. Active same-task saves also retain omitted `blockers`, matching next-step preservation. Explicit empty strings clear notes; explicitly supplied values replace them. Omitted notes start empty for a different task. No schema, command, history store, size-limit or save-cadence change.
+- Resume guidance in `references/completion.md` keeps settled decisions and their reasons, reconciles saved progress with current instructions/files/Git, and reuses only evidence still applicable to the current code. Cumulative notes stay concise; obsolete evidence is updated rather than blindly reused. Fresh-reader review corrected wording about omitted fields on new tasks.
+- Five focused save/resume/install checks passed. `npm run check`: 73/73 passed, covering retained notes, explicit clearing/replacement, read-only resume, changed-HEAD discrepancies, task isolation and existing plan continuity. Final smoke-harness grading edits passed syntax and diff checks. Main skill remains unchanged at 7,996 bytes.
+- Managed installation passed dry run, backed-up apply and verification; installed runtime and completion guidance hashes matched source. `.gitignore` is unchanged.
+- Fresh Claude and Codex verification-only sessions reconciled an externally changed implementation, kept the owner's greeting wording, reran the two relevant tests, updated evidence, and retained the absent owner-device output as active. Neither session edited project files or committed. This avoids the previously denied Git-write capability; it does not establish native commit acceptance.
+- Evidence: `.test-artifacts/hosts-1793063488743/`. Original `.result.json` and host transcripts are preserved. Continuity-specific regrading is recorded in `claude.regraded.json` and `codex.regraded.json`: both passed. The original grader required the literal phrase “owner ... wording”; it now also accepts “owner choice” or “owner chose”. Its unrelated recommendation assertion was removed from the continuity test and recommendation kind remains recorded separately.
+- Separate observed discrepancy: Claude omitted the existing recommendation output after verification-only work, while correctly preserving progress, next step and blocker. Codex supplied a REQUIRED recommendation. This follow-up behavior is not fixed by the scoped continuity change and is not reported as a full-workflow pass.
+
 ## Lightweight completion evidence
 
 - Development keeps requested outcomes in existing `decisions` and maps them to actual evidence in `verification`. Required gaps remain active with the missing result in `next` and its reason in `blockers`; optional checks create no gate. No new state fields, commands, approval steps or separate verification round.

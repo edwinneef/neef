@@ -1102,6 +1102,62 @@ test('agreed decisions survive same-task progress and completion, without leakin
   assert.equal(f.run(['status']).state.task, 'Unrelated task');
 });
 
+test('same-task checkpoints retain evidence and blockers across resume and changed HEAD', t => {
+  const f = fixture(t);
+  const first = f.state('missing', 'Long feature', {
+    decisions: 'Keep the existing API: callers depend on it.',
+    verification: 'Existing API assertions passed at the first checkpoint.',
+    next: 'Finish the independent documentation while awaiting owner output.',
+    blockers: 'Owner-device output is still required.',
+  });
+  const checkpoint = f.state(first.revision, first.state.task);
+  for (const field of ['decisions', 'verification', 'next', 'blockers']) {
+    assert.equal(checkpoint.state[field], first.state[field]);
+  }
+  const beforeResume = fs.readFileSync(f.statePath(), 'utf8');
+  const resumed = f.run(['next']);
+  assert.equal(resumed.resume, 'continue');
+  assert.equal(resumed.state.verification, first.state.verification);
+  assert.equal(resumed.state.blockers, first.state.blockers);
+  assert.equal(fs.readFileSync(f.statePath(), 'utf8'), beforeResume);
+  f.write('owned.txt', 'changed outside the saved task\n');
+  f.git('add', '--', 'owned.txt');
+  f.git('commit', '-m', 'External change');
+  const changed = f.run(['status']);
+  assert.ok(changed.discrepancies.some(item => /HEAD changed/.test(item)));
+  assert.equal(changed.state.verification, first.state.verification);
+  assert.equal(changed.state.blockers, first.state.blockers);
+  const updated = f.state(changed.revision, first.state.task, {
+    verification: 'Affected API assertions rerun after the external change; passed.',
+    blockers: '', next: 'Finish documentation.',
+  });
+  assert.equal(updated.state.verification, 'Affected API assertions rerun after the external change; passed.');
+  assert.equal(updated.state.blockers, '');
+  assert.equal(updated.state.decisions, first.state.decisions);
+});
+
+test('continuity notes clear explicitly and never leak into another task', t => {
+  const f = fixture(t);
+  const setup = f.run(['setup']);
+  const first = f.state(setup.revision, 'Long feature', {
+    decisions: 'Keep the public API.', verification: 'API behavior checked.',
+    next: 'Await owner output.', blockers: 'Owner output missing.',
+  });
+  const completed = f.state(first.revision, first.state.task, { progress: 'complete', recommendations: noRecommendation });
+  assert.equal(completed.state.verification, first.state.verification);
+  assert.equal(completed.state.next, '');
+  assert.equal(completed.state.blockers, '');
+  const cleared = f.state(completed.revision, first.state.task, { decisions: '', verification: '', next: '', blockers: '' });
+  for (const field of ['decisions', 'verification', 'next', 'blockers']) assert.equal(cleared.state[field], '');
+  const restored = f.state(cleared.revision, first.state.task, {
+    decisions: first.state.decisions, verification: first.state.verification,
+    next: first.state.next, blockers: first.state.blockers,
+  });
+  const unrelated = f.state(restored.revision, 'Another feature');
+  for (const field of ['decisions', 'verification', 'next', 'blockers']) assert.equal(unrelated.state[field], '');
+  assert.deepEqual(unrelated.state.context, first.state.context);
+});
+
 test('both agent installations receive self-contained shaping guidance and preserve unmanaged references', t => {
   const f = installation(t);
   f.install(true);

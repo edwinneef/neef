@@ -247,9 +247,9 @@ function stateWrite(p, expected, input) {
       ...(current.state?.context ? { context: current.state.context } : {}),
       ...(current.state?.recommendations ? { recommendations: current.state.recommendations } : {}),
       decisions: input.decisions ?? (current.state?.task === input.task ? current.state.decisions : '') ?? '',
-      verification: input.verification || '',
+      verification: input.verification ?? (current.state?.task === input.task ? current.state.verification : '') ?? '',
       next: input.next ?? (input.progress === 'active' && current.state?.task === input.task ? current.state.next : '') ?? '',
-      blockers: input.blockers || '' };
+      blockers: input.blockers ?? (input.progress === 'active' && current.state?.task === input.task ? current.state.blockers : '') ?? '' };
     if (Object.hasOwn(input, 'recommendations')) value.recommendations = recommendations(input.recommendations, value.progress, { task: value.task, branch: actual.branch, head: actual.head });
     const plan = Object.hasOwn(input, 'plan') ? input.plan : current.state?.task === input.task ? current.state.plan : undefined;
     if (plan !== undefined) {
