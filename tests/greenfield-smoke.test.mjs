@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import net from 'node:net';
+import { EventEmitter, once } from 'node:events';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { checkApp, fixtureEnvironment, hostArguments, scenario } from '../scripts/greenfield-smoke.mjs';
+import { checkApp, fixtureEnvironment, hostArguments, scenario, serverCleanup, startApp } from '../scripts/greenfield-smoke.mjs';
 
 function app(t, persistent, listStatus = 200, normalize = false) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'neef-app-check-'));
@@ -91,4 +93,69 @@ test('greenfield behavior check rejects a working form and API that lose saved b
 test('greenfield behavior check rejects error responses containing plausible booking data', async t => {
   const fixture = app(t, true, 500);
   await assert.rejects(checkApp(fixture.root, fixture.data), /Booking listing must return HTTP success/);
+});
+
+test('cleanup does not await another exit after an owned server was signal-terminated', { timeout: 3000 }, async t => {
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore', windowsHide: true });
+  t.after(serverCleanup(child));
+  const exit = once(child, 'exit');
+  child.kill('SIGTERM');
+  await exit;
+  assert.equal(child.exitCode, null);
+  assert.ok(child.signalCode);
+  const stop = serverCleanup(child, 200);
+  const stopped = stop();
+  assert.equal(stop(), stopped);
+  await stopped;
+  await stop();
+});
+
+test('repeated cleanup stops only its owned server and leaves another server available', async t => {
+  const fixture = app(t, true);
+  const owned = await startApp(fixture.root, path.join(fixture.root, 'owned.json'));
+  let other;
+  try {
+    other = await startApp(fixture.root, path.join(fixture.root, 'other.json'));
+    const stopped = owned.stop();
+    assert.equal(owned.stop(), stopped);
+    await stopped;
+    await owned.stop();
+    const response = await fetch(other.url, { signal: AbortSignal.timeout(1000) });
+    assert.equal(response.status, 200);
+  } finally { await owned.stop(); if (other) await other.stop(); }
+});
+
+test('unconfirmed owned-server shutdown times out without retrying the stop', { timeout: 1000 }, async () => {
+  const child = new EventEmitter();
+  Object.assign(child, { pid: 123, exitCode: null, signalCode: null });
+  let stops = 0, released = 0, streamsClosed = 0;
+  child.kill = () => { stops++; return false; };
+  child.unref = () => { released++; };
+  child.stdout = { destroy() { streamsClosed++; } };
+  child.stderr = { destroy() { streamsClosed++; } };
+  const stop = serverCleanup(child, 30);
+  const stopped = stop();
+  assert.equal(stop(), stopped);
+  await assert.rejects(stopped, /shutdown timed out; stop not confirmed/);
+  await assert.rejects(stop(), /shutdown timed out; stop not confirmed/);
+  assert.equal(stops, 1);
+  assert.equal(released, 1);
+  assert.equal(streamsClosed, 2);
+});
+
+test('stalled readiness is bounded and releases the owned server port', { timeout: 4000 }, async t => {
+  const fixture = app(t, true);
+  fs.writeFileSync(path.join(fixture.root, 'server.mjs'), `
+import http from 'node:http';
+import fs from 'node:fs';
+const server = http.createServer(() => {});
+server.listen(Number(process.env.PORT), '127.0.0.1', () => {
+  fs.writeFileSync(process.env.DATA_FILE, String(server.address().port));
+});
+`);
+  await assert.rejects(startApp(fixture.root, fixture.data, { startupTimeoutMs: 700 }), /did not respond within 700 ms/);
+  const port = Number(fs.readFileSync(fixture.data, 'utf8'));
+  const probe = net.createServer();
+  try { await new Promise((resolve, reject) => { probe.once('error', reject); probe.listen(port, '127.0.0.1', resolve); }); }
+  finally { if (probe.listening) await new Promise(resolve => probe.close(resolve)); }
 });

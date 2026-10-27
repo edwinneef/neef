@@ -14,6 +14,8 @@ Aim for a usable first version with one complete flow from input to visible resu
 
 Verify the result the way a user would use it: build or test what exists, then start it and confirm it responds, for example by fetching its local URL. Check the requested flow and persistence where relevant; a successful start alone does not prove them. Use a browser when available to exercise the interface, and distinguish API/source checks from an interaction actually tried. Commit this first usable version before optional polish, then continue only within the requested scope. Avoid extra planning, infrastructure and repeated successful checks.
 
+Keep these existing checks finite: give smoke tests, readiness probes, requests and shutdown waits appropriate timeouts. Retain handles only for servers you start for verification, capture their exit wait at launch, and reuse one cleanup result so a second cleanup cannot wait for another exit. Treat normal and signal termination as stopped. Clean up owned test servers on success or failure; never find targets by port or process name, enumerate unrelated processes, or kill a process tree you did not create. If a timeout or denial prevents confirming shutdown, preserve the work and report that exact gap instead of retrying or widening access. This adds no separate verification step and does not stop an app intentionally left running for the user.
+
 ## Hand it over running
 
 When the host can keep a process alive, leave the app running on localhost and give its URL and how to stop it; otherwise give the exact run command. Recommend the next most valuable feature as the follow-up, not setup chores.

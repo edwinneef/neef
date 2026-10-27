@@ -1,5 +1,12 @@
 # Validation — 2026-10-27
 
+## Bounded first-build checks and repeat-safe owned-server cleanup
+
+- Existing greenfield guidance and the fixture prompt now require finite test/readiness/request/shutdown waits and retain only handles for verification servers NEEF starts. No new user command, workflow phase, dependency, process inventory or broad termination. Apps intentionally handed over running are unaffected.
+- Checker readiness now uses a six-second elapsed deadline instead of an attempt count. Existing HTTP checks retain two-second request bounds. One exit wait is captured at server launch; one cleanup promise is reused, recognizing normal or signal termination. Shutdown waits at most two seconds. A failed stop remains a failure, releases the checker’s child/pipe references, and never issues a second kill or claims shutdown was confirmed. Fresh-reader review identified and closed the event-loop-reference gap on timeout.
+- Ten focused checker tests passed, including the original already-signal-terminated cleanup stall, repeated cleanup while another server stays available, a simulated non-exiting child with one stop attempt/reference release, and stalled readiness with the owned port released. Existing creation/listing/persistence and error checks still pass. One focused installed-guidance parity/skill-budget test passed. Syntax and diff checks passed.
+- The changed checker also passed once against the preserved generated app using new disposable data, covering create/list and actual server-restart persistence. Evidence: `.test-artifacts/greenfield-1793067008284/codex.bounded-lifecycle.result.json`. This is checker integration evidence, not a new unattended model-generation pass or browser rerun. Original app/data and source `.gitignore` are preserved.
+
 ## First-build lessons and personal motion reference
 
 - Confirmed actual `frontend-design` use from `.test-artifacts/greenfield-1793067008284/codex.jsonl`, line 5: the completed shell read includes the installed frontend skill, exits zero, and returns its body. The generated app's existing palette/type/layout plan is consistent with using that guidance; this does not establish that every design principle was satisfied. Its shipped CSS was mostly static, with hover feedback rather than a designed motion sequence.
