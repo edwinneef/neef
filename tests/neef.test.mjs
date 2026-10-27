@@ -83,6 +83,80 @@ test('clean trivial change commits only the reviewed change and consumes its tok
   f.run(['commit', prepared.token], undefined, /consumed/);
 });
 
+test('explanation style defaults read-only and persists globally without touching task state', t => {
+  const f = fixture(t, false);
+  assert.equal(f.run(['style']).style, 'simple');
+  assert.equal(fs.existsSync(f.home), false);
+  f.state('missing', 'Keep this task');
+  const before = fs.readFileSync(f.statePath(), 'utf8');
+  const file = path.join(f.home, 'preferences.json');
+  for (const style of ['simple', 'guided', 'technical']) {
+    assert.equal(f.run(['style', style]).style, style);
+    assert.equal(f.run(['style']).style, style);
+  }
+  assert.equal(JSON.parse(fs.readFileSync(`${file}.bak`, 'utf8')).style, 'guided');
+  const saved = fs.readFileSync(file, 'utf8');
+  f.run(['style', 'technical']);
+  assert.equal(fs.readFileSync(file, 'utf8'), saved);
+  assert.equal(JSON.parse(fs.readFileSync(`${file}.bak`, 'utf8')).style, 'guided');
+  const other = path.join(path.dirname(f.root), 'other-project');
+  fs.mkdirSync(other);
+  const read = spawnSync(process.execPath, [helper, '--project', other, 'style'], {
+    encoding: 'utf8', env: { ...process.env, NEEF_HOME: f.home },
+  });
+  assert.equal(read.status, 0, read.stdout + read.stderr);
+  assert.equal(JSON.parse(read.stdout).style, 'technical');
+  assert.equal(fs.readFileSync(f.statePath(), 'utf8'), before);
+  assert.deepEqual(fs.readdirSync(f.root), []);
+});
+
+test('style rejects invalid input and preserves corrupt or locked preferences', t => {
+  const f = fixture(t, false);
+  f.run(['style', 'verbose'], undefined, /Choose style/);
+  f.run(['style', 'simple', 'extra'], undefined, /Usage/);
+  assert.equal(fs.existsSync(f.home), false);
+  f.run(['style', 'guided']);
+  const file = path.join(f.home, 'preferences.json');
+  const saved = fs.readFileSync(file, 'utf8');
+  fs.writeFileSync(`${file}.lock`, 'another writer');
+  f.run(['style', 'technical'], undefined, /Operation locked/);
+  assert.equal(fs.readFileSync(file, 'utf8'), saved);
+  fs.unlinkSync(`${file}.lock`);
+  for (const contents of ['broken json', '{"version":1,"style":"unknown"}']) {
+    fs.writeFileSync(file, contents);
+    f.run(['style', 'simple'], undefined, /JSON|Invalid preferences/);
+    assert.equal(fs.readFileSync(file, 'utf8'), contents);
+  }
+});
+
+test('style refuses project-local storage before writing', t => {
+  const f = fixture(t, false);
+  const result = spawnSync(process.execPath, [helper, '--project', f.root, 'style', 'simple'], {
+    encoding: 'utf8', env: { ...process.env, NEEF_HOME: path.join(f.root, 'local-settings') },
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /outside the project/);
+  assert.deepEqual(fs.readdirSync(f.root), []);
+});
+
+test('style refuses linked storage and preserves other preference fields', t => {
+  const f = fixture(t, false);
+  f.run(['style', 'guided']);
+  const file = path.join(f.home, 'preferences.json');
+  fs.writeFileSync(file, JSON.stringify({ version: 1, style: 'guided', personal: 'keep' }));
+  f.run(['style', 'technical']);
+  assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).personal, 'keep');
+  const linked = path.join(path.dirname(f.root), 'linked-home');
+  fs.symlinkSync(f.home, linked, process.platform === 'win32' ? 'junction' : 'dir');
+  const before = fs.readFileSync(file, 'utf8');
+  const result = spawnSync(process.execPath, [helper, '--project', f.root, 'style', 'simple'], {
+    encoding: 'utf8', env: { ...process.env, NEEF_HOME: linked },
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /Linked preference storage refused/);
+  assert.equal(fs.readFileSync(file, 'utf8'), before);
+});
+
 test('normal multi-file feature stays on main and records verification', t => {
   const f = fixture(t);
   const begin = f.run(['begin', 'feature']);
@@ -374,16 +448,20 @@ test('isolated installation dry run writes nothing and both agents receive expli
   const shared = fs.readFileSync(path.join(f.home, 'SKILL.md'), 'utf8');
   for (const agent of ['.agents', '.claude']) {
     assert.equal(fs.readFileSync(path.join(f.user, agent, 'skills', 'neef', 'SKILL.md'), 'utf8'), shared);
+    assert.equal(fs.readFileSync(path.join(f.user, agent, 'skills/neef/references/explanation-styles.md'), 'utf8'),
+      fs.readFileSync(path.join(f.home, 'references/explanation-styles.md'), 'utf8'));
   }
   assert.match(shared, /disable-model-invocation: true/);
   assert.match(fs.readFileSync(path.join(f.user, '.agents/skills/neef/agents/openai.yaml'), 'utf8'), /allow_implicit_invocation: false/);
   assert.equal(fs.readFileSync(path.join(f.home, 'neef.mjs'), 'utf8'), fs.readFileSync(helper, 'utf8'));
   assert.ok(fs.existsSync(path.join(f.home, 'state')));
   const state = f.state('missing', 'Shared task');
+  f.run(['style', 'technical']);
   assert.equal(f.run(['status']).state.task, state.state.task);
   const repeated = f.install(true);
   assert.ok(fs.existsSync(path.join(repeated.backup, 'install.json.bak')));
   assert.equal(f.run(['status']).state.task, 'Shared task');
+  assert.equal(f.run(['style']).style, 'technical');
 });
 
 test('installer preserves edited managed files and unrelated agent content', t => {
@@ -563,8 +641,8 @@ test('advisor aliases install shared read-only guidance without replacing unfini
     assert.equal(fs.readFileSync(path.join(root, 'references/follow-up.md'), 'utf8'), followUp);
     assert.match(skill, /`options \[goal\]` or `ask <goal>`: read `references\/advisor.md`/);
     assert.match(skill, /Advice is read-only, including external state/);
-    assert.match(skill, /After development, finish with one `state-write`/);
-    assert.match(skill, /Read `references\/follow-up.md` only for blockers/);
+    assert.match(followUp, /Finish each task with `state-write`, saving progress and this evaluation atomically/);
+    assert.match(skill, /read `references\/follow-up.md` to save progress/);
   }
   const help = f.run(['help']);
   assert.ok(help.commands.includes('options [goal]'));

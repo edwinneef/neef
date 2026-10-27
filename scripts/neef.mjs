@@ -18,6 +18,7 @@ const commandCatalog = [
   { name: 'next', usage: 'next', aliases: ['continue'], intent: 'build', changes: 'Project files and task state; frequent safe local commits', stops: 'Unfinished task resumed until complete or blocked; otherwise one useful follow-up done' },
   { name: 'status', usage: 'status', intent: 'inspect', changes: 'Nothing (read-only)', stops: 'Progress, Git, verification and blockers reported' },
   { name: 'help', usage: 'help', intent: 'inspect', changes: 'Nothing (read-only)', stops: 'Grouped command guide and aliases displayed' },
+  { name: 'style', usage: 'style [simple|guided|technical]', subskill: false, intent: 'inspect', changes: 'With a name: global explanation preference only; without: read-only', stops: 'Current style shown or default saved; no project task started' },
   { name: 'doctor', usage: 'doctor', subskill: false, intent: 'inspect', changes: 'Nothing; no implicit repairs', stops: 'Installation health checks and concrete fixes reported' },
 ];
 export const commandNames = commandCatalog.flatMap(({ name, aliases = [] }) => [name, ...aliases]);
@@ -151,6 +152,33 @@ function lock(file, action) {
 }
 
 const stateFile = p => path.join(home(), 'state', `${p.id}.json`);
+const explanationStyles = ['simple', 'guided', 'technical'];
+function explanationStyle(p, selected) {
+  const file = path.join(home(), 'preferences.json');
+  // A shared preference must never follow a linked file or directory.
+  for (let cursor = file; cursor !== path.dirname(cursor); cursor = path.dirname(cursor)) {
+    try { if (fs.lstatSync(cursor).isSymbolicLink()) fail(`Linked preference storage refused: ${cursor}`); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
+  const load = () => {
+    if (!exists(file)) return { version: 1, style: 'simple' };
+    const value = json(file);
+    if (value?.version !== 1 || !explanationStyles.includes(value.style)) fail('Invalid preferences preserved; expected version 1 and style simple, guided or technical');
+    return value;
+  };
+  const result = value => ({ style: value.style, available: explanationStyles, scope: 'global', file });
+  if (selected === undefined) return result(load());
+  if (!explanationStyles.includes(selected)) fail('Choose style simple, guided or technical');
+  requireExternalStorage(p, [file, `${file}.bak`, `${file}.lock`]);
+  return lock(file, () => {
+    const value = load();
+    if (!exists(file) || value.style !== selected) {
+      if (exists(file)) atomic(`${file}.bak`, read(file));
+      atomic(file, `${JSON.stringify({ ...value, style: selected }, null, 2)}\n`);
+    }
+    return result({ ...value, style: selected });
+  });
+}
 function validState(value, p) {
   return value?.version === 1 && value.project === p.root && typeof value.task === 'string'
     && ['active', 'complete'].includes(value.progress) && typeof value.revision === 'string'
@@ -768,9 +796,13 @@ export async function main(args = process.argv.slice(2)) {
         .map(({ usage, changes, stops, aliases = [] }) => ({ command: usage, changes, stops, aliases })) })),
     invocation: { codex: '$neef <command>', claude: '/neef <command>' },
     aliases: { codex: subskillNames.map(command => `$neef-${command}`), claude: subskillNames.map(command => `/neef-${command}`) },
-    helperCommands: ['prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?}]}. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. Shared state remains under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, shape [--deep] <idea>, plan <feature>, challenge [--deep] <topic>, prototype <description> (proto alias), options [goal] (ask alias), setup, next (continue alias), status, help, doctor are agent skill modes; prototype builds or refines isolated external demos and hands approved concepts to development without automatic production changes; options ranks project actions, or with a goal recommends an existing command, read-only including external state and without execution; shaping uses native questions and state-write then implements unless discussion-only; plan saves a complexity-sized full-feature roadmap then stops; challenge is read-only except external recommendations-write and never implements; next resumes unfinished work and runs all ready plan phases until complete or blocked, otherwise starts one revalidated follow-up' };
+    helperCommands: ['style [simple|guided|technical] (read or save global explanation preference)', 'prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?}]}. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. Shared state remains under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, shape [--deep] <idea>, plan <feature>, challenge [--deep] <topic>, prototype <description> (proto alias), options [goal] (ask alias), setup, next (continue alias), status, help, doctor are agent skill modes; prototype builds or refines isolated external demos and hands approved concepts to development without automatic production changes; options ranks project actions, or with a goal recommends an existing command, read-only including external state and without execution; shaping uses native questions and state-write then implements unless discussion-only; plan saves a complexity-sized full-feature roadmap then stops; challenge is read-only except external recommendations-write and never implements; next resumes unfinished work and runs all ready plan phases until complete or blocked, otherwise starts one revalidated follow-up' };
   if (command === 'doctor') return doctor();
   const p = project(cwd);
+  if (command === 'style') {
+    if (args.length > 2) fail('Usage: style [simple|guided|technical]');
+    return explanationStyle(p, argument);
+  }
   if (['setup', 'bootstrap', 'context-write', 'begin', 'prepare', 'commit', 'state-write', 'recommendations-write', 'state-recover'].includes(command)) requireExternalStorage(p);
   const input = () => JSON.parse(fs.readFileSync(0, 'utf8'));
   if (command === 'setup') return setup(p);

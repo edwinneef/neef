@@ -28,6 +28,14 @@ Expect a clear interface with that complete flow, saved local data, checks of th
 
 Once it works, describe the next change normally, such as “let me cancel a booking.” To resume unfinished work in another session, use `$neef next` or `/neef next`. NEEF reads its saved decisions and checks them against the current project before continuing. Real build time depends on the request, model and environment; the landing-page timeline is illustrative.
 
+## Explanation style
+
+Simple is the initial default: short, everyday language with exact actions when you need to do something. Guided adds numbered steps and brief reasons. Technical explains what changed, where, why and how it was checked.
+
+Use `$neef style guided` in Codex or `/neef style guided` in Claude Code to save a default across all projects. Replace `guided` with `simple` or `technical`; omit the name to see the current setting. Add "use Technical for this task" to a request for a temporary override. Styles affect explanations only, including questions and progress updates. Every style retains the instructions and evidence you need.
+
+The preference lives in `~/.neef/preferences.json` (or `NEEF_HOME`), separate from project task state. Changing it preserves the previous file as `.bak`; reinstalling NEEF preserves the preference. Start a fresh agent session after installing updated skill instructions.
+
 ## How NEEF works
 
 - **Navigate:** Understand the task, codebase, context and relevant decisions.
@@ -37,7 +45,7 @@ Once it works, describe the next change normally, such as “let me cancel a boo
 
 These principles guide the existing workflow; they are not mandatory phases. The command name remains `neef`.
 
-One explicit skill for autonomous development in Claude Code (`/neef`) and Codex (`$neef`). Modes: task, shape [--deep], plan, challenge [--deep], prototype (proto), options [goal] (ask), setup, next (continue), status, help, doctor. Node 20+ and Git are required. No dependencies, daemon, or mandatory project setup.
+One explicit skill for autonomous development in Claude Code (`/neef`) and Codex (`$neef`). Modes: task, shape [--deep], plan, challenge [--deep], prototype (proto), options [goal] (ask), setup, next (continue), status, help, style [simple|guided|technical], doctor. Node 20+ and Git are required. No dependencies, daemon, or mandatory project setup.
 
 Each main mode also has a directly invokable subskill with its description shown in the skill picker: `$neef-task`, `$neef-shape`, `$neef-plan`, `$neef-challenge`, `$neef-prototype`, `$neef-options`, `$neef-setup`, `$neef-next`, `$neef-status` and `$neef-help`. Claude uses the matching `/neef-…` commands. Aliases (`proto`, `ask`, `continue`) and the rare `doctor` work only through `$neef`/`/neef`; reinstalling retires their old subskill folders when unedited. Arguments and flags work as before, for example `$neef-shape --deep <idea>`. These explicit-only aliases read the same canonical Neef instructions and share its state and safety checks. Hyphenated names work on both hosts; no colon-named skill directories are required on Windows.
 

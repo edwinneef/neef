@@ -14,11 +14,14 @@ Use Node 20+ and Git with `~/.neef/neef.mjs`; resolve the actual home and quote 
 
 ## Route the invocation
 
+For every invocation, read `references/explanation-styles.md` and run helper `style` to apply the explanation preference.
+
 UI work: read `references/personal-design.md`.
 
 Match bare modes exactly; route leading shape, plan, challenge, prototype/proto and options/ask commands first. Ask for missing subjects. Other arguments request development.
 
 - `help`: run helper `help`; show name, fullName, motto and all intent groups as Command/Changes/Stops at tables using returned text. Include every command, flag and alias beside its command, and each direct subskill with its full host prefix. Omit helper internals. Read-only; stop after help.
+- `style [simple|guided|technical]`: follow the style-setting route in `references/explanation-styles.md`, then stop.
 - `shape [--deep] <idea>`: read `references/shape.md`, clarify, save decisions and implement unless discussion-only.
 - `plan <feature>`: read `references/plan.md`; save the full feature plan and stop. Only external state writes are permitted. Skip development below.
 - `challenge [--deep] <topic>`: read `references/challenge.md`. Project files and Git are read-only. The only permitted write is external `recommendations-write`; then report and stop. Skip all sections below in this mode.
@@ -50,4 +53,4 @@ Run `prepare <baseline-id>` with stdin JSON `{"files":["relative/path"],"message
 
 ## Follow-up
 
-After task work, even verification-only, `state-write` progress and `recommendations`: `primary:{kind,action,reason}` plus up to two `alternatives`, or `primary:null`, `alternatives:[]`, `reason`. Unfinished original scope is REQUIRED and stays active; otherwise RECOMMENDED or OPTIONAL. Actions name the change and result; reasons cite code or goals. Advice authorizes nothing. Report work, verification and Git. End every final reply with one concrete next prompt or host command grounded in current goals; when blocked or pausing, state why in one line and name the exact input or user step needed and what to report back; never diagnose, retry or bypass a permission or policy denial, or repeat an unchanged blocker; when done, invite the next goal. Read `references/follow-up.md` only for blockers or competing follow-ups.
+After task work, including verification-only work, read `references/follow-up.md` to save progress, evaluate recommendations and report the result with one concrete next command. When blocked or pausing, name the exact input or user step needed and what to report back; never diagnose, retry or bypass a permission or policy denial, or repeat an unchanged blocker.
