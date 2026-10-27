@@ -6,6 +6,30 @@ Navigate → Execute → Evaluate → Follow-up
 
 **From idea to a running project, fast.** Open an empty folder and describe what you want: `/neef build a booking page for my salon`. NEEF creates Git on `main`, picks a sensible stack without asking, builds and verifies the first working version, commits it, and hands it over running with its local URL or run command. In existing projects it moves just as fast while keeping their stack, patterns and tooling: smallest working change, focused checks, frequent safe commits and one concrete next step. No per-project setup is required.
 
+## Get your first app running
+
+You need Claude Code or Codex, Node.js 20+ and Git. Install once from a local copy of the NEEF source:
+
+```powershell
+node scripts/install.mjs
+node scripts/install.mjs --apply
+```
+
+The first command previews the installation. The second installs for both hosts, backs up managed files and preserves unrelated configuration. Restart your agent session to discover NEEF. You do not need to learn the command menu or run project setup.
+
+Open a new empty folder in your agent and describe a useful first version:
+
+| Host | First request |
+| --- | --- |
+| Codex | `$neef build a local booking app for my salon. Let me add a customer booking, see the bookings, and keep them after restarting the app.` |
+| Claude Code | `/neef build a local booking app for my salon. Let me add a customer booking, see the bookings, and keep them after restarting the app.` |
+
+Expect a clear interface with that complete flow, saved local data, checks of the requested behavior, a scoped commit and a local URL or exact run command. Stack selection and project dependencies are NEEF's job. A first version uses sample data and local storage; payments, accounts and public hosting are separate requests.
+
+Once it works, describe the next change normally, such as “let me cancel a booking.” To resume unfinished work in another session, use `$neef next` or `/neef next`. NEEF reads its saved decisions and checks them against the current project before continuing. Real build time depends on the request, model and environment; the landing-page timeline is illustrative.
+
+## How NEEF works
+
 - **Navigate:** Understand the task, codebase, context and relevant decisions.
 - **Execute:** Implement autonomously with minimal overhead.
 - **Evaluate:** Verify proportionately and identify meaningful improvements.
@@ -17,7 +41,7 @@ One explicit skill for autonomous development in Claude Code (`/neef`) and Codex
 
 Each main mode also has a directly invokable subskill with its description shown in the skill picker: `$neef-task`, `$neef-shape`, `$neef-plan`, `$neef-challenge`, `$neef-prototype`, `$neef-options`, `$neef-setup`, `$neef-next`, `$neef-status` and `$neef-help`. Claude uses the matching `/neef-…` commands. Aliases (`proto`, `ask`, `continue`) and the rare `doctor` work only through `$neef`/`/neef`; reinstalling retires their old subskill folders when unedited. Arguments and flags work as before, for example `$neef-shape --deep <idea>`. These explicit-only aliases read the same canonical Neef instructions and share its state and safety checks. Hyphenated names work on both hosts; no colon-named skill directories are required on Windows.
 
-Maintain this source here. Run `node scripts/install.mjs` for a read-only installation plan, then `node scripts/install.mjs --apply` to synchronize the two skill copies and shared runtime. Existing managed files are hash checked and backed up before replacement; edited or unmanaged files stop installation. Unrelated agent configuration is untouched. Reinstall after source changes. Restart an agent session to refresh discovery.
+Maintain this source here and rerun the quick-start installer after source changes. Existing managed files are hash checked and backed up before replacement; edited or unmanaged files stop installation. Unrelated agent configuration is untouched. Restart an agent session to refresh discovery.
 
 The runtime lives at `~/.neef/neef.mjs`; `node <absolute-runtime-path> help` describes its commands. Shared state and Git baselines live outside projects under `~/.neef`. Every mutating helper checks that storage, including resolved directory links, stays outside the project before creating files, locks or branches. Set `NEEF_HOME` and `NEEF_USER_HOME` to isolated directories for tests. State uses canonical repository paths, SHA-256 identifiers, revision checks, exclusive locks, atomic replacement, and one recovery backup. Never remove a lock without checking its recorded owner.
 
@@ -50,6 +74,8 @@ Development carries requested outcomes in the existing `decisions` notes and con
 Longer work uses those same notes: same-task saves retain omitted decisions and evidence, and active same-task saves retain omitted next steps and blockers. Explicit empty strings clear resolved or obsolete notes; omitted notes start empty for a different task. On resumption, reconcile saved progress with current files and Git, retain settled decisions, and rerun only checks whose evidence is affected by changes. No extra command, history store or checkpoint step is needed.
 
 Run `npm run check` for focused disposable-repository tests. Installed configuration checks do not prove fresh agent discovery or native invocation; those require separate host smoke tests.
+
+Maintainers can preview the matching empty-folder booking-app regression with `node scripts/greenfield-smoke.mjs --plan` (read-only). The opt-in `--run` uses fresh installed hosts and disposable projects, checks creation/listing and persistence after a server restart, and records actual elapsed time without a speed threshold. `--claude-only` or `--codex-only` selects one host. It stops at the first failure; inspect the recorded result and respect any host denial before considering another run. The checker verifies HTTP behavior and interface source, not browser interaction or visual quality. This is maintenance tooling, never an extra step for ordinary NEEF tasks.
 
 The [landing page](site/README.md) uses the approved Tobacco light/dark design with reduced-motion support. Run `npm --prefix site ci`, then `npm run site:dev` to open it locally at http://127.0.0.1:4378. `npm run site:build` creates the static site in `site/dist/`.
 

@@ -1,5 +1,13 @@
 # Validation — 2026-10-27
 
+## First-use path to a usable local app
+
+- The user selected effortless first use and consistent results together, anchored on rapid creation from scratch. README now puts installation and a concrete booking-app request before the command overview. Existing greenfield guidance defines one complete usable flow, real local persistence where needed, a meaningful check and runnable handoff. No wizard, mandatory setup, new NEEF command or hosting requirement.
+- `scripts/greenfield-smoke.mjs` defaults to a read-only scenario plan. Opt-in host runs use genuinely empty disposable folders and the same booking request with an explicit regression-only Node/HTTP contract. They check a main-branch commit, saved evidence/follow-up, a served form, successful booking creation/listing, and persistence after an actual process restart. The runner records elapsed time, stops at the first failure, and makes no browser-interaction, visual-quality or general speed claim.
+- Four checker tests passed: both-host read-only plan, persisted bookings with equivalent normalized times, rejection of lost bookings, and rejection of HTTP errors containing plausible data. Three focused existing greenfield/install checks also passed. Script syntax and diff checks passed. Fresh-reader review found no prose issues; its two checker findings (HTTP status and time normalization) were fixed and tested.
+- Managed dry run and backed-up install passed; all installed start-guidance hashes matched source. The main skill and `.gitignore` are unchanged.
+- Native model-generated app runs were not attempted: earlier child-host sessions denied `.git/objects` writes. This change does not retry that capability, move to another route around it, or claim host greenfield/commit acceptance. A user must enable Git metadata writes for the selected host before such a run. The new checker was exercised on disposable test apps, not on a newly model-generated app. No actual app-creation timing or first-use visual/browser acceptance has been established.
+
 ## Follow-up after verification-only work
 
 - Root cause: the main follow-up instruction said “After development”, leaving verification-only task work implicit. Main, completion and follow-up guidance now explicitly cover it and keep recommendations in the existing final `state-write`. Status/help/advice stop boundaries remain read-only. No runtime/schema change or extra save.

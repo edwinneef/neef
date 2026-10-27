@@ -10,10 +10,14 @@ Done means the requested app or tool exists, its first working version is commit
 
 Scaffold only what the request needs. Run an official generator non-interactively when it saves real work, otherwise write the files directly. Installing the project's own dependencies is part of the task; global tools, system settings and external accounts still need the user. Add a `.gitignore` for dependencies and build output, and a short README with the run command. Use synthetic sample data rather than live services.
 
-Verify the result the way a user would use it: build or test what exists, then start it and confirm it responds, for example by fetching its local URL. Commit this first working version before polishing, then continue in small committed increments.
+Aim for a usable first version with one complete flow from input to visible result. For a booking app, that means creating a booking and finding it in the list, not just rendering a form. When the task needs saved data, use real local persistence and check that it survives the relevant reload or restart. Choose simple defaults for empty states and invalid input. Apply the existing UI/design guidance; make the message and main action clear without expanding the feature set. Hosted services, sign-in and deployment belong only when requested.
+
+Verify the result the way a user would use it: build or test what exists, then start it and confirm it responds, for example by fetching its local URL. Check the requested flow and persistence where relevant; a successful start alone does not prove them. Use a browser when available to exercise the interface, and distinguish API/source checks from an interaction actually tried. Commit this first usable version before optional polish, then continue only within the requested scope. Avoid extra planning, infrastructure and repeated successful checks.
 
 ## Hand it over running
 
 When the host can keep a process alive, leave the app running on localhost and give its URL and how to stop it; otherwise give the exact run command. Recommend the next most valuable feature as the follow-up, not setup chores.
+
+Give the user the main action to try and briefly report its actual checks and any required gap. Preserve unfinished acceptance in the normal task state. Do not label illustrative timelines or one successful fixture as a general speed or quality guarantee.
 
 Once the first commit exists, the project is an existing project: keep the stack and patterns it now has.
