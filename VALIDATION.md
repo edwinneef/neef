@@ -1,5 +1,11 @@
 # Validation — 2026-10-27
 
+## Booking flow exercised in the browser
+
+- Opened the preserved generated app in the ChatGPT in-app browser, using a new isolated `browser-bookings-1793068496582.json` data file. Through the actual form, entered `NEEF Browser Check 2026-10-27` and local appointment `2030-01-15T10:30`, then clicked Add booking. The success confirmation appeared and the list increased from two sample bookings to three.
+- Reloaded the page through the browser. The same customer and 10:30 appointment remained visible under January 15, 2030, with three total bookings. The saved data contains exactly one matching test booking. This establishes the requested create-and-reload interaction in this desktop browser; it does not establish mobile or cross-browser coverage.
+- Evidence under `.test-artifacts/greenfield-1793067008284/`: `codex.browser.result.json`, `browser-after-reload-1793068496582.png` and the isolated data file. Original failed/resumed records and earlier booking data remain intact. No app source change; fixture working tree remains clean. Test tab closed and the checker-owned server stopped after validation.
+
 ## Supervised resumption of the real greenfield check
 
 - User explicitly authorized scoped cleanup and resumption. Approved inspection filtered Node test/server candidates, checked their process working directories against the exact preserved fixture, and found no matching processes remaining. No unrelated process was stopped. Final inspection after the checks also found zero matches.
