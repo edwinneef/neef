@@ -13,10 +13,23 @@ const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const helper = path.join(os.homedir(), '.neef/neef.mjs');
 const request = 'Build a usable local booking app for my salon. Let me add a customer booking, see the bookings, and keep them after restarting the app. Use a clear interface and sample data, without accounts or hosting.';
 const contract = 'For this disposable regression only, use Node built-ins, start with node server.mjs, honor PORT and DATA_FILE environment variables, and provide GET /api/bookings returning a JSON array and POST /api/bookings accepting {customer, time} and returning the created booking with status 201. Serve the working interface at /. Use local file persistence. Verify the flow and persistence; stop any preview you start and provide the run command. Do not modify anything outside this disposable project except NEEF shared state. Follow normal NEEF Git safeguards; stop on a host denial.';
+const gitApproval = 'Codex Git approval: workspace-write protects .git, including in this empty fixture. Before running the exact NEEF begin, prepare or commit helper command that will write Git metadata, request scoped approval using sandbox_permissions="require_escalated" with a justification naming this disposable project and operation. The user authorizes those local Git operations in this fixture subject to approval; do not request a broad command prefix. Keep the sandbox enabled. Do not first attempt the protected write without approval. If approval is refused or unavailable, preserve work, record the exact blocker and stop; do not retry or bypass the denial.';
+
+export function hostArguments(host, shared) {
+  assert.ok(['claude', 'codex'].includes(host), 'Host must be claude or codex');
+  return host === 'claude' ? ['-p', '--output-format', 'stream-json', '--verbose', '--allowedTools', 'Read,Edit,Write,Bash,Skill']
+    : ['exec', '--ephemeral', '--json', '--sandbox', 'workspace-write', '-c', 'approval_policy="on-request"', '-c', 'approvals_reviewer="auto_review"', '--skip-git-repo-check', '--add-dir', shared, '-'];
+}
+
+export function fixtureEnvironment(artifacts) {
+  const env = { ...process.env, NEEF_HOME: path.join(artifacts, 'shared'), GIT_CEILING_DIRECTORIES: artifacts };
+  delete env.CLAUDECODE;
+  return env;
+}
 
 export function scenario(host) {
   assert.ok(['claude', 'codex'].includes(host), 'Host must be claude or codex');
-  return { host, prompt: `${host === 'claude' ? '/neef' : '$neef'} ${request}\n${contract}`,
+  return { host, prompt: `${host === 'claude' ? '/neef' : '$neef'} ${request}\n${contract}${host === 'codex' ? `\n${gitApproval}` : ''}`,
     checks: ['Starts from a genuinely empty folder', 'Serves an interface', 'Creates and lists a booking', 'Retains it after a server restart', 'Commits owned work on main', 'Records outcome evidence and follow-up'],
     limits: 'HTTP/source checks do not establish browser interaction, visual quality or a general speed guarantee.' };
 }
@@ -82,12 +95,10 @@ async function run(host, artifacts) {
   const root = path.join(artifacts, host);
   fs.mkdirSync(root);
   assert.deepEqual(fs.readdirSync(root), []);
-  const env = { ...process.env, NEEF_HOME: path.join(artifacts, 'shared') };
-  delete env.CLAUDECODE;
+  const env = fixtureEnvironment(artifacts);
   const plan = scenario(host);
   fs.writeFileSync(path.join(artifacts, `${host}.prompt.txt`), plan.prompt);
-  const args = host === 'claude' ? ['-p', '--output-format', 'stream-json', '--verbose', '--allowedTools', 'Read,Edit,Write,Bash,Skill']
-    : ['exec', '--ephemeral', '--json', '--approve-for-me', '--add-dir', env.NEEF_HOME, '-'];
+  const args = hostArguments(host, env.NEEF_HOME);
   const program = process.platform === 'win32' ? 'cmd.exe' : host;
   const hostArgs = process.platform === 'win32' ? ['/d', '/s', '/c', [host, ...args].map(arg => /\s/.test(arg) ? `"${arg}"` : arg).join(' ')] : args;
   const stdout = fs.openSync(path.join(artifacts, `${host}.jsonl`), 'w');
