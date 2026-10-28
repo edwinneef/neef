@@ -185,6 +185,8 @@ function validState(value, p) {
     && (value.context === undefined || (value.context?.version === 1
       && ['minimal', 'full'].includes(value.context.depth) && typeof value.context.fingerprint === 'string'))
     && (value.recommendations === undefined || validRecommendations(value.recommendations))
+    && (value.outcomes === undefined || (validOutcomes(value.outcomes)
+      && (value.progress !== 'complete' || !completionError(value))))
     && (value.plan === undefined || (validPlan(value.plan) && (value.progress !== 'complete' || value.plan.phases.every(phase => phase.status === 'complete'))))
     && ['decisions', 'verification', 'next', 'blockers'].every(key => typeof value[key] === 'string');
 }
@@ -236,9 +238,9 @@ function saveState(p, current, value) {
   const file = stateFile(p);
   // Keep project context readable as one field without expanding a small state
   // file into a permanent discovery report.
-  const { context, recommendations, plan, ...task } = value;
+  const { context, recommendations, plan, outcomes, ...task } = value;
   let contents = JSON.stringify(task, null, 2);
-  for (const [key, field] of Object.entries({ context, recommendations, plan })) {
+  for (const [key, field] of Object.entries({ context, recommendations, plan, outcomes })) {
     if (field) contents = `${contents.slice(0, -2)},\n  "${key}": ${JSON.stringify(field)}\n}`;
   }
   contents += '\n';
@@ -277,13 +279,22 @@ function stateWrite(p, expected, input) {
       decisions: input.decisions ?? (current.state?.task === input.task ? current.state.decisions : '') ?? '',
       verification: input.verification ?? (current.state?.task === input.task ? current.state.verification : '') ?? '',
       next: input.next ?? (input.progress === 'active' && current.state?.task === input.task ? current.state.next : '') ?? '',
-      blockers: input.blockers ?? (input.progress === 'active' && current.state?.task === input.task ? current.state.blockers : '') ?? '' };
+      blockers: input.blockers ?? (current.state?.task === input.task ? current.state.blockers : '') ?? '' };
     if (Object.hasOwn(input, 'recommendations')) value.recommendations = recommendations(input.recommendations, value.progress, { task: value.task, branch: actual.branch, head: actual.head });
     const plan = Object.hasOwn(input, 'plan') ? input.plan : current.state?.task === input.task ? current.state.plan : undefined;
     if (plan !== undefined) {
       if (!validPlan(plan)) fail('Invalid plan: provide goal, scale, rationale and phases with unique ids, tasks, dependencies, acceptance criteria and valid statuses');
       if (value.progress === 'complete' && plan.phases.some(phase => phase.status !== 'complete')) fail('Unfinished plan phases require active task progress');
       value.plan = plan;
+    }
+    const outcomes = Object.hasOwn(input, 'outcomes') ? input.outcomes : current.state?.task === input.task ? current.state.outcomes : undefined;
+    if (outcomes !== undefined) {
+      if (!validOutcomes(outcomes)) fail('Invalid outcomes: provide unique ids, descriptions, required booleans, status pending/passed/failed/blocked and evidence strings; passed outcomes require evidence and at least one outcome must be required');
+      value.outcomes = outcomes;
+    }
+    if (value.progress === 'complete') {
+      const error = completionError(value);
+      if (error) fail(error);
     }
     if (value.baseline !== null) {
       const baseline = json(baselineFile(value.baseline));
@@ -296,6 +307,21 @@ function stateWrite(p, expected, input) {
 
 const actionKinds = ['REQUIRED', 'RECOMMENDED', 'OPTIONAL'];
 const shortText = (value, limit) => typeof value === 'string' && !!value.trim() && value.length <= limit;
+function validOutcomes(value) {
+  return Array.isArray(value) && value.length > 0
+    && value.every(outcome => outcome && shortText(outcome.id, 60) && shortText(outcome.description, 400)
+      && typeof outcome.required === 'boolean' && ['pending', 'passed', 'failed', 'blocked'].includes(outcome.status)
+      && typeof outcome.evidence === 'string' && outcome.evidence.length <= 800
+      && (outcome.status !== 'passed' || !!outcome.evidence.trim()))
+    && value.some(outcome => outcome.required)
+    && new Set(value.map(outcome => outcome.id)).size === value.length;
+}
+function completionError(value) {
+  if (!validOutcomes(value.outcomes)) return 'Completed tasks require outcomes with a result and evidence for each required outcome';
+  if (value.outcomes.some(outcome => outcome.required && outcome.status !== 'passed')) return 'Unfinished required outcomes require active task progress';
+  if (value.blockers.trim()) return 'Unresolved blockers require active task progress; explicitly clear resolved blockers';
+  return null;
+}
 function validPlan(value) {
   if (!value || !shortText(value.goal, 600) || !['small', 'large'].includes(value.scale) || !shortText(value.rationale, 400)
     || !Array.isArray(value.phases) || !value.phases.length
@@ -796,7 +822,7 @@ export async function main(args = process.argv.slice(2)) {
         .map(({ usage, changes, stops, aliases = [] }) => ({ command: usage, changes, stops, aliases })) })),
     invocation: { codex: '$neef <command>', claude: '/neef <command>' },
     aliases: { codex: subskillNames.map(command => `$neef-${command}`), claude: subskillNames.map(command => `/neef-${command}`) },
-    helperCommands: ['style [simple|guided|technical] (read or save global explanation preference)', 'prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?}]}. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. Shared state remains under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, shape [--deep] <idea>, plan <feature>, challenge [--deep] <topic>, prototype <description> (proto alias), options [goal] (ask alias), setup, next (continue alias), status, help, doctor are agent skill modes; prototype builds or refines isolated external demos and hands approved concepts to development without automatic production changes; options ranks project actions, or with a goal recommends an existing command, read-only including external state and without execution; shaping uses native questions and state-write then implements unless discussion-only; plan saves a complexity-sized full-feature roadmap then stops; challenge is read-only except external recommendations-write and never implements; next resumes unfinished work and runs all ready plan phases until complete or blocked, otherwise starts one revalidated follow-up' };
+    helperCommands: ['style [simple|guided|technical] (read or save global explanation preference)', 'prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?,outcomes?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', outcomes: 'Development completion requires [{id,description,required,status,evidence}], with unique ids and at least one required outcome. Status is pending/passed/failed/blocked; passed outcomes need nonempty evidence. Required outcomes must pass, blockers must be explicitly cleared, and plan phases must finish before completion. Same-task writes preserve omitted outcomes; new tasks do not inherit them. Legacy saved states remain readable. Evidence is agent-reported, not independently proven.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?}]}. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. Shared state remains under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, shape [--deep] <idea>, plan <feature>, challenge [--deep] <topic>, prototype <description> (proto alias), options [goal] (ask alias), setup, next (continue alias), status, help, doctor are agent skill modes; prototype builds or refines isolated external demos and hands approved concepts to development without automatic production changes; options ranks project actions, or with a goal recommends an existing command, read-only including external state and without execution; shaping uses native questions and state-write then implements unless discussion-only; plan saves a complexity-sized full-feature roadmap then stops; challenge is read-only except external recommendations-write and never implements; next resumes unfinished work and runs all ready plan phases until complete or blocked, otherwise starts one revalidated follow-up' };
   if (command === 'doctor') return doctor();
   const p = project(cwd);
   if (command === 'style') {

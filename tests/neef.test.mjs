@@ -7,6 +7,8 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
+const passedOutcomes = [{ id: 'fixture', description: 'Complete the fixture task', required: true, status: 'passed', evidence: 'Fixture assertions passed.' }];
+
 const helper = fileURLToPath(new URL('../scripts/neef.mjs', import.meta.url));
 
 test('persisted baseline resumes owned edits without replacing the before-edit snapshot', t => {
@@ -166,7 +168,7 @@ test('normal multi-file feature stays on main and records verification', t => {
   f.write('new feature.txt', 'new module\n');
   const prepared = f.prepare(begin.baseline, ['owned.txt', 'new feature.txt']);
   f.run(['commit', prepared.token]);
-  f.state(saved.revision, 'Add feature', { progress: 'complete', verification: 'Focused fixture assertions passed', recommendations: { primary: null, alternatives: [], reason: 'The fixture feature is complete; no further user goal is defined.' } });
+  f.state(saved.revision, 'Add feature', { progress: 'complete', outcomes: passedOutcomes, verification: 'Focused fixture assertions passed', recommendations: { primary: null, alternatives: [], reason: 'The fixture feature is complete; no further user goal is defined.' } });
   const status = f.run(['status']);
   assert.equal(status.state.progress, 'complete');
   assert.equal(status.state.head, status.actual.head);
@@ -962,8 +964,8 @@ test('completion requires an explicit recommendation evaluation and refuses unfi
   const f = fixture(t);
   const saved = f.state('missing', 'Original task');
   const raw = fs.readFileSync(f.statePath(), 'utf8');
-  f.state(saved.revision, 'Original task', { progress: 'complete' }, /require evaluated recommendations/);
-  f.state(saved.revision, 'Original task', { progress: 'complete', recommendations: { primary: recommendation('Finish the original behavior.', 'REQUIRED'), alternatives: [] } }, /unfinished original task/);
+  f.state(saved.revision, 'Original task', { progress: 'complete', outcomes: passedOutcomes }, /require evaluated recommendations/);
+  f.state(saved.revision, 'Original task', { progress: 'complete', outcomes: passedOutcomes, recommendations: { primary: recommendation('Finish the original behavior.', 'REQUIRED'), alternatives: [] } }, /unfinished original task/);
   assert.equal(fs.readFileSync(f.statePath(), 'utf8'), raw);
   const active = f.state(saved.revision, 'Original task', { next: 'Finish owned.txt', recommendations: {
     primary: recommendation(), alternatives: [recommendation('Finish the original behavior.', 'REQUIRED')],
@@ -975,11 +977,109 @@ test('completion requires an explicit recommendation evaluation and refuses unfi
   assert.equal(next.state.next, 'Finish owned.txt');
 });
 
+test('four-zone completion rejects missing or malformed outcome records without changing saved state', t => {
+  const f = fixture(t, false);
+  const saved = f.state('missing', 'Check requested behavior');
+  const raw = fs.readFileSync(f.statePath(), 'utf8');
+  const complete = { progress: 'complete', recommendations: noRecommendation };
+  f.state(saved.revision, saved.state.task, complete, /Completed tasks require outcomes/);
+  for (const outcomes of [null, [], {}, [null], [{ ...passedOutcomes[0], required: 'yes' }],
+    [{ ...passedOutcomes[0], status: 'complete' }], [{ ...passedOutcomes[0], id: ' ' }],
+    [{ ...passedOutcomes[0], description: '' }], [{ ...passedOutcomes[0], evidence: [] }],
+    [{ ...passedOutcomes[0], evidence: ' ' }], [{ ...passedOutcomes[0], required: false }],
+    [passedOutcomes[0], passedOutcomes[0]]]) {
+    f.state(saved.revision, saved.state.task, { ...complete, outcomes }, /Invalid outcomes/);
+    assert.equal(fs.readFileSync(f.statePath(), 'utf8'), raw);
+  }
+  for (const [field, limit] of [['id', 60], ['description', 400], ['evidence', 800]]) {
+    f.state(saved.revision, saved.state.task, { outcomes: [{ ...passedOutcomes[0], [field]: 'x'.repeat(limit + 1) }] }, /Invalid outcomes/);
+  }
+  assert.equal(fs.existsSync(`${f.statePath()}.bak`), false);
+  assert.equal(fs.readFileSync(f.statePath(), 'utf8'), raw);
+});
+
+test('four-zone completion requires every required outcome to pass but allows optional unfinished checks', t => {
+  const f = fixture(t, false);
+  const saved = f.state('missing', 'Check requested behavior');
+  for (const status of ['pending', 'failed', 'blocked']) {
+    f.state(saved.revision, saved.state.task, {
+      progress: 'complete', recommendations: noRecommendation,
+      outcomes: [...passedOutcomes, { id: 'second', description: 'Second required behavior', required: true, status, evidence: 'Still unverified.' }],
+    }, /Unfinished required outcomes/);
+  }
+  const outcomes = [...passedOutcomes, { id: 'optional', description: 'Optional additional check', required: false, status: 'failed', evidence: '' }];
+  const complete = f.state(saved.revision, saved.state.task, { progress: 'complete', outcomes, recommendations: noRecommendation });
+  assert.equal(complete.state.progress, 'complete');
+  assert.deepEqual(f.run(['status']).state.outcomes, outcomes);
+});
+
+test('four-zone records survive checkpoints and prevent implicit clearing of unresolved blockers', t => {
+  const f = fixture(t, false);
+  const first = f.state('missing', 'Check requested behavior', { outcomes: passedOutcomes, blockers: 'Required result is missing.' });
+  const checkpoint = f.state(first.revision, first.state.task, { verification: 'Rechecked current evidence.' });
+  assert.deepEqual(checkpoint.state.outcomes, first.state.outcomes);
+  f.state(checkpoint.revision, first.state.task, { progress: 'complete', recommendations: noRecommendation }, /Unresolved blockers/);
+  const complete = f.state(checkpoint.revision, first.state.task, { progress: 'complete', blockers: '', recommendations: noRecommendation });
+  assert.deepEqual(complete.state.outcomes, passedOutcomes);
+  const next = f.state(complete.revision, 'Another task');
+  assert.equal(next.state.outcomes, undefined);
+  assert.equal(next.state.blockers, '');
+  f.state(next.revision, next.state.task, { progress: 'complete', recommendations: noRecommendation }, /Completed tasks require outcomes/);
+});
+
+test('legacy completed states remain readable and require outcome records on their next completion write', t => {
+  const f = fixture(t, false);
+  const first = f.state('missing', 'Legacy task');
+  const legacy = { ...first.state, progress: 'complete', verification: 'Historical check.' };
+  const raw = JSON.stringify(legacy);
+  fs.writeFileSync(f.statePath(), raw);
+  const current = f.run(['status']);
+  assert.equal(current.error, undefined);
+  assert.equal(f.run(['next']).state.progress, 'complete');
+  assert.equal(fs.readFileSync(f.statePath(), 'utf8'), raw);
+  f.state(current.revision, legacy.task, { progress: 'complete', recommendations: noRecommendation }, /Completed tasks require outcomes/);
+  const upgraded = f.state(current.revision, legacy.task, { progress: 'complete', outcomes: passedOutcomes, recommendations: noRecommendation });
+  assert.deepEqual(upgraded.state.outcomes, passedOutcomes);
+  assert.equal(upgraded.state.verification, legacy.verification);
+});
+
+test('outcomes remain compact and survive setup, recommendation refresh and recovery', t => {
+  const f = fixture(t, false);
+  const outcomes = Array.from({ length: 8 }, (_, index) => ({ ...passedOutcomes[0], id: `outcome-${index}` }));
+  f.state('missing', 'Preserve outcomes', { outcomes });
+  const setup = f.run(['setup']);
+  const advice = f.run(['recommendations-write', setup.revision], noRecommendation);
+  assert.deepEqual(advice.state.outcomes, outcomes);
+  const raw = fs.readFileSync(f.statePath(), 'utf8');
+  assert.ok(Buffer.byteLength(raw) <= 8192);
+  assert.ok(raw.split('\n').length <= 40);
+  const bad = { ...advice.state, outcomes: [{ ...passedOutcomes[0], evidence: '' }] };
+  fs.writeFileSync(f.statePath(), JSON.stringify(bad));
+  const corrupt = f.run(['status']);
+  assert.match(corrupt.error, /Invalid state preserved/);
+  const recovered = f.run(['state-recover', corrupt.revision]);
+  assert.deepEqual(recovered.state.outcomes, outcomes);
+});
+
+test('both hosts install the same adaptive four-zone contract and completion schema', t => {
+  const f = installation(t);
+  f.install(true);
+  const source = fs.readFileSync(new URL('../SKILL.md', import.meta.url), 'utf8');
+  for (const agent of ['.agents', '.claude']) {
+    const root = path.join(f.user, agent, 'skills/neef');
+    assert.equal(fs.readFileSync(path.join(root, 'SKILL.md'), 'utf8'), source);
+    assert.match(source, /headings only when useful/);
+    assert.match(source, /Each mode's write permissions and stop boundary govern every zone/);
+    assert.match(fs.readFileSync(path.join(root, 'references/completion.md'), 'utf8'), /helper checks record consistency/);
+  }
+  assert.match(f.run(['help']).outcomes, /required.*passed|Required outcomes must pass/);
+});
+
 test('next returns ordered advisory candidates and inspects changed Git state without mutating it', t => {
   const f = fixture(t);
   const primary = recommendation();
   const alternative = recommendation('Add an optional export to owned.txt.', 'OPTIONAL');
-  const saved = f.state('missing', 'Completed feature', { progress: 'complete', recommendations: { primary, alternatives: [alternative] } });
+  const saved = f.state('missing', 'Completed feature', { progress: 'complete', outcomes: passedOutcomes, recommendations: { primary, alternatives: [alternative] } });
   const raw = fs.readFileSync(f.statePath(), 'utf8');
   f.write('user.txt', 'concurrent personal tuning\n');
   const before = f.git('status', '--porcelain');
@@ -1002,7 +1102,7 @@ test('next returns ordered advisory candidates and inspects changed Git state wi
 test('recommendation refresh preserves task and context, supports alternatives and no-action evaluation', t => {
   const f = fixture(t);
   const setup = f.run(['setup']);
-  const saved = f.state(setup.revision, 'Completed feature', { progress: 'complete', recommendations: { primary: recommendation(), alternatives: [] } });
+  const saved = f.state(setup.revision, 'Completed feature', { progress: 'complete', outcomes: passedOutcomes, recommendations: { primary: recommendation(), alternatives: [] } });
   const replacement = { primary: recommendation('Add a focused greeting export in owned.txt.'), alternatives: [recommendation('Add an optional fixture example.', 'OPTIONAL')] };
   const updated = f.run(['recommendations-write', saved.revision], replacement);
   const { recommendations, ...task } = updated.state;
@@ -1057,7 +1157,7 @@ test('next treats an inspectable dependency as investigation work and can persis
   assert.equal(f.run(['next']).discoveryRequired, true);
   assert.match(nextGuidance(), /Resolve technical dependencies through code inspection.*focused verification/i);
   const investigated = f.state(saved.revision, 'Investigate greeting support', {
-    progress: 'complete', verification: 'Inspected owned.txt: it contains only before; no greeting API exists.',
+    progress: 'complete', outcomes: passedOutcomes, verification: 'Inspected owned.txt: it contains only before; no greeting API exists.',
     recommendations: { primary: recommendation('Implement a greeting API with default and named-output tests.'), alternatives: [] },
   });
   assert.match(investigated.state.verification, /Inspected owned.txt/);
@@ -1142,7 +1242,7 @@ test('missing and legacy recommendation state stays read-only; recovery preserve
   const missing = f.run(['next']);
   assert.deepEqual(missing.candidates, []);
   assert.equal(fs.existsSync(f.home), false);
-  const first = f.state('missing', 'Previous completed task', { progress: 'complete', recommendations: { primary: recommendation(), alternatives: [] } });
+  const first = f.state('missing', 'Previous completed task', { progress: 'complete', outcomes: passedOutcomes, recommendations: { primary: recommendation(), alternatives: [] } });
   const second = f.state(first.revision, 'Current active task');
   assert.deepEqual(second.state.recommendations, first.state.recommendations);
   const file = f.statePath();
@@ -1171,7 +1271,7 @@ test('agreed decisions survive same-task progress and completion, without leakin
   assert.equal(resumed.state.decisions, first.state.decisions);
   assert.deepEqual(resumed.state.context, first.state.context);
   const answered = f.state(resumed.revision, 'Shape greeting behavior', { decisions: `${resumed.state.decisions} Empty names use the default.` });
-  const completed = f.state(answered.revision, 'Shape greeting behavior', { progress: 'complete', recommendations: noRecommendation });
+  const completed = f.state(answered.revision, 'Shape greeting behavior', { progress: 'complete', outcomes: passedOutcomes, recommendations: noRecommendation });
   assert.equal(completed.state.decisions, answered.state.decisions);
   const newTask = f.state(completed.revision, 'Unrelated task');
   assert.equal(newTask.state.decisions, '');
@@ -1221,7 +1321,7 @@ test('continuity notes clear explicitly and never leak into another task', t => 
     decisions: 'Keep the public API.', verification: 'API behavior checked.',
     next: 'Await owner output.', blockers: 'Owner output missing.',
   });
-  const completed = f.state(first.revision, first.state.task, { progress: 'complete', recommendations: noRecommendation });
+  const completed = f.state(first.revision, first.state.task, { progress: 'complete', outcomes: passedOutcomes, blockers: '', recommendations: noRecommendation });
   assert.equal(completed.state.verification, first.state.verification);
   assert.equal(completed.state.next, '');
   assert.equal(completed.state.blockers, '');
@@ -1281,7 +1381,7 @@ test('a full feature plan survives separate phase commits and keeps the feature 
   assert.deepEqual(f.run(['status']).actual, original);
   assert.deepEqual(f.run(['status']).state.plan, plan);
   assert.equal(f.run(['next']).resume, 'continue');
-  f.state(saved.revision, saved.state.task, { progress: 'complete', recommendations: noRecommendation }, /Unfinished plan phases/);
+  f.state(saved.revision, saved.state.task, { progress: 'complete', outcomes: passedOutcomes, recommendations: noRecommendation }, /Unfinished plan phases/);
   assert.equal(f.run(['status']).revision, saved.revision);
 
   const first = f.run(['begin', 'greeting-api']);
@@ -1305,7 +1405,7 @@ test('a full feature plan survives separate phase commits and keeps the feature 
   f.run(['commit', f.prepare(second.baseline).token]);
   plan.phases[1].status = 'complete';
   plan.phases[1].verification = 'The entry point returned the named greeting.';
-  const completed = f.state(resumed.revision, saved.state.task, { plan, baseline: null, progress: 'complete', recommendations: noRecommendation });
+  const completed = f.state(resumed.revision, saved.state.task, { plan, baseline: null, progress: 'complete', outcomes: passedOutcomes, recommendations: noRecommendation });
   assert.equal(completed.state.progress, 'complete');
   assert.equal(completed.state.plan.phases[0].verification, accepted.state.plan.phases[0].verification);
   assert.deepEqual(completed.state.plan, plan);
@@ -1398,7 +1498,7 @@ test('challenge advice preserves active work and becomes advisory next candidate
   assert.equal(f.run(['next']).resume, 'continue');
   assert.equal(f.git('status', '--porcelain'), before);
   assert.equal(f.git('rev-parse', 'HEAD'), head);
-  const complete = f.state(saved.revision, 'Existing task', { progress: 'complete', recommendations: advice });
+  const complete = f.state(saved.revision, 'Existing task', { progress: 'complete', outcomes: passedOutcomes, recommendations: advice });
   assert.equal(f.run(['next']).candidates[0].action, complete.state.recommendations.primary.action);
 });
 

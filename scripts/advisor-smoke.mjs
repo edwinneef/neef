@@ -113,7 +113,8 @@ async function run(host) {
       fs.writeFileSync(path.join(root, 'README.md'), '# Greeting\nThe sole goal is greet() returning Hello, world!, already implemented in index.mjs. No optional features are wanted.\n');
       const current = JSON.parse(status());
       command(process.execPath, [helper, 'state-write', current.revision], JSON.stringify({
-        task: 'Base greeting', progress: 'complete', baseline: null, decisions: 'Only the base greeting is required.',
+        task: 'Base greeting', progress: 'complete', baseline: null,
+        outcomes: [{ id: 'base', description: 'Preserve the base greeting', required: true, status: 'passed', evidence: 'Seeded fixture contains the base greeting.' }], decisions: 'Only the base greeting is required.',
         verification: 'Source confirms the sole required output.', next: '', blockers: '',
         recommendations: { primary: null, alternatives: [], reason: 'README.md defines only the existing base greeting.' },
       }));

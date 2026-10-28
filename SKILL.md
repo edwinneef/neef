@@ -8,6 +8,15 @@ disable-model-invocation: true
 
 Navigate → Execute → Evaluate → Follow-up
 
+## Default four-zone contract
+
+The zones organize every invocation. Show headings only when useful; small tasks keep short replies. User prompts may stay natural. Each mode's write permissions and stop boundary govern every zone. They add no phases or approvals.
+
+- **Navigate:** Establish the goal, requested outcomes, scope, constraints and mode boundary.
+- **Execute:** Perform authorized scoped work while preserving unrelated changes and existing patterns.
+- **Evaluate:** Match every required outcome to its result and evidence. Missing required evidence keeps development unfinished.
+- **Follow-up:** Report results, changed files, checks and required gaps, then give one concrete advisory next command.
+
 Implement and verify the request, commit only owned work when safe, and save continuity for either agent. Otherwise record the blocker and preserved work. NEEF authorizes scoped local edits, checks and commits on main. Keep development on main; create no branches or worktrees. If another branch is checked out, preserve it and report the mismatch; pause project edits and commits until main is selected. Pushing, merging, destructive actions and scope expansion need separate user authorization.
 
 Use Node 20+ and Git with `~/.neef/neef.mjs`; resolve the actual home and quote absolute paths. Run `node <helper> help` when command contracts are missing or changed. Commands use cwd as the project; `--project <path>` overrides it.
@@ -37,13 +46,11 @@ Match bare modes exactly; route leading shape, plan, challenge, prototype/proto 
 
 Read applicable AGENTS.md, CLAUDE.md, relevant code and helper `status`; `next` already includes status. Reuse instructions already read in this session unless changed. `begin` bootstraps missing `context`. Setup is optional; cached facts never override current instructions. On persistence failure, preserve state, report it and continue independent work. Reconcile stale state; retain unfinished work unless the user replaces it. Before edits that may be committed, run `begin <short-task-slug>` for a baseline. Commits require the returned baseline ID.
 
-For development, record outcomes in `decisions` and their evidence in `verification`; required gaps stay active. Read `references/completion.md`. Make the smallest change with focused checks; fix introduced regressions. Keep existing stacks, patterns and tooling. If `begin` reports `greenfield`, read `references/start.md`. Runnable work ends verified to start, with run command or URL. Ordinary work needs no extra plans, full suite, review or interview. Execute authorized plan phases until complete or no safe work remains. Inspect and use reasonable defaults; ask only for essential missing information or authority. Continue independent work around blockers. Batch independent calls; give brief progress updates.
+For development, read `references/completion.md`. Make the smallest change with focused checks; fix introduced regressions. Keep existing stacks, patterns and tooling. If `begin` reports `greenfield`, read `references/start.md`. Runnable work ends verified to start, with run command or URL. Ordinary work needs no extra plans, full suite, review or interview. Execute authorized plan phases until complete or no safe work remains. Inspect and use reasonable defaults; ask only for essential missing information or authority. Continue independent work around blockers. Batch independent calls; give brief progress updates.
 
 Use native delegates only for independent investigation or disjoint edits. Bound their scope; own integration, verification, Git and state. Add no orchestration dependencies.
 
-Use `state-write <revision>` with stdin JSON containing `task`, `progress` (`active` or `complete`), `baseline`, `decisions`, `verification`, `next` and `blockers`; last four strings; `verification` maps outcomes to evidence. Reuse the latest revision from `begin`, `commit`, bootstrap/setup or state mutation. Use `status` when no revision is available, a check fails, or progress needs reconciliation. Save at useful milestones and before stopping. HEAD changes expire a baseline; begin again before the next increment's edits. Inspect a corrupt state's backup before `state-recover <revision>`.
-
-Task writes preserve `context`; setup preserves task fields. Agreed `decisions` constrain implementation. Refresh stale facts without requiring setup.
+Before task-state writes, read `references/completion.md` for outcome records, revision reuse and recovery. Save at useful milestones and before stopping.
 
 ## Evaluate and commit
 

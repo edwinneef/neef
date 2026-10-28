@@ -1,5 +1,13 @@
 # Validation — 2026-10-28
 
+## Four-zone contract and completion records
+
+- The shared skill defines Navigate, Execute, Evaluate and Follow-up with adaptive heading visibility. Natural-language requests, existing mode permissions and stop boundaries remain intact; no approval step or mandatory phase was added. Continuity mechanics moved into the existing required completion reference to keep the main skill at 7,794 bytes, below its 8,000-byte limit.
+- Development completion now requires compact outcome records with unique ids, descriptions, required flags, results and evidence. The helper rejects missing or malformed records, unfinished required outcomes, missing passing evidence, unresolved blockers and unfinished plan phases. Optional unfinished checks do not prevent completion. Evidence remains agent-reported rather than independently proven.
+- Legacy state stays readable. Outcomes persist across same-task checkpoints, setup, recommendation updates and recovery without leaking into new tasks. Completion requires explicit clearing of resolved blockers. Both existing completed smoke-fixture seeds now supply outcome records.
+- `npm run check` passed all 101 tests, including six new regressions for completion validation, continuity, legacy state, compact serialization/recovery and synchronized host installation. Nine focused completion/continuity tests passed separately. Both changed smoke runners passed syntax checks, and `git diff --check` passed.
+- The managed installer dry run and apply passed for 69 files. All installed hashes and 69 backup copies were independently checked; 13 saved state/backup/preference files stayed byte-identical during installation. Rollback data is in `C:\Users\edwin\.neef\backups\install-1793166139451-50dec066`. Installed-runtime checks rejected missing outcomes, unfinished required outcomes and unresolved blockers, then accepted evidenced completion. All 20 doctor checks passed. Fresh model conversations were not launched; these checks establish installation and helper behavior, not fresh-host workflow acceptance.
+
 ## Safe, bounded installed-host smoke runners
 
 - All six live runners now use the same explicit workspace sandbox and on-request automatic approval review for Codex, including resumed sessions. Authorized fixture Git writes request scoped approval first and stop on refusal. Shape, advisor and prototype fixtures explicitly initialize main. Retired `neef-ask` and `neef-proto` calls now use their canonical command forms.

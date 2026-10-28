@@ -111,6 +111,7 @@ async function run(host) {
   if (next || active || help) {
     const seeded = spawnSync(process.execPath, [helper, 'state-write', 'missing'], { cwd: root, env, encoding: 'utf8', timeout: 30000, input: JSON.stringify({
       task: active ? 'Add named greetings' : 'Implement the base greeting', progress: active || help ? 'active' : 'complete',
+      ...(!active && !help ? { outcomes: [{ id: 'base', description: 'Preserve the base greeting', required: true, status: 'passed', evidence: 'Base greeting fixture test passes.' }] } : {}),
       decisions: 'README.md defines the greeting sample goal.', verification: 'Base greeting fixture test passes.',
       next: active ? 'Add optional names, preserve the default output and verify both behaviors.' : help ? 'Finish the original base greeting task.' : '',
       recommendations: exhausted
