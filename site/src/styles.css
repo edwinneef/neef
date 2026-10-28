@@ -48,7 +48,7 @@ section { padding: 112px 0; }
 .logo { display: inline-flex; align-items: center; gap: 10px; margin-right: auto; text-decoration: none; }
 /* The word's box is trimmed to cap height, so centring aligns the mark with the letters, not the line box. */
 .logo .word { font: 800 20px/1 var(--sans); letter-spacing: .07em; text-box: trim-both cap alphabetic; }
-.logo .mark { width: 27px; height: 27px; }
+.logo .mark { width: 20px; height: 20px; }
 .controls { display: flex; align-items: center; gap: 10px; }
 .pill { position: relative; display: flex; padding: 3px; border: 1px solid var(--line); border-radius: 999px; }
 .pill .thumb { position: absolute; top: 3px; bottom: 3px; left: 0; border-radius: 999px; background: var(--ink); transition: transform 420ms cubic-bezier(.3, 1.35, .5, 1), width 420ms cubic-bezier(.3, 1.35, .5, 1); }
@@ -59,7 +59,10 @@ section { padding: 112px 0; }
 
 /* The "four steps" mark: a block, so its slot never gains descender space */
 .mark { display: block; flex: none; overflow: visible; }
-.mark .tile { fill: currentColor; transition: fill 350ms, opacity 350ms; }
+.mark .tile { fill: var(--accent); transition: fill 350ms, opacity 350ms; }
+.mark:not(.live) .tile:nth-child(2) { opacity: .6; }
+.mark:not(.live) .tile:nth-child(4) { opacity: .4; }
+.mark.live .tile { fill: currentColor; }
 .mark .tile.on { fill: var(--accent); }
 .mark .tile.ahead { opacity: .22; }
 

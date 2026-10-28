@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 
-const TILES = [[3, 3], [17, 3], [17, 17], [3, 17]] as const;
+const TILES = [[0, 0], [16, 0], [16, 16], [0, 16]] as const;
 
 /**
  * The "four steps" mark: one tile per step, clockwise from the top left.
- * At rest the first tile is accent; while a job runs (step 0–3) the current tile lights and later ones dim.
+ * At rest the tiles use accent tones; while a job runs (step 0–3) the current tile lights and later ones dim.
  */
 export function Mark({ step = -1, className = '' }: { step?: number; className?: string }) {
-  return <svg className={`mark${step >= 0 ? ' live' : ''}${className ? ` ${className}` : ''}`} viewBox="0 0 32 32" aria-hidden="true">
-    {TILES.map(([x, y], i) => <rect key={i} x={x} y={y} width="12" height="12" rx="3.2"
+  return <svg className={`mark${step >= 0 ? ' live' : ''}${className ? ` ${className}` : ''}`} viewBox="0 0 28 28" aria-hidden="true">
+    {TILES.map(([x, y], i) => <rect key={i} x={x} y={y} width="12" height="12" rx="2"
       className={`tile${(step < 0 ? i === 0 : i === step) ? ' on' : ''}${step >= 0 && i > step ? ' ahead' : ''}`} />)}
   </svg>;
 }
