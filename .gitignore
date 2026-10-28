@@ -2,3 +2,6 @@
 inventory.json
 site/node_modules/
 site/dist/
+
+# Local Netlify folder
+.netlify
