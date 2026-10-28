@@ -244,7 +244,9 @@ function saveState(p, current, value) {
     if (field) contents = `${contents.slice(0, -2)},\n  "${key}": ${JSON.stringify(field)}\n}`;
   }
   contents += '\n';
-  if (Buffer.byteLength(contents) > 8192 || contents.split('\n').length > 40) fail('State must stay under 8 KiB and 40 lines');
+  const bytes = Buffer.byteLength(contents);
+  const lines = contents.split('\n').length;
+  if (bytes > 8192 || lines > 40) fail(`State must stay under 8 KiB and 40 lines (this write: ${bytes} bytes, ${lines} lines); shorten plan, outcomes or notes`);
   if (current.state) atomic(`${file}.bak`, read(file));
   atomic(file, contents);
   return stateRead(p);
@@ -660,6 +662,24 @@ const baselineFile = id => {
   if (!/^[a-f0-9-]{36}$/.test(id || '')) fail('Invalid baseline/token');
   return path.join(home(), 'baselines', `${id}.json`);
 };
+const baselineRetention = 14 * 24 * 60 * 60 * 1000;
+// Baselines and reviewed tokens (which hold full diffs) otherwise accumulate forever.
+// Keep anything recent or still referenced by a saved task in any project.
+function pruneBaselines() {
+  const directory = path.join(home(), 'baselines');
+  if (!exists(directory)) return;
+  const referenced = new Set();
+  const stateDir = path.join(home(), 'state');
+  if (exists(stateDir)) for (const name of fs.readdirSync(stateDir).filter(name => name.endsWith('.json'))) {
+    try { const baseline = json(path.join(stateDir, name)).baseline; if (baseline) referenced.add(`${baseline}.json`); } catch { /* Doctor reports invalid state. */ }
+  }
+  const cutoff = Date.now() - baselineRetention;
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    if (!entry.isFile() || !/^[a-f0-9-]{36}\.(json|index)$/.test(entry.name) || referenced.has(entry.name)) continue;
+    const file = path.join(directory, entry.name);
+    try { if (fs.statSync(file).mtimeMs < cutoff) fs.unlinkSync(file); } catch { /* Pruning never blocks development. */ }
+  }
+}
 function begin(p, slug) {
   // A completely empty folder is a new project: give it Git on main so work can be committed at once.
   const gitInitialized = !p.isGit && fs.readdirSync(p.root).length === 0;
@@ -674,8 +694,9 @@ function begin(p, slug) {
   const before = snapshot(p);
   if (!before.branch) fail('Detached HEAD; select main explicitly');
   if (before.branch !== 'main') fail('Development requires main; preserve the current branch and report the mismatch');
+  pruneBaselines();
   const id = crypto.randomUUID();
-  atomic(baselineFile(id), JSON.stringify({ project: p.root, ...before }));
+  atomic(baselineFile(id), JSON.stringify({ project: p.root, slug: slug || null, ...before }));
   const greenfield = !before.head && before.changes.length === 0;
   return { baseline: id, ...before, ...(gitInitialized ? { gitInitialized } : {}), ...(greenfield ? { greenfield } : {}), revision: initialized.revision, context };
 }
@@ -822,7 +843,7 @@ export async function main(args = process.argv.slice(2)) {
         .map(({ usage, changes, stops, aliases = [] }) => ({ command: usage, changes, stops, aliases })) })),
     invocation: { codex: '$neef <command>', claude: '/neef <command>' },
     aliases: { codex: subskillNames.map(command => `$neef-${command}`), claude: subskillNames.map(command => `/neef-${command}`) },
-    helperCommands: ['style [simple|guided|technical] (read or save global explanation preference)', 'prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?,outcomes?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', outcomes: 'Development completion requires [{id,description,required,status,evidence}], with unique ids and at least one required outcome. Status is pending/passed/failed/blocked; passed outcomes need nonempty evidence. Required outcomes must pass, blockers must be explicitly cleared, and plan phases must finish before completion. Same-task writes preserve omitted outcomes; new tasks do not inherit them. Legacy saved states remain readable. Evidence is agent-reported, not independently proven.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?}]}. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. Shared state remains under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: '<task>, shape [--deep] [--discuss] [idea], plan <feature>, challenge [--deep] <topic>, prototype <description> (proto alias), options [goal] (ask alias), setup, next (continue alias), status, help, doctor are agent skill modes; prototype builds or refines isolated external demos and hands approved concepts to development without automatic production changes; options ranks project actions, or with a goal recommends an existing command, read-only including external state and without execution; bare shape offers three project-specific starters and waits without writes; shaping uses native questions and state-write then implements unless --discuss or discussion-only was requested; plan saves a complexity-sized full-feature roadmap then stops; challenge is read-only except external recommendations-write and never implements; next resumes unfinished work and runs all ready plan phases until complete or blocked, otherwise starts one revalidated follow-up' };
+    helperCommands: ['style [simple|guided|technical] (read or save global explanation preference)', 'prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?,outcomes?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', outcomes: 'Development completion requires [{id,description,required,status,evidence}], with unique ids and at least one required outcome. Status is pending/passed/failed/blocked; passed outcomes need nonempty evidence. Required outcomes must pass, blockers must be explicitly cleared, and plan phases must finish before completion. Same-task writes preserve omitted outcomes; new tasks do not inherit them. Legacy saved states remain readable. Evidence is agent-reported, not independently proven.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?}]}. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. Shared state remains under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: `${commandCatalog.map(({ usage, aliases = [] }) => `${usage}${aliases.map(alias => ` (${alias} alias)`).join('')}`).join(', ')} are agent skill modes; prototype builds or refines isolated external demos and hands approved concepts to development without automatic production changes; options ranks project actions, or with a goal recommends an existing command, read-only including external state and without execution; bare shape offers three project-specific starters and waits without writes; shaping uses native questions and state-write then implements unless --discuss or discussion-only was requested; plan saves a complexity-sized full-feature roadmap then stops; challenge is read-only except external recommendations-write and never implements; next resumes unfinished work and runs all ready plan phases until complete or blocked, otherwise starts one revalidated follow-up` };
   if (command === 'doctor') return doctor();
   const p = project(cwd);
   if (command === 'style') {

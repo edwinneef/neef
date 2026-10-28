@@ -10,6 +10,8 @@ const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const user = path.resolve(process.env.NEEF_USER_HOME || os.homedir());
 const shared = path.resolve(process.env.NEEF_HOME || path.join(user, '.neef'));
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+// Every installed reference; command-alias.md is a template rendered into subskills, not installed.
+const references = fs.readdirSync(path.join(source, 'references')).filter(name => name.endsWith('.md') && name !== 'command-alias.md').sort();
 
 function noLinks(target) {
   for (let cursor = target; cursor !== path.dirname(cursor); cursor = path.dirname(cursor)) {
@@ -33,8 +35,8 @@ export function install(apply = false) {
     ['SKILL.md', path.join(user, '.claude/skills/neef/SKILL.md')],
     ['SKILL.md', path.join(user, '.agents/skills/neef/SKILL.md')],
     ['agents/openai.yaml', path.join(user, '.agents/skills/neef/agents/openai.yaml')],
-    ...['shape', 'plan', 'challenge', 'prototype', 'advisor', 'next', 'follow-up', 'start', 'personal-design', 'completion', 'explanation-styles', 'status'].flatMap(mode => [shared, path.join(user, '.claude/skills/neef'), path.join(user, '.agents/skills/neef')]
-      .map(root => [`references/${mode}.md`, path.join(root, `references/${mode}.md`)])),
+    ...references.flatMap(mode => [shared, path.join(user, '.claude/skills/neef'), path.join(user, '.agents/skills/neef')]
+      .map(root => [`references/${mode}`, path.join(root, `references/${mode}`)])),
   ];
   for (const command of subskillNames) {
     for (const agent of ['.claude', '.agents']) {
@@ -81,7 +83,7 @@ export function install(apply = false) {
       for (const name of fs.readdirSync(path.join(root, 'agents'))) if (name !== 'openai.yaml') throw new Error(`Unmanaged agent metadata: ${name}`);
     }
     if (fs.existsSync(path.join(root, 'references'))) {
-      for (const name of fs.readdirSync(path.join(root, 'references'))) if (!['shape.md', 'plan.md', 'challenge.md', 'prototype.md', 'advisor.md', 'next.md', 'follow-up.md', 'start.md', 'personal-design.md', 'completion.md', 'explanation-styles.md', 'status.md'].includes(name) && !retired.includes(path.join(root, 'references', name))) throw new Error(`Unmanaged skill reference: ${name}`);
+      for (const name of fs.readdirSync(path.join(root, 'references'))) if (!references.includes(name) && !retired.includes(path.join(root, 'references', name))) throw new Error(`Unmanaged skill reference: ${name}`);
     }
   }
   noLinks(path.join(shared, 'state'));

@@ -1,11 +1,19 @@
 // Shared launch policy and owned-process lifetime for opt-in host checks.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 const gitApproval = 'For Git metadata writes authorized by this task in this disposable project, request scoped approval before running the exact NEEF begin, prepare or commit command, using sandbox_permissions="require_escalated" and a justification naming this disposable project and operation. Do not request a broad command prefix or attempt a protected write first. Keep sandbox and approval review enabled. If approval is refused or unavailable, preserve work, record the exact blocker and stop; do not retry or bypass the denial.';
+
+// Hosts run the installed helper; refuse a stale install so results describe this checkout.
+export function installedHelper(installed = path.join(os.homedir(), '.neef/neef.mjs'), source = fileURLToPath(new URL('./neef.mjs', import.meta.url))) {
+  assert.ok(fs.existsSync(installed) && fs.readFileSync(installed).equals(fs.readFileSync(source)), `Installed helper differs from ${source}; run node scripts/install.mjs --apply first`);
+  return installed;
+}
 
 export function hostPrompt(host, prompt) {
   return host === 'codex' && !prompt.endsWith(gitApproval) ? `${prompt}\n${gitApproval}` : prompt;

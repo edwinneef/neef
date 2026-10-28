@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 // Opt-in live host validation. Never included in the ordinary unit test suite.
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { hasResumeCommand, neefCommands, runHost } from './host-smoke.mjs';
+import { hasResumeCommand, installedHelper, neefCommands, runHost } from './host-smoke.mjs';
 
 const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const artifacts = path.join(source, '.test-artifacts', `hosts-${Date.now()}`);
@@ -24,7 +23,7 @@ const active = process.argv.includes('--next-active');
 const completionOpen = process.argv.includes('--completion-open');
 const completion = process.argv.includes('--completion') || completionOpen;
 const continuity = process.argv.includes('--continuity');
-const helper = path.join(os.homedir(), '.neef/neef.mjs');
+const helper = installedHelper();
 
 function git(root, args) {
   const result = spawnSync('git', ['-C', root, ...args], { encoding: 'utf8', timeout: 30000 });

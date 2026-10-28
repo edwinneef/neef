@@ -2,17 +2,15 @@
 // Opt-in real-app scenario. Default prints the plan; never part of ordinary tasks.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { hostPrompt, runHost } from './host-smoke.mjs';
+import { hostPrompt, installedHelper, runHost } from './host-smoke.mjs';
 export { hostArguments } from './host-smoke.mjs';
 
 const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const helper = path.join(os.homedir(), '.neef/neef.mjs');
 const request = 'Build a usable local booking app for my salon. Let me add a customer booking, see the bookings, and keep them after restarting the app. Use a clear interface and sample data, without accounts or hosting.';
 const contract = 'For this disposable regression only, use Node built-ins, start with node server.mjs, honor PORT and DATA_FILE environment variables, and provide GET /api/bookings returning a JSON array and POST /api/bookings accepting {customer, time} and returning the created booking with status 201. Serve the working interface at /. Use local file persistence. Verify the flow and persistence; stop any preview you start and provide the run command. Give smoke tests, requests and server shutdown finite timeouts. Capture the exit wait when starting each owned server and reuse one cleanup promise, including when it already exited by signal; never scan or kill unrelated processes. Do not modify anything outside this disposable project except NEEF shared state. Follow normal NEEF Git safeguards; stop on a host denial.';
 
@@ -126,7 +124,7 @@ async function run(host, artifacts) {
   const started = Date.now();
   const code = await runHost({ host, root, shared: env.NEEF_HOME, prompt: plan.prompt, stem: path.join(artifacts, host), env });
   assert.equal(code, 0, 'Host must finish successfully; inspect its saved logs before any retry');
-  const state = JSON.parse(command(root, process.execPath, [helper, 'status'], env)).state;
+  const state = JSON.parse(command(root, process.execPath, [installedHelper(), 'status'], env)).state;
   assert.equal(state?.progress, 'complete', `Unfinished acceptance must not count as a pass: ${state?.blockers || state?.next || 'inspect host logs'}`);
   assert.ok(state.verification && state.recommendations, 'Evidence and follow-up must be saved');
   assert.equal(command(root, 'git', ['branch', '--show-current'], env), 'main');

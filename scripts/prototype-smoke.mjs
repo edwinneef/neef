@@ -2,15 +2,14 @@
 // Opt-in installed-host validation in disposable projects; not part of npm test.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { runHost } from './host-smoke.mjs';
+import { installedHelper, runHost } from './host-smoke.mjs';
 
 const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const artifacts = path.join(source, '.test-artifacts', `prototypes-${Date.now()}`);
-const helper = path.join(os.homedir(), '.neef/neef.mjs');
+const helper = installedHelper();
 const uiOnly = process.argv.includes('--ui-only');
 fs.mkdirSync(artifacts, { recursive: true });
 

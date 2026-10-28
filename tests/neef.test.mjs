@@ -321,7 +321,7 @@ test('invalid or oversized state and missing recovery backup fail without overwr
   f.state('missing', 'Invalid progress', { progress: 'unknown' }, /Invalid state fields: progress must be "active" or "complete"/);
   f.state('missing', 'Array fields', { decisions: [], blockers: ['none'] }, /decisions must be a string \(got array\); blockers must be a string \(got array\)/);
   assert.equal(f.run(['status']).state, null);
-  f.state('missing', 'Too large', { decisions: 'x'.repeat(9000) }, /State must stay under/);
+  f.state('missing', 'Too large', { decisions: 'x'.repeat(9000) }, /State must stay under 8 KiB and 40 lines \(this write: \d+ bytes, \d+ lines\); shorten/);
   f.state('missing', 'Valid task');
   const file = f.statePath();
   fs.writeFileSync(file, '{broken');
@@ -329,6 +329,33 @@ test('invalid or oversized state and missing recovery backup fail without overwr
   assert.equal(corrupt.backup, false);
   f.run(['state-recover', corrupt.revision], undefined, /ENOENT/);
   assert.equal(fs.readFileSync(file, 'utf8'), '{broken');
+});
+
+test('begin prunes stale unreferenced baselines and keeps recent or saved ones', t => {
+  const f = fixture(t);
+  const saved = f.run(['begin', 'saved task']);
+  f.state(saved.revision, 'Saved task', { baseline: saved.baseline });
+  const directory = path.join(f.home, 'baselines');
+  const stale = path.join(directory, `${crypto.randomUUID()}.json`);
+  const recent = path.join(directory, `${crypto.randomUUID()}.json`);
+  const unrelated = path.join(directory, 'notes.json');
+  for (const file of [stale, recent, unrelated]) fs.writeFileSync(file, '{}');
+  const old = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
+  for (const file of [stale, unrelated, path.join(directory, `${saved.baseline}.json`)]) fs.utimesSync(file, old, old);
+  const next = f.run(['begin', 'next increment']);
+  assert.equal(fs.existsSync(stale), false);
+  for (const file of [recent, unrelated, path.join(directory, `${saved.baseline}.json`)]) assert.equal(fs.existsSync(file), true, file);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(directory, `${next.baseline}.json`), 'utf8')).slug, 'next increment');
+});
+
+test('every script parses and help lists every catalog mode', () => {
+  const scripts = path.dirname(helper);
+  for (const name of fs.readdirSync(scripts).filter(name => name.endsWith('.mjs'))) {
+    const result = spawnSync(process.execPath, ['--check', path.join(scripts, name)], { encoding: 'utf8' });
+    assert.equal(result.status, 0, `${name}: ${result.stderr}`);
+  }
+  const help = JSON.parse(spawnSync(process.execPath, [helper, 'help'], { encoding: 'utf8' }).stdout);
+  for (const usage of ['<task>', 'style [simple|guided|technical]', 'doctor', 'prototype <description> (proto alias)']) assert.ok(help.modes.includes(usage), usage);
 });
 
 test('non-empty non-Git project supports state without creating Git or scaffolding', t => {
@@ -768,6 +795,16 @@ test('reinstall retires owned subskills for aliases and doctor but preserves edi
   fs.writeFileSync(edited, 'Personal doctor alias');
   f.install(true, /Unmanaged or edited file preserved/);
   assert.equal(fs.readFileSync(edited, 'utf8'), 'Personal doctor alias');
+});
+
+test('installer covers every reference file without a separate list', t => {
+  const f = installation(t);
+  const targets = new Set(f.install().files.map(file => file.target));
+  const references = fs.readdirSync(fileURLToPath(new URL('../references', import.meta.url))).filter(name => name.endsWith('.md') && name !== 'command-alias.md');
+  for (const name of references) for (const root of [f.home, path.join(f.user, '.claude/skills/neef'), path.join(f.user, '.agents/skills/neef')]) {
+    assert.ok(targets.has(path.join(root, 'references', name)), path.join(root, name));
+  }
+  assert.ok(![...targets].some(target => target.endsWith('command-alias.md')));
 });
 
 test('doctor reports a healthy isolated install, then edited files, locks and corrupt state', t => {

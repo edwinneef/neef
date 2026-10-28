@@ -2,15 +2,14 @@
 // Opt-in fresh-host checks against installed skills in disposable projects.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { hasResumeCommand, runHost } from './host-smoke.mjs';
+import { hasResumeCommand, installedHelper, runHost } from './host-smoke.mjs';
 
 const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const artifacts = path.join(source, '.test-artifacts', `advisors-${Date.now()}`);
-const helper = path.join(os.homedir(), '.neef/neef.mjs');
+const helper = installedHelper();
 const selection = process.argv.includes('--selection');
 const exhaustedOnly = process.argv.includes('--exhausted');
 const prototypeOnly = process.argv.includes('--prototype');
