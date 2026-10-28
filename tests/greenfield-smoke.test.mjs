@@ -35,7 +35,7 @@ http.createServer(async (req, res) => {
 }
 
 test('greenfield plan is read-only and contains both host scenarios', () => {
-  const result = spawnSync(process.execPath, ['scripts/greenfield-smoke.mjs', '--plan'], { encoding: 'utf8' });
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/greenfield-smoke.mjs', import.meta.url)), '--plan'], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
   const plan = JSON.parse(result.stdout);
   assert.equal(plan.run, false);

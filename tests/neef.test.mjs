@@ -64,7 +64,9 @@ function fixture(t, initialize = true) {
   const prepare = (baseline, files = ['owned.txt'], message = 'Implement change', error) => run(['prepare', baseline], { files, message }, error);
   const state = (revision, task = 'Implement feature', extra = {}, error) => run(['state-write', revision], { task, progress: 'active', ...extra }, error);
   const statePath = () => path.join(home, 'state', fs.readdirSync(path.join(home, 'state')).find(name => name.endsWith('.json')));
-  return { root, home, git, write, run, prepare, state, statePath };
+  // Direct helper calls share the fixture's isolated Git configuration.
+  const env = neefHome => ({ ...process.env, NEEF_HOME: neefHome, GIT_CONFIG_GLOBAL: gitConfig, GIT_CONFIG_NOSYSTEM: '1' });
+  return { root, home, git, write, run, prepare, state, statePath, env };
 }
 
 test('clean trivial change commits only the reviewed change and consumes its token', t => {
@@ -104,7 +106,7 @@ test('explanation style defaults read-only and persists globally without touchin
   const other = path.join(path.dirname(f.root), 'other-project');
   fs.mkdirSync(other);
   const read = spawnSync(process.execPath, [helper, '--project', other, 'style'], {
-    encoding: 'utf8', env: { ...process.env, NEEF_HOME: f.home },
+    encoding: 'utf8', env: f.env(f.home),
   });
   assert.equal(read.status, 0, read.stdout + read.stderr);
   assert.equal(JSON.parse(read.stdout).style, 'technical');
@@ -134,7 +136,7 @@ test('style rejects invalid input and preserves corrupt or locked preferences', 
 test('style refuses project-local storage before writing', t => {
   const f = fixture(t, false);
   const result = spawnSync(process.execPath, [helper, '--project', f.root, 'style', 'simple'], {
-    encoding: 'utf8', env: { ...process.env, NEEF_HOME: path.join(f.root, 'local-settings') },
+    encoding: 'utf8', env: f.env(path.join(f.root, 'local-settings')),
   });
   assert.equal(result.status, 1);
   assert.match(result.stdout, /outside the project/);
@@ -152,7 +154,7 @@ test('style refuses linked storage and preserves other preference fields', t => 
   fs.symlinkSync(f.home, linked, process.platform === 'win32' ? 'junction' : 'dir');
   const before = fs.readFileSync(file, 'utf8');
   const result = spawnSync(process.execPath, [helper, '--project', f.root, 'style', 'simple'], {
-    encoding: 'utf8', env: { ...process.env, NEEF_HOME: linked },
+    encoding: 'utf8', env: f.env(linked),
   });
   assert.equal(result.status, 1);
   assert.match(result.stdout, /Linked preference storage refused/);
@@ -660,7 +662,7 @@ test('prototype allocation is isolated, unique and preserves active work and Git
   const other = { ...f, root: path.join(path.dirname(f.root), 'other-project') };
   fs.mkdirSync(other.root);
   const result = spawnSync(process.execPath, [helper, '--project', other.root, 'prototype-workspace'], {
-    encoding: 'utf8', env: { ...process.env, NEEF_HOME: f.home },
+    encoding: 'utf8', env: f.env(f.home),
   });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.deepEqual(JSON.parse(result.stdout).workspaces, []);
@@ -1099,7 +1101,7 @@ test('setup skips linked project trees and storage inside the project', t => {
   assert.equal(setup.safety.git, false);
   assert.equal(setup.safety.selectiveCommitAvailable, false);
   const result = spawnSync(process.execPath, [helper, '--project', f.root, 'setup'], {
-    encoding: 'utf8', env: { ...process.env, NEEF_HOME: path.join(f.root, '..cache') },
+    encoding: 'utf8', env: f.env(path.join(f.root, '..cache')),
   });
   assert.equal(result.status, 1);
   assert.match(result.stdout, /outside the project/);
@@ -1297,7 +1299,7 @@ test('recommendation refresh preserves task and context, supports alternatives a
 // not model judgment. Live host checks are separate from deterministic tests.
 const nextGuidance = () => fs.readFileSync(new URL('../references/next.md', import.meta.url), 'utf8');
 
-test('next discovers research work for an unplanned roadmap phase without changing Git or state', t => {
+test('next stays read-only beside an unplanned roadmap, and its guidance calls for research', t => {
   const f = fixture(t);
   f.write('.planning/ROADMAP.md', '# Goal: named greetings\nPhase 2: support names. No plan yet; inspect the greeting API.\n');
   const before = f.git('status', '--porcelain');
@@ -1309,7 +1311,7 @@ test('next discovers research work for an unplanned roadmap phase without changi
   assert.equal(fs.existsSync(f.home), false);
 });
 
-test('next revalidates external orchestrator advice as a goal rather than an execution command', t => {
+test('next keeps orchestrator advice as a readable candidate, and its guidance treats it as a goal', t => {
   const f = fixture(t);
   const advice = recommendation('Run /gsd:verify-work and /gsd:plan-phase 2, then /neef next.');
   f.run(['recommendations-write', 'missing'], { primary: advice, alternatives: [] });
@@ -1321,7 +1323,7 @@ test('next revalidates external orchestrator advice as a goal rather than an exe
   assert.match(nextGuidance(), /mandatory project instructions/i);
 });
 
-test('next treats an inspectable dependency as investigation work and can persist its evidence', t => {
+test('investigation evidence and its follow-up persist, and next guidance treats dependencies as work', t => {
   const f = fixture(t);
   const saved = f.run(['recommendations-write', 'missing'], { primary: recommendation('Determine whether owned.txt supports names before implementing named greetings.'), alternatives: [] });
   assert.equal(f.run(['next']).discoveryRequired, true);
@@ -1744,7 +1746,7 @@ test('every mutation rejects project-local storage before creating files or swit
   const mutations = ['setup', 'bootstrap', 'context-write', 'begin', 'prepare', 'commit', 'state-write', 'recommendations-write', 'state-recover', 'prototype-workspace'];
   for (const home of paths) for (const command of mutations) {
     const result = spawnSync(process.execPath, [helper, '--project', f.root, command], {
-      encoding: 'utf8', input: '{}', env: { ...process.env, NEEF_HOME: home },
+      encoding: 'utf8', input: '{}', env: f.env(home),
     });
     assert.equal(result.status, 1, `${command}: ${result.stdout}${result.stderr}`);
     assert.match(result.stdout, /storage must be outside the project/, command);
@@ -1755,7 +1757,7 @@ test('every mutation rejects project-local storage before creating files or swit
   assert.equal(f.git('status', '--porcelain'), '');
   for (const command of ['status', 'next', 'help']) {
     const result = spawnSync(process.execPath, [helper, '--project', f.root, command], {
-      encoding: 'utf8', env: { ...process.env, NEEF_HOME: path.join(f.root, 'new', 'shared') },
+      encoding: 'utf8', env: f.env(path.join(f.root, 'new', 'shared')),
     });
     assert.equal(result.status, 0, result.stdout + result.stderr);
   }

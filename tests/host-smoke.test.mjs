@@ -67,8 +67,23 @@ test('Windows launches native hosts rather than shells or npm shims', t => {
   assert.equal(hostExecutable('codex', env, 'linux'), 'codex');
 });
 
+// Record descriptors the runner opens so a test can prove it closed them.
+function openedDescriptors(t) {
+  const opened = [];
+  const open = fs.openSync;
+  fs.openSync = (...args) => { const fd = open(...args); opened.push(fd); return fd; };
+  t.after(() => { fs.openSync = open; });
+  return opened;
+}
+
+function assertClosed(descriptors) {
+  assert.ok(descriptors.length > 0);
+  for (const fd of descriptors.splice(0)) assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+}
+
 test('logged processes preserve arguments and input, close logs, and record launch failure', async t => {
   const root = workspace(t);
+  const opened = openedDescriptors(t);
   const stem = path.join(root, 'success');
   const input = '$neef inspect this & preserve "quotes"';
   const argument = 'space & | %PATH% "quote"';
@@ -77,15 +92,16 @@ test('logged processes preserve arguments and input, close logs, and record laun
   assert.deepEqual(JSON.parse(fs.readFileSync(`${stem}.jsonl`, 'utf8')), { input, arg: argument, ceiling: path.dirname(root) });
   assert.equal(fs.readFileSync(`${stem}.prompt.txt`, 'utf8'), input);
   assert.match(fs.readFileSync(`${stem}.stderr.txt`, 'utf8'), /saved stderr/);
-  fs.renameSync(`${stem}.jsonl`, `${stem}.closed.jsonl`);
+  assertClosed(opened);
   const failed = path.join(root, 'failed');
   await assert.rejects(runLoggedProcess(path.join(root, 'missing-program'), [], { root, stem: failed, timeoutMs: 3000 }), /ENOENT/);
   assert.match(fs.readFileSync(`${failed}.failure.txt`, 'utf8'), /ENOENT/);
-  fs.renameSync(`${failed}.stderr.txt`, `${failed}.closed.stderr.txt`);
+  assertClosed(opened);
 });
 
 test('a host timeout stops only its retained process and preserves timeout logs', { timeout: 5000 }, async t => {
   const root = workspace(t);
+  const opened = openedDescriptors(t);
   const other = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { stdio: 'ignore', windowsHide: true });
   const otherExit = new Promise(resolve => other.once('exit', resolve));
   try {
@@ -94,7 +110,7 @@ test('a host timeout stops only its retained process and preserves timeout logs'
     assert.equal(other.exitCode, null);
     assert.equal(other.signalCode, null);
     assert.match(fs.readFileSync(`${stem}.failure.txt`, 'utf8'), /Host timed out/);
-    fs.renameSync(`${stem}.jsonl`, `${stem}.closed.jsonl`);
+    assertClosed(opened);
   } finally { other.kill(); await otherExit; }
 });
 

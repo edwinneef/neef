@@ -213,4 +213,10 @@ async function run(host) {
 }
 
 console.log(JSON.stringify({ artifacts }));
-await Promise.all((process.argv.includes('--codex-only') ? ['codex'] : process.argv.includes('--claude-only') ? ['claude'] : ['claude', 'codex']).map(run));
+const hosts = process.argv.includes('--codex-only') ? ['codex'] : process.argv.includes('--claude-only') ? ['claude'] : ['claude', 'codex'];
+const outcomes = await Promise.allSettled(hosts.map(run));
+for (const [index, outcome] of outcomes.entries()) if (outcome.status === 'rejected') {
+  fs.writeFileSync(path.join(artifacts, `${hosts[index]}.failure.txt`), String(outcome.reason.stack || outcome.reason));
+  console.error(outcome.reason);
+  process.exitCode = 1;
+}

@@ -126,4 +126,10 @@ async function run(host) {
 }
 
 console.log(JSON.stringify({ artifacts }));
-await Promise.all(['claude', 'codex'].map(run));
+const hosts = ['claude', 'codex'];
+const outcomes = await Promise.allSettled(hosts.map(run));
+for (const [index, outcome] of outcomes.entries()) if (outcome.status === 'rejected') {
+  fs.writeFileSync(path.join(artifacts, `${hosts[index]}.failure.txt`), String(outcome.reason.stack || outcome.reason));
+  console.error(outcome.reason);
+  process.exitCode = 1;
+}
