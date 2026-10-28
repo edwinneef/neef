@@ -2,6 +2,8 @@
 
 Done means the requested app or tool exists, its first working version is committed, and the user can run or open it right away. Speed comes from deciding, not asking.
 
+This development route delivers a usable first version. Explicit demo-only tasks use `references/prototype.md` and its isolated workspace and completion boundary instead; an empty folder alone does not select that route.
+
 ## Decide the shape
 
 `begin` reports `greenfield` for an empty repository and `gitInitialized` when it just created Git on main in an empty folder; mention the latter once. Choose a mainstream stack that fits the request and any preference the user stated, without asking. Prefer the fewest moving parts: plain HTML, CSS and JavaScript for a simple page; one established framework when the request needs routing, state or a server; built-in storage such as SQLite or files before a hosted database. Ask only for what inspection and defaults cannot settle, such as a paid service, an account or a brand decision, and suggest a default.

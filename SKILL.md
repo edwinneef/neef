@@ -27,7 +27,7 @@ For every invocation, read `references/explanation-styles.md` and run helper `st
 
 UI work: read `references/personal-design.md`.
 
-Route leading shape, plan, challenge, prototype/proto and options/ask commands first; match bare modes exactly. Ask for missing subjects except shape. Other arguments request development.
+Route leading shape, plan, challenge, prototype/proto and options/ask commands first; match bare modes exactly. Ask for missing subjects except shape. Otherwise, demo-only tasks use `references/prototype.md` and skip development below; otherwise develop.
 
 - `help`: run helper `help`; show name, fullName, motto and all intent groups as Command/Changes/Stops at tables using returned text. Include every command, flag and alias beside its command, and each direct subskill with its full host prefix. Omit helper internals. Read-only; stop after help.
 - `style [simple|guided|technical]`: follow the style-setting route in `references/explanation-styles.md`, then stop.

@@ -34,6 +34,8 @@ If a required check cannot be performed, finish independent safe work, keep prog
 
 Report the result and relevant evidence briefly, including any required gap. Scale the detail to the request; no mandatory table, checklist, extra user question or full test suite.
 
+Prototype completion follows `references/prototype.md`: demonstrate the bounded concept and state shortcuts and limits. Its handoff does not acquire production outcome records, commits or task-state writes. Production development retains the required outcomes and evidence above.
+
 ## Save task continuity
 
 Use `state-write <revision>` with stdin JSON containing `task`, `progress` (`active` or `complete`), `baseline`, `decisions`, `verification`, `next`, `blockers` and development `outcomes`; the four note fields remain strings. See `references/completion.md` for the outcome contract. Reuse the latest revision from `begin`, `commit`, bootstrap/setup or state mutation. Use `status` when no revision is available, a check fails, or progress needs reconciliation. Save at useful milestones and before stopping. HEAD changes expire a baseline; begin again before the next increment's edits. Inspect a corrupt state's backup before `state-recover <revision>`.
