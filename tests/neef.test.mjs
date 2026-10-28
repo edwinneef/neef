@@ -452,6 +452,8 @@ test('isolated installation dry run writes nothing and both agents receive expli
     assert.equal(fs.readFileSync(path.join(f.user, agent, 'skills', 'neef', 'SKILL.md'), 'utf8'), shared);
     assert.equal(fs.readFileSync(path.join(f.user, agent, 'skills/neef/references/explanation-styles.md'), 'utf8'),
       fs.readFileSync(path.join(f.home, 'references/explanation-styles.md'), 'utf8'));
+    assert.equal(fs.readFileSync(path.join(f.user, agent, 'skills/neef/references/status.md'), 'utf8'),
+      fs.readFileSync(new URL('../references/status.md', import.meta.url), 'utf8'));
   }
   assert.match(shared, /disable-model-invocation: true/);
   assert.match(fs.readFileSync(path.join(f.user, '.agents/skills/neef/agents/openai.yaml'), 'utf8'), /allow_implicit_invocation: false/);

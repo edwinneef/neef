@@ -33,7 +33,7 @@ export function install(apply = false) {
     ['SKILL.md', path.join(user, '.claude/skills/neef/SKILL.md')],
     ['SKILL.md', path.join(user, '.agents/skills/neef/SKILL.md')],
     ['agents/openai.yaml', path.join(user, '.agents/skills/neef/agents/openai.yaml')],
-    ...['shape', 'plan', 'challenge', 'prototype', 'advisor', 'next', 'follow-up', 'start', 'personal-design', 'completion', 'explanation-styles'].flatMap(mode => [shared, path.join(user, '.claude/skills/neef'), path.join(user, '.agents/skills/neef')]
+    ...['shape', 'plan', 'challenge', 'prototype', 'advisor', 'next', 'follow-up', 'start', 'personal-design', 'completion', 'explanation-styles', 'status'].flatMap(mode => [shared, path.join(user, '.claude/skills/neef'), path.join(user, '.agents/skills/neef')]
       .map(root => [`references/${mode}.md`, path.join(root, `references/${mode}.md`)])),
   ];
   for (const command of subskillNames) {
@@ -81,7 +81,7 @@ export function install(apply = false) {
       for (const name of fs.readdirSync(path.join(root, 'agents'))) if (name !== 'openai.yaml') throw new Error(`Unmanaged agent metadata: ${name}`);
     }
     if (fs.existsSync(path.join(root, 'references'))) {
-      for (const name of fs.readdirSync(path.join(root, 'references'))) if (!['shape.md', 'plan.md', 'challenge.md', 'prototype.md', 'advisor.md', 'next.md', 'follow-up.md', 'start.md', 'personal-design.md', 'completion.md', 'explanation-styles.md'].includes(name) && !retired.includes(path.join(root, 'references', name))) throw new Error(`Unmanaged skill reference: ${name}`);
+      for (const name of fs.readdirSync(path.join(root, 'references'))) if (!['shape.md', 'plan.md', 'challenge.md', 'prototype.md', 'advisor.md', 'next.md', 'follow-up.md', 'start.md', 'personal-design.md', 'completion.md', 'explanation-styles.md', 'status.md'].includes(name) && !retired.includes(path.join(root, 'references', name))) throw new Error(`Unmanaged skill reference: ${name}`);
     }
   }
   noLinks(path.join(shared, 'state'));
