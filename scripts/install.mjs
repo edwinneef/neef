@@ -85,6 +85,7 @@ export function install(apply = false) {
     }
   }
   noLinks(path.join(shared, 'state'));
+  noLinks(path.join(shared, 'backups'));
   const result = { apply, source, shared, files: entries.map(({ target, hash, old }) => ({ target, hash, existed: !!old })) };
   if (!apply) return result;
   fs.mkdirSync(shared, { recursive: true });
@@ -100,6 +101,7 @@ export function install(apply = false) {
       const current = fs.existsSync(entry.target) ? fs.readFileSync(entry.target) : null;
       if ((current && digest(current)) !== (entry.old && digest(entry.old))) throw new Error(`Install target changed: ${entry.target}`);
     }
+    noLinks(backup);
     fs.mkdirSync(backup, { recursive: true });
     fs.writeFileSync(path.join(backup, 'restore.json'), JSON.stringify(entries.map((entry, i) => ({ target: entry.target, backup: entry.old ? `${i}.bak` : null })), null, 2));
     for (const [i, entry] of entries.entries()) if (entry.old) fs.writeFileSync(path.join(backup, `${i}.bak`), entry.old);

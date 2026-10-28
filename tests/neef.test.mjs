@@ -732,6 +732,43 @@ test('installer rejects linked installation ancestors without writing the destin
   assert.equal(fs.existsSync(f.home), false);
 });
 
+test('installer rejects linked backup directories before dry-run success or apply writes', t => {
+  for (const existing of [false, true]) {
+    const f = installation(t);
+    const protectedFiles = [];
+    if (existing) {
+      const installed = f.install(true);
+      protectedFiles.push(...installed.files.map(entry => entry.target), path.join(f.home, 'install.json'));
+      f.state('missing', 'Keep this task', { decisions: 'Preserve saved data.' });
+      f.run(['style', 'guided']);
+      protectedFiles.push(f.statePath(), path.join(f.home, 'preferences.json'));
+      const backupRoot = path.join(f.home, 'backups');
+      const retained = path.join(f.home, 'retained-backups');
+      assert.equal(path.dirname(path.resolve(backupRoot)), path.resolve(f.home));
+      assert.equal(path.dirname(path.resolve(retained)), path.resolve(f.home));
+      fs.renameSync(backupRoot, retained);
+    } else {
+      fs.mkdirSync(f.home);
+    }
+    const before = new Map(protectedFiles.map(file => [file, fs.readFileSync(file)]));
+    const outside = path.join(path.dirname(f.root), 'redirected-backups');
+    fs.mkdirSync(outside);
+    const marker = path.join(outside, 'personal.txt');
+    fs.writeFileSync(marker, 'Do not change redirected data.');
+    fs.symlinkSync(outside, path.join(f.home, 'backups'), process.platform === 'win32' ? 'junction' : 'dir');
+    const homeEntries = fs.readdirSync(f.home);
+    for (const apply of [false, true]) {
+      f.install(apply, /Linked installation path refused/);
+      assert.deepEqual(fs.readdirSync(outside), ['personal.txt']);
+      assert.equal(fs.readFileSync(marker, 'utf8'), 'Do not change redirected data.');
+      assert.deepEqual(fs.readdirSync(f.home), homeEntries);
+      assert.equal(fs.existsSync(path.join(f.home, 'install.lock')), false);
+      for (const [file, bytes] of before) assert.deepEqual(fs.readFileSync(file), bytes, file);
+      if (!existing) assert.equal(fs.existsSync(f.user), false);
+    }
+  }
+});
+
 test('setup discovers facts and adds directions while preserving dirty project content and task state', t => {
   const f = fixture(t);
   f.write('package.json', JSON.stringify({ type: 'module', packageManager: 'pnpm@10', main: 'src/main.tsx',
