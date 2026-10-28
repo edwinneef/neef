@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { PHASES, scenarios, type TimelineStep } from './content';
-import { Cmd, Hx, usePage } from './host';
+import { Cmd, CODEX_VERB, Hx, usePage } from './host';
 import { Mark } from './Logo';
 import { useInView } from './motion';
 
@@ -29,8 +29,6 @@ const clamp = (x: number) => Math.max(0, Math.min(1, x));
 const sine = (p: number) => .5 - Math.cos(Math.PI * p) / 2;
 /** Left offset on the track for u, skipping the gaps between phase segments. */
 const left = (u: number) => { const seg = Math.min(3, Math.floor(u)); return `calc(${seg} * (var(--col) + var(--gap)) + ${Math.min(1, u - seg).toFixed(4)} * var(--col))`; };
-
-const CODEX_VERB = { Bash: 'Ran', Write: 'Added', Edit: 'Edited' } as const;
 
 function StepText({ step }: { step: TimelineStep }) {
   const { host } = usePage();
@@ -97,6 +95,18 @@ export function Timeline({ onStep }: { onStep: (step: number) => void }) {
   }, [reduced, setU, stop]);
   // Replay rewinds smoothly rather than snapping back to 0:00.
   const replay = () => uRef.current > 0 ? glideTo(0, Math.min(600, 250 + uRef.current * 90), run) : run();
+  // Arrow keys move one logged step at a time instead of 1/1000 of the job.
+  const stepKey = (event: KeyboardEvent<HTMLInputElement>) => {
+    const stops = [0, ...anchorsRef.current.filter(a => a.step).map(a => a.u), 4];
+    const current = uRef.current;
+    const forward = stops.find(x => x > current + 1e-6) ?? 4;
+    const back = [...stops].reverse().find(x => x < current - 1e-6) ?? 0;
+    const targets: Record<string, number> = { ArrowRight: forward, ArrowUp: forward, ArrowLeft: back, ArrowDown: back, Home: 0, End: 4 };
+    if (!(event.key in targets)) return;
+    event.preventDefault();
+    stop();
+    setU(targets[event.key]);
+  };
 
   const wrap = useRef<HTMLDivElement>(null);
   const seen = useInView(wrap, '0px');
@@ -120,7 +130,7 @@ export function Timeline({ onStep }: { onStep: (step: number) => void }) {
   const claude = host === 'claude';
 
   return <div ref={wrap}>
-    <div className="tl" data-at={at} aria-label="Illustrative job, step by step">
+    <div className="tl" data-at={at} role="group" aria-label="Illustrative job, step by step">
       <div className="tl-you">
         <p className="lane-l">You</p>
         <p className="bubble you-start"><span className="mk"><Hx>{claude ? '>' : '›'}</Hx></span> <Cmd text={s.ask} /></p>
@@ -139,7 +149,7 @@ export function Timeline({ onStep }: { onStep: (step: number) => void }) {
           })}
           <span className="playhead" style={{ left: left(u) }} aria-hidden="true"><b className="clock">{clock(t)}</b></span>
           <input className="scrub" type="range" min="0" max="1000" step="1" value={Math.round(u * 250)} aria-label="Step through the job"
-            aria-valuetext={`${clock(t)}, ${PHASES[phase]}`} onChange={event => { stop(); setU(+event.target.value / 250); }} />
+            aria-valuetext={`${clock(t)}, ${PHASES[phase]}`} onKeyDown={stepKey} onChange={event => { stop(); setU(+event.target.value / 250); }} />
         </div>
       </div>
       <div className="tl-cols">
@@ -151,7 +161,7 @@ export function Timeline({ onStep }: { onStep: (step: number) => void }) {
               if (!a.step || a.step.p !== p) return null;
               // Proximity d: how far the playhead is past this step (negative: not reached yet).
               const d = u - a.u;
-              const style = { '--o': d >= 0 ? 1 : (.42 + .58 * clamp(1 + d / .07)).toFixed(3), '--g': u >= 4 ? 0 : (d >= 0 ? clamp(1 - d / .3) : clamp(1 + d / .07) * .6).toFixed(3) } as CSSProperties;
+              const style = { '--o': d >= 0 ? 1 : (.7 + .3 * clamp(1 + d / .07)).toFixed(3), '--g': u >= 4 ? 0 : (d >= 0 ? clamp(1 - d / .3) : clamp(1 + d / .07) * .6).toFixed(3) } as CSSProperties;
               return <li key={i} className={`st ${a.step.kind}${i === now && u < 4 ? ' now' : ''}`} style={style}
                 onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(-1)}
                 onClick={() => glideTo(a.u, 420 + Math.abs(a.u - uRef.current) * 120)}>
@@ -163,6 +173,6 @@ export function Timeline({ onStep }: { onStep: (step: number) => void }) {
       </div>
     </div>
     <div className="tl-foot"><span>Illustrative job, {clock(s.bounds[4])} from sentence to running app. Drag the timeline, or pick a step, to see that moment.</span>
-      <button type="button" className="linkish" onClick={replay}>↺ Replay</button></div>
+      <button type="button" className="linkish" onClick={playing ? stop : replay}>{playing ? '❚❚ Pause' : '↺ Replay'}</button></div>
   </div>;
 }

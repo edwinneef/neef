@@ -1,7 +1,5 @@
 import type { TermStep } from './content';
-import { Cmd, Hx, usePage } from './host';
-
-const CODEX_VERB = { Bash: 'Ran', Write: 'Added', Edit: 'Edited' } as const;
+import { Cmd, CODEX_VERB, Hx, usePage } from './host';
 
 /** NEEF's own helper calls show the path dimmed and the NEEF command in the accent colour. */
 function Arg({ arg }: { arg: string }) {

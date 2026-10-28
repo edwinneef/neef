@@ -8,8 +8,16 @@
     <meta name="color-scheme" content="light dark" />
     <title>NEEF — You decide what it’s for. NEEF does the legwork.</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="canonical" href="https://neef-landing.netlify.app/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://neef-landing.netlify.app/" />
+    <meta property="og:title" content="NEEF — You decide what it’s for. NEEF does the legwork." />
+    <meta property="og:description" content="NEEF keeps Claude Code and Codex on track. Say what you want in one sentence; it builds, checks and saves the work, and asks you only when it matters." />
+    <meta name="twitter:card" content="summary" />
     <script>
       document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      // Set before first paint so in-view content does not flash visible, then hide and animate.
+      if (matchMedia('(prefers-reduced-motion: no-preference)').matches) document.documentElement.classList.add('motion');
     </script>
   </head>
   <body>

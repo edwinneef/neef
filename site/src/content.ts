@@ -23,10 +23,10 @@ export type TermStep =
 export type Scenario = {
   label: string; ask: string; url: string; minutes: number; next: string;
   /** One example line per phase for "What the name means". */
-  lines: string[];
+  lines: [string, string, string, string];
   neef: string[];
   /** Phase boundaries in seconds: start of each phase plus the end of the job. */
-  bounds: number[];
+  bounds: [number, number, number, number, number];
   steps: TimelineStep[];
 };
 
@@ -134,4 +134,5 @@ export const modes: [command: string, what: string, effect: Effect][] = [
   ['{neef} challenge <topic>', 'An honest, ranked review.', 'changes nothing'],
   ['{neef} options', 'A few good choices with reasons.', 'changes nothing'],
   ['{neef} ask <goal>', 'Not sure which one? It tells you.', 'changes nothing'],
+  ['{neef} help', 'Every command, flag and alias, grouped by what you want.', 'changes nothing'],
 ];

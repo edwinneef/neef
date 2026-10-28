@@ -29,7 +29,7 @@ export function Meaning() {
         <b aria-hidden="true">{PHASES[i][0]}</b>
         <p className="word"><span className="sr-only">{PHASES[i][0]} for </span>{PHASES[i]}</p>
         <h3>{m.title}</h3><p>{m.text}</p>
-        <code aria-label="Example">{scenarios[scenario].lines[i]}</code>
+        <code><span className="sr-only">Example: </span>{scenarios[scenario].lines[i]}</code>
       </article>)}
     </Reveal></div>
   </div></section>;
@@ -144,7 +144,7 @@ export function Install() {
       <div className="terminal" style={order(1)}><div className="term-body">
         <div className="cmd"><span>$ node scripts/install.mjs <span className="t-dim"># preview, changes nothing</span></span><CopyCommand command="node scripts/install.mjs" /></div>
         <div className="cmd"><span>$ node scripts/install.mjs --apply</span><CopyCommand command="node scripts/install.mjs --apply" /></div>
-        <p className="t-acc">then check it with <Cmd text="{neef} doctor" /></p>
+        <p className="t-acc">then restart your assistant and check it with <Cmd text="{neef} doctor" /></p>
         <p className="t-dim">Installs from NEEF’s source folder; there’s no public download yet.</p>
       </div></div>
     </Reveal>

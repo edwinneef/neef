@@ -37,6 +37,8 @@ export function Hx({ children }: { children: string }) {
 }
 
 export const prefix = (host: Host) => host === 'claude' ? '/neef' : '$neef';
+/** Codex names each tool call with a past-tense verb. */
+export const CODEX_VERB = { Bash: 'Ran', Write: 'Added', Edit: 'Edited' } as const;
 export const hostName = (host: Host) => host === 'claude' ? '✻ Claude Code' : '>_ Codex';
 
 /** Text with {neef} placeholders, rendered with the current host's prefix. */
@@ -45,6 +47,3 @@ export function Cmd({ text }: { text: string }) {
   const parts = text.split('{neef}');
   return <>{parts.map((part, i) => <Fragment key={i}>{i > 0 && <Hx>{prefix(host)}</Hx>}{part}</Fragment>)}</>;
 }
-
-/** Plain-text version for screen-reader summaries and copy buttons. */
-export const plain = (text: string, host: Host) => text.replaceAll('{neef}', prefix(host));
