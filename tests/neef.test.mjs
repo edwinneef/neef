@@ -496,6 +496,8 @@ test('help groups every command and alias by intent without bootstrapping a proj
   });
   assert.deepEqual(new Set(covered), new Set(help.commands));
   const row = name => commands.find(item => item.command.split(' ')[0] === name);
+  assert.equal(row('shape').command, 'shape [--deep] [--discuss] [idea]');
+  assert.match(row('shape').changes, /read-only starters.*--discuss: external decisions only/);
   assert.match(row('shape').stops, /implemented.*unless discussion-only/);
   assert.match(row('plan').stops, /Plan saved.*until complete or blocked/);
   assert.match(row('prototype').changes, /scratch.*task state unchanged/);
@@ -1396,6 +1398,13 @@ test('both agent installations receive self-contained shaping guidance and prese
   assert.match(guidance, /at most two targeted questions/);
   assert.match(guidance, /one question at a time/);
   assert.match(guidance, /implement.*automatically/);
+  assert.match(guidance, /three small project-specific starter ideas, one line each/);
+  assert.match(guidance, /read-only, including external state/);
+  assert.match(guidance, /Carry supplied flags into the selected idea/);
+  assert.match(guidance, /`--discuss` makes shaping discussion-only/);
+  assert.match(guidance, /`--deep` in either order/);
+  assert.match(guidance, /including `next` or `continue`, until the user explicitly requests implementation/);
+  assert.match(guidance, /Every discussion-only task save.*`decisions` and `next`/);
   assert.ok(fs.statSync(path.join(path.dirname(installer), '../SKILL.md')).size < 8000);
   const extra = path.join(f.user, '.agents/skills/neef/references/personal.md');
   fs.writeFileSync(extra, 'Unrelated user guidance');

@@ -4,7 +4,17 @@ Collaboratively turn a rough idea into an actionable implementation. Resolve con
 
 ## Inspect before asking
 
-Read applicable instructions, relevant code and tests, current NEEF state, and established user preferences. Discover facts yourself. Ask only about decisions whose alternatives materially affect behavior, scope, design or cost and cannot be resolved from that evidence. An established decision or requirement to preserve behavior settles that question, including in deep mode. Ask no reconfirmation or adjacent policy questions about settled behavior. Deep mode increases inspection depth, not task scope. Leave all inputs and behavior outside the requested change unchanged without asking about them. Make routine decisions autonomously. Clear requests need zero questions, even with an explicit shape invocation. If `shape` has no task, request the missing task rather than inventing one.
+Read applicable instructions, relevant code and tests, current NEEF state, and established user preferences. Discover facts yourself. Ask only about decisions whose alternatives materially affect behavior, scope, design or cost and cannot be resolved from that evidence. An established decision or requirement to preserve behavior settles that question, including in deep mode. Ask no reconfirmation or adjacent policy questions about settled behavior. Deep mode increases inspection depth, not task scope. Leave all inputs and behavior outside the requested change unchanged without asking about them. Make routine decisions autonomously. Clear requests need zero questions, even with an explicit shape invocation.
+
+## Start without an idea
+
+When `shape` has no idea, including with flags or the direct shape alias, offer three small project-specific starter ideas, one line each, based on the inspection above. Give each a concrete change and intended benefit; recommend the strongest. If evidence is sparse, label assumptions rather than inventing defects. Invite a numbered choice or the user's own idea, then wait. This is read-only, including external state: preserve any unfinished task and its decisions. A choice selects only that idea for normal shaping; it does not authorize the other suggestions. Carry supplied flags into the selected idea. Starter selection does not count toward the shaping-question limit.
+
+## Discussion only
+
+`--discuss` makes shaping discussion-only, as does an explicit natural-language request. It combines with `--deep` in either order. Inspect and clarify normally, and save decisions in external task state, but leave project files and Git unchanged. Skip development commands, hooks, installation and `begin`. Once the idea is clear, report the saved decisions and stop without implementing or marking the feature complete. Retain this boundary on resumption, including `next` or `continue`, until the user explicitly requests implementation. Those commands alone continue discussion; they do not request a build. A build handoff must suggest an explicit implementation command.
+
+Every discussion-only task save, including the closing summary, must retain `Discussion-only (--discuss); awaiting explicit implementation request` in `decisions` and `next`, alongside the agreed constraints and any pending question. Resolving the last question does not clear this marker. Clear it only when the user explicitly requests implementation.
 
 ## Adapt the depth
 

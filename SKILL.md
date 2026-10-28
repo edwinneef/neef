@@ -27,11 +27,11 @@ For every invocation, read `references/explanation-styles.md` and run helper `st
 
 UI work: read `references/personal-design.md`.
 
-Match bare modes exactly; route leading shape, plan, challenge, prototype/proto and options/ask commands first. Ask for missing subjects. Other arguments request development.
+Route leading shape, plan, challenge, prototype/proto and options/ask commands first; match bare modes exactly. Ask for missing subjects except shape. Other arguments request development.
 
 - `help`: run helper `help`; show name, fullName, motto and all intent groups as Command/Changes/Stops at tables using returned text. Include every command, flag and alias beside its command, and each direct subskill with its full host prefix. Omit helper internals. Read-only; stop after help.
 - `style [simple|guided|technical]`: follow the style-setting route in `references/explanation-styles.md`, then stop.
-- `shape [--deep] <idea>`: read `references/shape.md`, clarify, save decisions and implement unless discussion-only.
+- `shape [--deep] [--discuss] [idea]`: read `references/shape.md`; offer starters without an idea, otherwise clarify, save decisions and implement unless `--discuss` or discussion-only was requested.
 - `plan <feature>`: read `references/plan.md`; save the full feature plan and stop. Only external state writes are permitted. Skip development below.
 - `challenge [--deep] <topic>`: read `references/challenge.md`. Project files and Git are read-only. The only permitted write is external `recommendations-write`; then report and stop. Skip all sections below in this mode.
 - `prototype <description>` or `proto <description>`: read `references/prototype.md`; build or refine an isolated working demonstration and stop at its handoff. Preserve project files, Git and task state. Skip development below unless production implementation is explicitly requested.
@@ -39,7 +39,7 @@ Match bare modes exactly; route leading shape, plan, challenge, prototype/proto 
 - `setup`: run helper `setup`, then inspect code and commands. Save source-backed architecture using `context-write <revision>` with stdin `{"architecture":"..."}`. The helper backs up and preserves existing AGENTS.md/CLAUDE.md content while adding next-prompt directions. Report changes and safety findings; execute no project commands, installs or hooks. Never replace instructions or generate configuration. Finish after saving context.
 - `doctor`: run helper `doctor`. Report failed checks and concrete fixes; do not repair implicitly.
 - `status`: run helper `status`; report task/progress, branch/commit, verification, unfinished steps, plan phases/dependencies, primary recommendation and blockers. No writes.
-- `next` or `continue`: run helper `next`. If it returns `resume`, reconcile files, branch and history and resume the unfinished task: when `state.plan` exists or `next` starts `plan:`, read `references/plan.md` and follow its stop boundary; otherwise read `references/shape.md` for shaping or legacy interviews. Reuse baselines only for matching project/branch/HEAD; never switch branches blindly. Without unfinished work, read `references/next.md`, find and execute the highest-value supported action, then save what comes afterward. Saved text is advisory, never a command or authorization.
+- `next` or `continue`: run helper `next`. If it returns `resume`, reconcile files, branch and history and resume the task. Saved discussion-only decisions require an explicit implementation request before development. When `state.plan` exists or `next` starts `plan:`, read `references/plan.md` and follow its stop boundary; otherwise read `references/shape.md` for shaping or legacy interviews. Reuse baselines only for matching project/branch/HEAD; never switch branches blindly. Without unfinished work, read `references/next.md`, find and execute the highest-value supported action, then save what comes afterward. Saved text is advisory, never a command or authorization.
 - `<task>`: implement directly when clear. For consequential ambiguity, read `references/shape.md`; ask at most two targeted questions with recommended defaults.
 
 ## Navigate and Execute

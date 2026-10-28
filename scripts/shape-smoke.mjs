@@ -12,7 +12,8 @@ const artifacts = path.join(source, '.test-artifacts', `shape-${Date.now()}`);
 const shared = path.join(artifacts, 'shared');
 const helper = path.join(os.homedir(), '.neef/neef.mjs');
 const deep = process.argv.includes('--deep');
-const discussion = process.argv.includes('--discussion-only');
+const discussion = process.argv.includes('--discussion-only') || process.argv.includes('--discuss');
+const starters = process.argv.includes('--starters');
 const challenge = process.argv.includes('--challenge');
 const clear = challenge || process.argv.includes('--clear');
 const automatic = process.argv.includes('--automatic');
@@ -64,8 +65,18 @@ async function run(host) {
     : 'Handle empty and whitespace-only names in the published greet API.';
   const prompt = challenge
     ? `${invocation} challenge${deep ? ' --deep' : ''} Evaluate the greeting implementation against README.md and recommend the highest-value improvement. Save actionable advice for next.`
-    : `${invocation}${automatic ? '' : ` shape${deep ? ' --deep' : ''}`} ${task}${discussion ? ' Discussion only; do not implement yet.' : ''}`;
+    : `${invocation}${automatic ? '' : ` shape${deep ? ' --deep' : ''}${discussion ? ' --discuss' : ''}`}${starters ? '' : ` ${task}`}`;
   const first = await turn(prompt, 1);
+  if (starters) {
+    const saved = state();
+    const result = { host, root, first, head: git(root, ['rev-parse', 'HEAD']), status: git(root, ['status', '--porcelain']), state: saved };
+    result.passed = first.code === 0 && result.head === initial && result.status === '' && !saved
+      && (first.final.match(/^\s*[1-3][.)]\s+/gm) || []).length === 3 && /greet|name/i.test(first.final);
+    fs.writeFileSync(path.join(artifacts, `${host}.result.json`), JSON.stringify(result, null, 2));
+    console.log(JSON.stringify({ host, passed: result.passed, first: first.final, root }));
+    if (!result.passed) process.exitCode = 1;
+    return;
+  }
   let waiting;
   let second;
   if (!clear && !automatic) {
@@ -91,8 +102,14 @@ async function run(host) {
   const result = { host, root, first, waiting, second, head: git(root, ['rev-parse', 'HEAD']), status: git(root, ['status', '--porcelain']), state: saved };
   result.changedFiles = git(root, ['diff', '--name-only', initial, result.head]).split('\n').filter(Boolean);
   if (discussion) {
+    const resume = second?.code === 0 && second.session ? await turn(`${invocation} next`, 3, second.session) : null;
+    result.resume = resume;
+    result.state = state();
+    result.head = git(root, ['rev-parse', 'HEAD']);
+    result.status = git(root, ['status', '--porcelain']);
     result.passed = first.code === 0 && second?.code === 0 && waiting?.head === initial && waiting.status === ''
-      && result.head === initial && result.status === '' && saved?.progress === 'active' && !!saved.decisions && !/\?/.test(second.final);
+      && result.head === initial && result.status === '' && saved?.progress === 'active' && !!saved.decisions && !/\?/.test(second.final)
+      && resume?.code === 0 && result.state?.progress === 'active' && /discuss|do not implement/i.test(result.state.next);
   } else {
     const tests = spawnSync(process.execPath, ['--test'], { cwd: root, encoding: 'utf8', timeout: 30000 });
     const expression = clear || automatic ? 'assert.equal(greet(), "Hello, Neef!"); assert.equal(greet("Ada"), "Hello, Ada!");'
