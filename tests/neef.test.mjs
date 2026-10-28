@@ -423,6 +423,65 @@ test('Git commit failures leave working files and user index intact', t => {
   assert.equal(f.git('diff', '--cached'), '');
 });
 
+test('a failing hook after the index lock releases it and leaves HEAD, index and files intact', t => {
+  const f = fixture(t);
+  const begin = f.run(['begin', 'hook failure']);
+  f.write('owned.txt', 'kept after hook failure\n');
+  const prepared = f.prepare(begin.baseline);
+  const head = f.git('rev-parse', 'HEAD');
+  const hook = path.join(f.root, '.git', 'hooks', 'pre-commit');
+  fs.mkdirSync(path.dirname(hook), { recursive: true });
+  fs.writeFileSync(hook, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  f.run(['commit', prepared.token], undefined, /pre-commit|hook|Git failed/);
+  assert.equal(fs.existsSync(path.join(f.root, '.git', 'index.lock')), false);
+  assert.equal(f.git('rev-parse', 'HEAD'), head);
+  assert.equal(f.git('diff', '--cached'), '');
+  assert.equal(fs.readFileSync(path.join(f.root, 'owned.txt'), 'utf8'), 'kept after hook failure\n');
+  fs.unlinkSync(hook);
+  f.run(['commit', prepared.token]);
+  assert.equal(f.git('show', 'HEAD:owned.txt'), 'kept after hook failure');
+});
+
+test('prepare refuses missing input, unchanged files and submodules without touching the index', t => {
+  const f = fixture(t);
+  const sub = f.git('rev-parse', 'HEAD');
+  fs.mkdirSync(path.join(f.root, 'sub'));
+  f.git('update-index', '--add', '--cacheinfo', `160000,${sub},sub`);
+  f.git('commit', '-m', 'Add gitlink');
+  const begin = f.run(['begin', 'refusals']);
+  f.prepare(begin.baseline, [], 'No files', /Provide files and message/);
+  f.write('owned.txt', 'after\n');
+  f.prepare(begin.baseline, ['owned.txt'], ' ', /Provide files and message/);
+  f.prepare(begin.baseline, ['user.txt'], 'Unchanged', /No change to commit: user.txt/);
+  fs.rmdirSync(path.join(f.root, 'sub'));
+  f.prepare(begin.baseline, ['sub'], 'Gitlink', /Submodule commit refused/);
+  assert.equal(f.git('diff', '--cached'), '');
+});
+
+test('a staged diff that differs from the reviewed one is refused at commit', t => {
+  const f = fixture(t);
+  const begin = f.run(['begin', 'filter drift']);
+  f.write('owned.txt', 'reviewed\n');
+  const prepared = f.prepare(begin.baseline);
+  // A clean filter changes what Git stages without changing the working file.
+  f.git('config', 'filter.drift.clean', 'cat >/dev/null; echo filtered');
+  fs.writeFileSync(path.join(f.root, '.git', 'info', 'attributes'), 'owned.txt filter=drift\n');
+  f.run(['commit', prepared.token], undefined, /Staged diff changed after review/);
+  assert.equal(fs.existsSync(path.join(f.root, '.git', 'index.lock')), false);
+  assert.equal(f.git('show', 'HEAD:owned.txt'), 'before');
+  assert.equal(f.git('diff', '--cached'), '');
+});
+
+test('state-write refuses a baseline that belongs to another project', t => {
+  const f = fixture(t);
+  const other = fixture(t);
+  const foreign = other.run(['begin', 'other project']).baseline;
+  fs.mkdirSync(path.join(f.home, 'baselines'), { recursive: true });
+  fs.copyFileSync(path.join(other.home, 'baselines', `${foreign}.json`), path.join(f.home, 'baselines', `${foreign}.json`));
+  f.state('missing', 'Foreign baseline', { baseline: foreign }, /another project/);
+  assert.equal(f.run(['status']).state, null);
+});
+
 const installer = fileURLToPath(new URL('../scripts/install.mjs', import.meta.url));
 
 function installation(t) {
@@ -711,6 +770,28 @@ test('reinstall retires owned subskills for aliases and doctor but preserves edi
   assert.equal(fs.readFileSync(edited, 'utf8'), 'Personal doctor alias');
 });
 
+test('doctor reports a healthy isolated install, then edited files, locks and corrupt state', t => {
+  const f = installation(t);
+  f.install(true);
+  const doctor = () => {
+    const result = spawnSync(process.execPath, [helper, 'doctor'], { encoding: 'utf8', env: { ...process.env, NEEF_USER_HOME: f.user, NEEF_HOME: f.home } });
+    assert.equal(result.status, 0, result.stderr);
+    return Object.fromEntries(JSON.parse(result.stdout).checks.map(check => [check.name, check]));
+  };
+  const healthy = doctor();
+  for (const name of ['Node 20+', 'shared utility', 'installed file hashes', '.claude skill', '.agents skill', '.claude synchronized instructions', '.agents synchronized instructions', 'Claude explicit-only', 'Codex explicit-only', 'state directory permissions', 'legacy ED absent']) {
+    assert.equal(healthy[name]?.ok, true, name);
+  }
+  fs.appendFileSync(path.join(f.user, '.claude/skills/neef/SKILL.md'), '\nlocal edit\n');
+  fs.writeFileSync(path.join(f.home, 'state', 'abc.json.lock'), '{}');
+  fs.writeFileSync(path.join(f.home, 'state', 'abc.json'), '{not json');
+  const broken = doctor();
+  for (const name of ['installed file hashes', '.claude synchronized instructions', 'state lock abc.json.lock', 'state abc.json']) {
+    assert.equal(broken[name]?.ok, false, name);
+    assert.ok(broken[name].fix, name);
+  }
+});
+
 test('installer refuses unowned skill files and an existing installation lock', t => {
   const f = installation(t);
   f.install(true);
@@ -896,6 +977,17 @@ test('setup refuses unsafe or edited instructions before changing either instruc
   f.run(['setup'], undefined, /Linked path refused/);
   assert.equal(fs.existsSync(path.join(f.root, 'AGENTS.md')), false);
   assert.deepEqual(fs.readdirSync(outside), []);
+});
+
+test('a failed instruction write rolls back the instruction file already written', { skip: process.platform !== 'win32' && 'read-only files block replacement only on Windows' }, t => {
+  const f = fixture(t);
+  const claude = path.join(f.root, 'CLAUDE.md');
+  f.write('CLAUDE.md', 'Personal rules\n');
+  fs.chmodSync(claude, 0o444);
+  f.run(['setup'], undefined, /EPERM|operation not permitted/);
+  assert.equal(fs.existsSync(path.join(f.root, 'AGENTS.md')), false);
+  assert.equal(fs.readFileSync(claude, 'utf8'), 'Personal rules\n');
+  assert.deepEqual(fs.readdirSync(f.root).filter(name => name.endsWith('.tmp')), []);
 });
 
 test('setup refuses a backup directory linked into the project', t => {
