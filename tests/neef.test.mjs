@@ -1814,6 +1814,25 @@ test('review scopes the last task\'s commits from its first save and stays read-
   assert.equal(f.state(kept.revision, 'Next task').state.start, f.git('rev-parse', 'HEAD'));
 });
 
+test('review starts at the task\'s first begin when it commits before its first save', t => {
+  const f = fixture(t);
+  f.run(['begin', 'before previous save']);
+  const previous = f.state(f.run(['status']).revision, 'Previous task', { progress: 'complete', outcomes: passedOutcomes, recommendations: noRecommendation });
+  f.write('user.txt', 'unrelated earlier commit\n');
+  f.git('commit', '-qam', 'Earlier commit between tasks');
+  const before = f.git('rev-parse', 'HEAD');
+  const begin = f.run(['begin', 'commit first']);
+  f.write('owned.txt', 'committed before saving\n');
+  const committed = f.run(['commit', f.prepare(begin.baseline, ['owned.txt'], 'Commit before first save').token]);
+  const saved = f.state(committed.revision, 'Commit first');
+  assert.notEqual(previous.state.head, before);
+  assert.equal(saved.state.start, before);
+  assert.deepEqual(f.run(['review']).commits.map(commit => commit.subject), ['Commit before first save']);
+  f.write('owned.txt', 'later\n');
+  f.git('commit', '-qam', 'Later commit');
+  assert.equal(f.state(saved.revision, 'Brand new task').state.start, f.git('rev-parse', 'HEAD'));
+});
+
 test('review routing keeps the challenge boundary in both installed copies', t => {
   const f = installation(t);
   f.install(true);
