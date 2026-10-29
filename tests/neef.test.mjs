@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { gitMergeReady } from '../scripts/neef.mjs';
 
 const passedOutcomes = [{ id: 'fixture', description: 'Complete the fixture task', required: true, status: 'passed', evidence: 'Fixture assertions passed.' }];
 
@@ -921,6 +922,15 @@ test('doctor reports a healthy isolated install, then edited files, locks and co
     assert.equal(broken[name]?.ok, false, name);
     assert.ok(broken[name].fix, name);
   }
+});
+
+test('doctor warns, without failing, when Git is older than 2.38 for merge', () => {
+  for (const version of ['git version 2.38.0', 'git version 2.54.0.windows.1', 'git version 2.39.3 (Apple Git-146)', 'git version 3.0.0']) assert.equal(gitMergeReady(version), true, version);
+  for (const version of ['git version 2.37.9', 'git version 1.99.0', '', null]) assert.equal(gitMergeReady(version), false, String(version));
+  const result = spawnSync(process.execPath, [helper, 'doctor'], { encoding: 'utf8' });
+  const check = JSON.parse(result.stdout).checks.find(item => item.name === 'Git 2.38+ for merge');
+  assert.equal(check.severity, 'warning');
+  assert.equal(check.ok, gitMergeReady(spawnSync('git', ['--version'], { encoding: 'utf8' }).stdout));
 });
 
 test('installer refuses unowned skill files and an existing installation lock', t => {

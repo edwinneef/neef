@@ -888,13 +888,22 @@ function commandVersion(command) {
   return result.status === 0 ? result.stdout.trim() : null;
 }
 
+// merge relies on `git merge-tree --write-tree`, added in Git 2.38.
+export function gitMergeReady(versionText) {
+  const match = /(\d+)\.(\d+)/.exec(versionText || '');
+  return !!match && (Number(match[1]) > 2 || (Number(match[1]) === 2 && Number(match[2]) >= 38));
+}
+
 export function doctor() {
   const user = process.env.NEEF_USER_HOME || os.homedir();
   const roots = ['.agents/skills', '.claude/skills', '.codex/skills', '.copilot/skills', '.config/opencode/skills', '.config/zed/skills', '.claude/commands'];
   const checks = [];
-  const add = (name, ok, fix) => checks.push({ name, ok, ...(!ok ? { fix } : {}) });
+  const add = (name, ok, fix, severity) => checks.push({ name, ok, ...(!ok ? { fix } : {}), ...(severity ? { severity } : {}) });
   add('Node 20+', Number(process.versions.node.split('.')[0]) >= 20, 'Install Node.js 20 or later');
-  for (const command of ['git', 'claude', 'codex']) add(command, !!commandVersion(command), `Install ${command} and ensure it is on PATH`);
+  const gitVersion = commandVersion('git');
+  add('git', !!gitVersion, 'Install git and ensure it is on PATH');
+  if (gitVersion) add('Git 2.38+ for merge', gitMergeReady(gitVersion), `Found ${gitVersion}; upgrade Git to 2.38 or later before using merge`, 'warning');
+  for (const command of ['claude', 'codex']) add(command, !!commandVersion(command), `Install ${command} and ensure it is on PATH`);
   const shared = path.join(home(), 'neef.mjs');
   add('shared utility', exists(shared), 'Run node scripts/install.mjs --apply from the source project');
   const receipt = path.join(home(), 'install.json');
@@ -931,7 +940,7 @@ export function doctor() {
     catch { add('Skills CLI metadata', false, 'Inspect invalid lock file; do not overwrite unrelated entries'); }
   }
   add('legacy ED absent', obsolete.length === 0, 'Inventory and remove only the eight exact ED installations with backups');
-  return { ok: checks.every(check => check.ok), checks, obsolete, discovery: 'Paths and configuration checked; native invocation requires a fresh agent session.' };
+  return { ok: checks.every(check => check.ok || check.severity === 'warning'), checks, obsolete, discovery: 'Paths and configuration checked; native invocation requires a fresh agent session.' };
 }
 
 export async function main(args = process.argv.slice(2)) {
