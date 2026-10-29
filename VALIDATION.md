@@ -22,7 +22,7 @@ Each runner uses the installed helper and refuses to start when `~/.neef/neef.mj
 | Runner | Scenarios (flags) |
 | --- | --- |
 | `scripts/smoke.mjs` | ordinary task (default), `--setup`, `--directions`, `--help`, `--alias`, `--next`, `--next-active`, `--next-discovery`, `--next-blocked`, `--next-exhausted`, `--next-denied`, `--completion`, `--completion-open`, `--continuity`; `--claude-only` / `--codex-only` |
-| `scripts/shape-smoke.mjs` | `--starters`, `--deep`, `--discuss`, `--discussion-only`, `--automatic`, `--auto`, `--clear`, `--challenge` |
+| `scripts/shape-smoke.mjs` | `--starters`, `--deep`, `--discuss`, `--discussion-only`, `--automatic`, `--auto`, `--auto-change`, `--clear`, `--challenge` |
 | `scripts/plan-smoke.mjs` | `--small`, `--large`; `--claude` / `--codex` |
 | `scripts/advisor-smoke.mjs` | options (default), `--selection`, `--exhausted`, `--prototype`; `--claude` / `--codex` |
 | `scripts/prototype-smoke.mjs` | UI demo, refinement, handoff and algorithm demo (default), `--ui-only`; `--claude` / `--codex` |
