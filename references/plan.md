@@ -35,6 +35,8 @@ Planning needs no `begin` baseline. Use `baseline:null`, record inspection as ve
 
 ## Continue until complete or blocked
 
+If the task `next` starts `auto:`, the plan is not signed off: read `references/auto.md` and follow its sign-off rules instead of this section. A bare `next` or `continue` never signs it off.
+
 On `next` (or `continue`) with this plan active, reconcile the entire saved roadmap with current files, instructions, branch and history. Preserve accepted phases and agreed decisions. Revalidate assumptions for the selected phase and adjust the remaining plan only as source evidence or new user requirements justify. Resume an active phase; otherwise select the earliest pending phase whose dependencies are complete. Before treating the roadmap as blocked, inspect every remaining phase for useful work that can proceed independently.
 
 Obtain and save a safe `begin` baseline before implementation. Reuse an interrupted phase's baseline only when its project, branch and HEAD still match; preserve overlapping work and existing commit safeguards. Mark only the selected phase active and execute its task through NEEF's normal implementation, focused verification and owned-commit workflow on main. Commit completed increments often and obtain a fresh baseline before editing the next increment.

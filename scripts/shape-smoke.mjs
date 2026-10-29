@@ -16,6 +16,7 @@ const starters = process.argv.includes('--starters');
 const challenge = process.argv.includes('--challenge');
 const clear = challenge || process.argv.includes('--clear');
 const automatic = process.argv.includes('--automatic');
+const auto = process.argv.includes('--auto');
 fs.mkdirSync(shared, { recursive: true });
 
 function git(root, args) {
@@ -36,7 +37,9 @@ async function run(host) {
   git(root, ['config', 'core.hooksPath', '.no-hooks']);
   fs.writeFileSync(path.join(root, 'index.mjs'), 'export function greet(name = "world") { return `Hello, ${name}!`; }\n');
   fs.writeFileSync(path.join(root, 'index.test.mjs'), 'import { test } from "node:test";\nimport assert from "node:assert/strict";\nimport { greet } from "./index.mjs";\ntest("default", () => assert.equal(greet(), "Hello, world!"));\ntest("named", () => assert.equal(greet("Ada"), "Hello, Ada!"));\n');
-  fs.writeFileSync(path.join(root, 'README.md'), clear || automatic
+  fs.writeFileSync(path.join(root, 'README.md'), auto
+    ? '# Greeting sample\nThe sample is complete once its default greeting is Hello, Neef!, named greetings remain unchanged, and farewell(name) returns Goodbye, <name>! with focused tests.\n'
+    : clear || automatic
     ? '# Greeting sample\nThe sample is complete once its default greeting is Hello, Neef! and named greetings remain unchanged.\n'
     : '# Published greeting API\nClients use greet(name). Blank strings currently produce literal empty or whitespace names. Whether the new blank-name policy must preserve that behavior has not been decided. Nonblank names and the omitted argument must remain unchanged. The sample is complete once a blank-name policy is agreed, implemented and tested.\n');
   git(root, ['add', '--', 'index.mjs', 'index.test.mjs', 'README.md']);
@@ -60,10 +63,12 @@ async function run(host) {
   }
 
   const invocation = host === 'claude' ? '/neef' : '$neef';
-  const task = clear || automatic ? 'Change only the default greeting to Hello, Neef!, update its focused test, and preserve named greetings.'
+  const task = auto ? 'Change the default greeting to Hello, Neef!, add an exported farewell(name) returning Goodbye, <name>!, cover both with focused tests, and preserve named greetings.'
+    : clear || automatic ? 'Change only the default greeting to Hello, Neef!, update its focused test, and preserve named greetings.'
     : 'Handle empty and whitespace-only names in the published greet API.';
   const prompt = challenge
     ? `${invocation} challenge${deep ? ' --deep' : ''} Evaluate the greeting implementation against README.md and recommend the highest-value improvement. Save actionable advice for next.`
+    : auto ? `${invocation} auto ${task}`
     : `${invocation}${automatic ? '' : ` shape${deep ? ' --deep' : ''}${discussion ? ' --discuss' : ''}`}${starters ? '' : ` ${task}`}`;
   const first = await turn(prompt, 1);
   if (starters) {
@@ -74,6 +79,31 @@ async function run(host) {
     fs.writeFileSync(path.join(artifacts, `${host}.result.json`), JSON.stringify(result, null, 2));
     console.log(JSON.stringify({ host, passed: result.passed, first: first.final, root }));
     if (!result.passed) process.exitCode = 1;
+    return;
+  }
+  if (auto) {
+    // Sign-off gate: a fresh next must not run an unsigned plan; approval in the original session runs every phase.
+    const snapshot = () => ({ head: git(root, ['rev-parse', 'HEAD']), branch: git(root, ['branch', '--show-current']), status: git(root, ['status', '--porcelain']), state: state() });
+    const untouched = view => view.head === initial && view.branch === initialBranch && view.status === ''
+      && view.state?.progress === 'active' && !view.state.baseline && /^auto:/.test(view.state.next || '') && !!view.state.plan?.phases?.length;
+    const unsigned = snapshot();
+    const held = first.code === 0 && untouched(unsigned) ? await turn(`${invocation} next`, 2) : null;
+    const resumed = held ? snapshot() : null;
+    const gated = held?.code === 0 && untouched(resumed);
+    const approval = gated && first.session ? await turn('Approved. Sign off and build it.', 3, first.session) : null;
+    const saved = state();
+    const tests = spawnSync(process.execPath, ['--test'], { cwd: root, encoding: 'utf8', timeout: 30000 });
+    const behavior = spawnSync(process.execPath, ['--input-type=module', '-e', 'import assert from "node:assert/strict"; import {greet, farewell} from "./index.mjs"; assert.equal(greet(), "Hello, Neef!"); assert.equal(greet("Ada"), "Hello, Ada!"); assert.equal(farewell("Ada"), "Goodbye, Ada!");'], { cwd: root, encoding: 'utf8', timeout: 30000 });
+    const head = git(root, ['rev-parse', 'HEAD']);
+    const changedFiles = head === initial ? [] : git(root, ['diff', '--name-only', initial, head]).split('\n').filter(Boolean);
+    const built = approval?.code === 0 && head !== initial && git(root, ['status', '--porcelain']) === '' && tests.status === 0 && behavior.status === 0
+      && saved?.progress === 'complete' && /signed off/i.test(saved.decisions || '') && !!saved.plan?.phases?.length
+      && saved.plan.phases.every(phase => phase.status === 'complete' && !!phase.verification)
+      && changedFiles.every(file => ['index.mjs', 'index.test.mjs', 'README.md'].includes(file));
+    const passed = gated && built;
+    fs.writeFileSync(path.join(artifacts, `${host}.result.json`), JSON.stringify({ host, root, passed, gated, first, unsigned, held, resumed, approval, saved, changedFiles }, null, 2));
+    console.log(JSON.stringify({ host, passed, gated, root, signOff: first.final, approval: approval?.final }));
+    if (!passed) process.exitCode = 1;
     return;
   }
   let waiting;
