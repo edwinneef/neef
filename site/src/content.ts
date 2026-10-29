@@ -129,6 +129,7 @@ export const modes: [command: string, what: string, effect: Effect][] = [
   ['{neef} <what you want>', 'Build or change something.', 'changes your project'],
   ['{neef} next', 'Finish what’s open, or do the most useful next thing.', 'changes your project'],
   ['{neef} shape <idea>', 'A few sharp questions, then it builds.', 'changes your project'],
+  ['{neef} auto <feature>', 'All questions first, one sign-off, then it builds alone.', 'changes your project'],
   ['{neef} prototype <idea>', 'A clickable demo in a scratch folder.', 'scratch folder only'],
   ['{neef} plan <feature>', 'A saved, phased plan. Then it stops.', 'changes nothing'],
   ['{neef} challenge <topic>', 'An honest, ranked review.', 'changes nothing'],

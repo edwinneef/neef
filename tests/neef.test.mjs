@@ -618,7 +618,7 @@ test('every main command installs a described subskill that routes through canon
   const plan = f.install();
   assert.equal(fs.existsSync(f.user), false);
   f.install(true);
-  const commands = ['task', 'shape', 'plan', 'challenge', 'prototype', 'options', 'setup', 'next', 'status', 'help'];
+  const commands = ['task', 'shape', 'auto', 'plan', 'challenge', 'prototype', 'options', 'setup', 'next', 'status', 'help'];
   for (const command of ['proto', 'ask', 'continue', 'doctor']) for (const agent of ['.agents', '.claude']) assert.equal(fs.existsSync(path.join(f.user, agent, 'skills', `neef-${command}`)), false);
   assert.match(fs.readFileSync(path.join(f.user, '.claude/skills/neef-next/SKILL.md'), 'utf8'), /description: "Resume unfinished work, or do the next useful thing. Use only when explicitly invoked."/);
   assert.doesNotMatch(fs.readFileSync(path.join(f.user, '.claude/skills/neef-plan/SKILL.md'), 'utf8'), /Run Neef's/);
@@ -1692,6 +1692,21 @@ test('challenge routing stops before development in both installed copies', t =>
     assert.match(skill, /then report and stop/);
     assert.match(guidance, /External recommendation state is the only permitted write/);
     assert.match(guidance, /next revalidates advice/);
+  }
+});
+
+test('auto routing gates execution on one explicit sign-off in both installed copies', t => {
+  const f = installation(t);
+  f.install(true);
+  for (const agent of ['.claude', '.agents']) {
+    const root = path.join(f.user, agent, 'skills/neef');
+    const skill = fs.readFileSync(path.join(root, 'SKILL.md'), 'utf8');
+    const guidance = fs.readFileSync(path.join(root, 'references/auto.md'), 'utf8');
+    assert.match(skill, /`auto <feature>` or `next` starting `auto:`: read `references\/auto\.md`/);
+    assert.match(guidance, /Only an explicit approval signs off/);
+    assert.match(guidance, /never executes phases/);
+    assert.match(guidance, /no pushing, merging/);
+    assert.match(guidance, /Do not ask the user to confirm phases/);
   }
 });
 
