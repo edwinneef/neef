@@ -618,7 +618,7 @@ test('every main command installs a described subskill that routes through canon
   const plan = f.install();
   assert.equal(fs.existsSync(f.user), false);
   f.install(true);
-  const commands = ['task', 'shape', 'auto', 'plan', 'challenge', 'prototype', 'options', 'setup', 'next', 'status', 'help'];
+  const commands = ['task', 'shape', 'auto', 'plan', 'challenge', 'prototype', 'options', 'setup', 'merge', 'next', 'status', 'help'];
   for (const command of ['proto', 'ask', 'continue', 'doctor']) for (const agent of ['.agents', '.claude']) assert.equal(fs.existsSync(path.join(f.user, agent, 'skills', `neef-${command}`)), false);
   assert.match(fs.readFileSync(path.join(f.user, '.claude/skills/neef-next/SKILL.md'), 'utf8'), /description: "Resume unfinished work, or do the next useful thing. Use only when explicitly invoked."/);
   assert.doesNotMatch(fs.readFileSync(path.join(f.user, '.claude/skills/neef-plan/SKILL.md'), 'utf8'), /Run Neef's/);
@@ -1538,7 +1538,7 @@ test('both agent installations receive self-contained shaping guidance and prese
   assert.match(guidance, /`--deep` in either order/);
   assert.match(guidance, /including `next` or `continue`, until the user explicitly requests implementation/);
   assert.match(guidance, /Every discussion-only task save.*`decisions` and `next`/);
-  assert.ok(fs.statSync(path.join(path.dirname(installer), '../SKILL.md')).size < 8000);
+  assert.ok(fs.statSync(path.join(path.dirname(installer), '../SKILL.md')).size < 8100);
   const extra = path.join(f.user, '.agents/skills/neef/references/personal.md');
   fs.writeFileSync(extra, 'Unrelated user guidance');
   f.install(true, /Unmanaged skill reference/);
@@ -1806,4 +1806,70 @@ test('a linked external home outside the project still supports continuity', t =
   assert.equal(saved.state.recommendations.primary, null);
   assert.ok(fs.existsSync(path.join(target, 'state')));
   assert.equal(f.git('status', '--porcelain'), '');
+});
+
+test('merge lists branches ahead of main, fast-forwards or merges, and deletes clean worktrees', t => {
+  const f = fixture(t);
+  const tree = name => path.join(path.dirname(f.root), name);
+  const commitIn = (dir, file, value) => {
+    fs.writeFileSync(path.join(dir, file), value);
+    f.git('-C', dir, 'add', '--', file);
+    f.git('-C', dir, 'commit', '-m', `Change ${file}`);
+  };
+  f.git('worktree', 'add', '-b', 'diverged', tree('diverged'));
+  commitIn(tree('diverged'), 'diverged.txt', 'diverged\n');
+  fs.writeFileSync(path.join(tree('diverged'), 'scratch.txt'), 'untracked\n');
+  f.git('branch', 'merged-already');
+  commitIn(f.root, 'main.txt', 'main\n');
+  f.git('worktree', 'add', '-b', 'linear', tree('linear'));
+  commitIn(tree('linear'), 'linear.txt', 'linear\n');
+  f.git('worktree', 'add', '-b', 'kept', tree('kept'));
+  commitIn(tree('kept'), 'kept.txt', 'kept\n');
+  const listed = f.run(['merge-candidates']).candidates;
+  assert.deepEqual(listed.map(item => item.branch).sort(), ['diverged', 'kept', 'linear']);
+  const diverged = listed.find(item => item.branch === 'diverged');
+  assert.equal(diverged.dirty, true);
+  assert.equal(diverged.fastForward, false);
+  assert.equal(listed.find(item => item.branch === 'linear').fastForward, true);
+  const result = f.run(['merge', 'linear', 'diverged']);
+  assert.deepEqual(result.merged.map(({ branch, method }) => [branch, method]), [['linear', 'fast-forward'], ['diverged', 'merge commit']]);
+  assert.equal(result.merged[0].deleted, true);
+  assert.equal(fs.existsSync(tree('linear')), false);
+  assert.equal(result.merged[1].deleted, false);
+  assert.match(result.merged[1].kept, /untracked|modified/);
+  assert.equal(fs.readFileSync(path.join(tree('diverged'), 'scratch.txt'), 'utf8'), 'untracked\n');
+  assert.equal(f.git('show', 'HEAD:diverged.txt'), 'diverged');
+  assert.equal(f.git('show', 'HEAD:linear.txt'), 'linear');
+  assert.match(f.git('branch', '--list', 'linear'), /^$/);
+  assert.equal(f.run(['merge', 'kept', '--keep']).merged[0].deleted, false);
+  assert.match(f.git('branch', '--list', 'kept'), /kept/);
+  assert.equal(fs.existsSync(tree('kept')), true);
+});
+
+test('merge stops at a conflict, restores main and refuses a dirty main or unknown branch', t => {
+  const f = fixture(t);
+  f.git('branch', 'conflict');
+  f.git('branch', 'later');
+  f.write('owned.txt', 'main side\n');
+  f.git('commit', '-am', 'Main side');
+  f.git('checkout', '-q', 'conflict');
+  f.write('owned.txt', 'branch side\n');
+  f.git('commit', '-am', 'Branch side');
+  f.git('checkout', '-q', 'later');
+  f.write('later.txt', 'later\n');
+  f.git('add', 'later.txt');
+  f.git('commit', '-m', 'Later');
+  f.git('checkout', '-q', 'main');
+  const head = f.git('rev-parse', 'HEAD');
+  const result = f.run(['merge', 'conflict', 'later']);
+  assert.equal(result.failed.branch, 'conflict');
+  assert.deepEqual(result.failed.conflicts, ['owned.txt']);
+  assert.deepEqual(result.notAttempted, ['later']);
+  assert.equal(f.git('rev-parse', 'HEAD'), head);
+  assert.equal(f.git('status', '--porcelain'), '');
+  f.run(['merge', 'nope'], undefined, /No such branch: nope/);
+  f.run(['merge', 'main'], undefined, /Invalid branch/);
+  f.write('user.txt', 'dirty\n');
+  f.run(['merge', 'later'], undefined, /uncommitted changes/);
+  assert.equal(f.git('rev-parse', 'HEAD'), head);
 });

@@ -37,6 +37,7 @@ Route leading mode commands first; match bare modes exactly. Ask for missing sub
 - `challenge [--deep] <topic>`: read `references/challenge.md`. Project files and Git are read-only. The only permitted write is external `recommendations-write`; then report and stop. Skip all sections below in this mode.
 - `prototype <description>` or `proto <description>`: read `references/prototype.md`; build or refine an isolated working demonstration and stop at its handoff. Preserve project files, Git and task state. Skip development below unless production implementation is explicitly requested.
 - `options [goal]` or `ask <goal>`: read `references/advisor.md`; inspect and recommend, then stop. Advice is read-only, including external state. Skip all sections below until the user explicitly selects work.
+- `merge [branch...] [--keep]`: read `references/merge.md`; only it may merge or delete branches.
 - `setup`: run helper `setup`, then inspect code and commands. Save source-backed architecture using `context-write <revision>` with stdin `{"architecture":"..."}`. The helper backs up and preserves existing AGENTS.md/CLAUDE.md content while adding next-prompt directions. Report changes and safety findings; execute no project commands, installs or hooks. Never replace instructions or generate configuration. Finish after saving context.
 - `doctor`: run helper `doctor`. Report failed checks and concrete fixes; do not repair implicitly.
 - `status`: read `references/status.md`; run helper `status` and report its compact summary. No writes.

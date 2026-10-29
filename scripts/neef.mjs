@@ -16,6 +16,7 @@ const commandCatalog = [
   { name: 'prototype', usage: 'prototype <description>', aliases: ['proto'], intent: 'explore', changes: 'External scratch demo and README; source/Git/task state unchanged', stops: 'Working demo and handoff; no automatic production promotion' },
   { name: 'options', usage: 'options [goal]', aliases: ['ask'], intent: 'choose', changes: 'Nothing during advice (read-only)', stops: 'Ranked choices, or the best-fit command for a goal; never invokes it. A later explicit selection can execute its action' },
   { name: 'setup', usage: 'setup', intent: 'inspect', changes: 'External context and managed AGENTS.md/CLAUDE.md directions', stops: 'Context and next-prompt rule saved; no project commands run' },
+  { name: 'merge', usage: 'merge [branch...] [--keep]', intent: 'build', changes: 'main gains the chosen branches; merged branches and their clean worktrees are deleted unless --keep', stops: 'Chosen branches merged into main, or stopped at the first conflict with main restored' },
   { name: 'next', usage: 'next', aliases: ['continue'], intent: 'build', changes: 'Project files and task state; frequent safe local commits', stops: 'Unfinished task resumed until complete or blocked; otherwise one useful follow-up done' },
   { name: 'status', usage: 'status', intent: 'inspect', changes: 'Nothing (read-only)', stops: 'Progress, Git, verification and blockers reported' },
   { name: 'help', usage: 'help', intent: 'inspect', changes: 'Nothing (read-only)', stops: 'Grouped command guide and aliases displayed' },
@@ -34,6 +35,7 @@ export const commandDescriptions = {
   prototype: 'Build an isolated demo to test an idea',
   options: 'Rank next actions, or find the best command for a goal',
   setup: 'Discover the project and save its context',
+  merge: 'Pick finished branches and merge them into main',
   next: 'Resume unfinished work, or do the next useful thing',
   status: 'Show progress, verification and blockers',
   help: 'Explain NEEF commands and when to use them',
@@ -778,6 +780,75 @@ function commit(p, token) {
   });
 }
 
+function worktreeList(root) {
+  const trees = [];
+  for (const block of git(root, ['worktree', 'list', '--porcelain']).split(/\n\n+/)) {
+    const tree = Object.fromEntries(block.split('\n').filter(Boolean).map(line => [line.split(' ')[0], line.slice(line.indexOf(' ') + 1)]));
+    if (!tree.worktree) continue;
+    let resolved = null;
+    try { resolved = canonical(tree.worktree); } catch { /* Missing or prunable worktree. */ }
+    trees.push({ path: tree.worktree, resolved, branch: tree.branch?.replace(/^refs\/heads\//, '') || null });
+  }
+  return trees;
+}
+
+function mainWorktree(p) {
+  if (!p.isGit) fail('Not a Git project');
+  try { git(p.root, ['rev-parse', '--verify', '--quiet', 'refs/heads/main']); } catch { fail('No main branch'); }
+  const trees = worktreeList(p.root);
+  return { trees, main: trees.find(tree => tree.branch === 'main' && tree.resolved) };
+}
+
+function mergeCandidates(p) {
+  const { trees, main } = mainWorktree(p);
+  const branches = git(p.root, ['for-each-ref', '--format=%(refname:short)%00%(subject)', 'refs/heads']).split('\n').filter(Boolean)
+    .map(line => line.split('\0')).filter(([name]) => name !== 'main');
+  const candidates = [];
+  for (const [branch, subject] of branches) {
+    const [behind, ahead] = git(p.root, ['rev-list', '--left-right', '--count', `main...refs/heads/${branch}`]).trim().split(/\s+/).map(Number);
+    if (!ahead) continue;
+    const tree = trees.find(item => item.branch === branch);
+    const dirty = tree?.resolved ? !!git(tree.resolved, ['status', '--porcelain']).trim() : false;
+    candidates.push({ branch, ahead, behind, fastForward: behind === 0, subject, worktree: tree?.path || null, dirty });
+  }
+  return { main: main?.path || null, candidates };
+}
+
+function merge(p, branches, keep) {
+  if (!branches.length) fail('Usage: merge <branch...> [--keep]');
+  const { trees, main } = mainWorktree(p);
+  if (!main) fail('main is not checked out in any worktree; check it out first');
+  if (git(main.resolved, ['status', '--porcelain', '--untracked-files=no']).trim()) fail(`main worktree has uncommitted changes: ${main.path}`);
+  for (const branch of branches) {
+    if (branch === 'main' || branch.startsWith('-')) fail(`Invalid branch: ${branch}`);
+    try { git(p.root, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]); } catch { fail(`No such branch: ${branch}`); }
+  }
+  const here = canonical(process.cwd());
+  const merged = [];
+  for (const [index, branch] of branches.entries()) {
+    const fastForward = spawnSync('git', ['-C', main.resolved, 'merge-base', '--is-ancestor', 'main', `refs/heads/${branch}`]).status === 0;
+    try {
+      git(main.resolved, fastForward ? ['merge', '--ff-only', `refs/heads/${branch}`] : ['merge', '--no-ff', '--no-edit', `refs/heads/${branch}`]);
+    } catch (error) {
+      const conflicts = git(main.resolved, ['diff', '--name-only', '--diff-filter=U']).split('\n').filter(Boolean);
+      // Abort only a merge this call started; main returns to its pre-merge commit.
+      try { git(main.resolved, ['merge', '--abort']); } catch { /* No merge in progress. */ }
+      return { main: git(main.resolved, ['rev-parse', '--short', 'HEAD']).trim(), merged, failed: { branch, error: error.message, conflicts }, notAttempted: branches.slice(index + 1) };
+    }
+    const result = { branch, method: fastForward ? 'fast-forward' : 'merge commit', deleted: false };
+    merged.push(result);
+    if (keep) continue;
+    const tree = trees.find(item => item.branch === branch);
+    if (tree?.resolved && (here === tree.resolved || here.startsWith(`${tree.resolved}${path.sep}`))) { result.kept = 'Current worktree; remove it after leaving'; continue; }
+    try {
+      if (tree) git(main.resolved, ['worktree', 'remove', tree.path]); // Refuses dirty or untracked work.
+      git(main.resolved, ['branch', '-d', branch]);
+      result.deleted = true;
+    } catch (error) { result.kept = error.message; }
+  }
+  return { main: git(main.resolved, ['rev-parse', '--short', 'HEAD']).trim(), merged };
+}
+
 function commandVersion(command) {
   // Windows npm shims need cmd; command names here are fixed, never user input.
   const result = spawnSync(process.platform === 'win32' ? 'cmd.exe' : command,
@@ -845,7 +916,7 @@ export async function main(args = process.argv.slice(2)) {
         .map(({ usage, changes, stops, aliases = [] }) => ({ command: usage, changes, stops, aliases })) })),
     invocation: { codex: '$neef <command>', claude: '/neef <command>' },
     aliases: { codex: subskillNames.map(command => `$neef-${command}`), claude: subskillNames.map(command => `/neef-${command}`) },
-    helperCommands: ['style [simple|guided|technical] (read or save global explanation preference)', 'prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?,outcomes?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', outcomes: 'Development completion requires [{id,description,required,status,evidence}], with unique ids and at least one required outcome. Status is pending/passed/failed/blocked; passed outcomes need nonempty evidence. Required outcomes must pass, blockers must be explicitly cleared, and plan phases must finish before completion. Same-task writes preserve omitted outcomes; new tasks do not inherit them. Legacy saved states remain readable. Evidence is agent-reported, not independently proven.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?}]}. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. Shared state remains under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: `${commandCatalog.map(({ usage, aliases = [] }) => `${usage}${aliases.map(alias => ` (${alias} alias)`).join('')}`).join(', ')} are agent skill modes; prototype builds or refines isolated external demos and hands approved concepts to development without automatic production changes; options ranks project actions, or with a goal recommends an existing command, read-only including external state and without execution; bare shape offers three project-specific starters and waits without writes; shaping uses native questions and state-write then implements unless --discuss or discussion-only was requested; auto asks every decision in batched rounds, saves and self-challenges a plan, needs one explicit sign-off, then runs all phases without further prompts until complete or blocked; plan saves a complexity-sized full-feature roadmap then stops; challenge is read-only except external recommendations-write and never implements; next resumes unfinished work and runs all ready plan phases until complete or blocked, otherwise starts one revalidated follow-up` };
+    helperCommands: ['style [simple|guided|technical] (read or save global explanation preference)', 'prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'merge-candidates (read-only: local branches ahead of main with worktree and dirty flags)', 'merge <branch...> [--keep] (fast-forward or merge commit into the main worktree; stops and aborts at the first conflict; deletes merged branches and clean worktrees unless --keep)', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?,outcomes?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', outcomes: 'Development completion requires [{id,description,required,status,evidence}], with unique ids and at least one required outcome. Status is pending/passed/failed/blocked; passed outcomes need nonempty evidence. Required outcomes must pass, blockers must be explicitly cleared, and plan phases must finish before completion. Same-task writes preserve omitted outcomes; new tasks do not inherit them. Legacy saved states remain readable. Evidence is agent-reported, not independently proven.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?}]}. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. Shared state remains under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: `${commandCatalog.map(({ usage, aliases = [] }) => `${usage}${aliases.map(alias => ` (${alias} alias)`).join('')}`).join(', ')} are agent skill modes; prototype builds or refines isolated external demos and hands approved concepts to development without automatic production changes; options ranks project actions, or with a goal recommends an existing command, read-only including external state and without execution; bare shape offers three project-specific starters and waits without writes; shaping uses native questions and state-write then implements unless --discuss or discussion-only was requested; auto asks every decision in batched rounds, saves and self-challenges a plan, needs one explicit sign-off, then runs all phases without further prompts until complete or blocked; plan saves a complexity-sized full-feature roadmap then stops; challenge is read-only except external recommendations-write and never implements; next resumes unfinished work and runs all ready plan phases until complete or blocked, otherwise starts one revalidated follow-up` };
   if (command === 'doctor') return doctor();
   const p = project(cwd);
   if (command === 'style') {
@@ -866,6 +937,8 @@ export async function main(args = process.argv.slice(2)) {
   if (command === 'state-recover') return stateRecover(p, argument);
   if (command === 'prepare') return prepare(p, argument, input());
   if (command === 'commit') return commit(p, argument);
+  if (command === 'merge-candidates') return mergeCandidates(p);
+  if (command === 'merge') return merge(p, args.slice(1).filter(arg => arg !== '--keep'), args.includes('--keep'));
   fail(`Unknown helper command: ${command}; run help`);
 }
 
