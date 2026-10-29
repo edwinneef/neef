@@ -710,7 +710,7 @@ test('every main command installs a described subskill that routes through canon
   const plan = f.install();
   assert.equal(fs.existsSync(f.user), false);
   f.install(true);
-  const commands = ['task', 'shape', 'auto', 'plan', 'challenge', 'prototype', 'options', 'setup', 'next', 'status', 'help'];
+  const commands = ['task', 'shape', 'auto', 'plan', 'challenge', 'review', 'prototype', 'options', 'setup', 'next', 'status', 'help'];
   for (const command of ['proto', 'ask', 'continue', 'doctor']) for (const agent of ['.agents', '.claude']) assert.equal(fs.existsSync(path.join(f.user, agent, 'skills', `neef-${command}`)), false);
   assert.match(fs.readFileSync(path.join(f.user, '.claude/skills/neef-next/SKILL.md'), 'utf8'), /description: "Resume unfinished work, or do the next useful thing. Use only when explicitly invoked."/);
   assert.doesNotMatch(fs.readFileSync(path.join(f.user, '.claude/skills/neef-plan/SKILL.md'), 'utf8'), /Run Neef's/);
@@ -1784,6 +1784,47 @@ test('challenge routing stops before development in both installed copies', t =>
     assert.match(skill, /then report and stop/);
     assert.match(guidance, /External recommendation state is the only permitted write/);
     assert.match(guidance, /next revalidates advice/);
+  }
+});
+
+test('review scopes the last task\'s commits from its first save and stays read-only', t => {
+  const f = fixture(t);
+  f.run(['review'], undefined, /No saved NEEF task; pass a ref/);
+  const before = f.git('rev-parse', 'HEAD');
+  const shaped = f.state('missing', 'Review me', { decisions: 'Owned file says after' });
+  assert.equal(shaped.state.start, before);
+  const begin = f.run(['begin', 'review me']);
+  f.write('owned.txt', 'after\n');
+  const committed = f.run(['commit', f.prepare(begin.baseline, ['owned.txt'], 'Make owned say after').token]);
+  const kept = f.state(committed.revision, 'Review me', { progress: 'complete', outcomes: passedOutcomes, recommendations: noRecommendation });
+  assert.equal(kept.state.start, before);
+  f.write('user.txt', 'later user commit\n');
+  f.git('commit', '-qam', 'Later user commit');
+  const stateBefore = fs.readFileSync(f.statePath(), 'utf8');
+  const scoped = f.run(['review']);
+  assert.equal(scoped.range, `${before}..${kept.state.head}`);
+  assert.deepEqual(scoped.commits.map(commit => commit.subject), ['Make owned say after']);
+  assert.equal(scoped.agreed.decisions, 'Owned file says after');
+  assert.match(scoped.diffstat, /owned\.txt/);
+  assert.deepEqual(f.run(['review', before]).commits.map(commit => commit.subject), ['Later user commit', 'Make owned say after']);
+  f.run(['review', 'no-such-ref'], undefined, /Unknown ref/);
+  f.run(['review', '--all'], undefined, /Invalid ref/);
+  assert.equal(fs.readFileSync(f.statePath(), 'utf8'), stateBefore);
+  assert.equal(f.git('status', '--porcelain'), '');
+  assert.equal(f.state(kept.revision, 'Next task').state.start, f.git('rev-parse', 'HEAD'));
+});
+
+test('review routing keeps the challenge boundary in both installed copies', t => {
+  const f = installation(t);
+  f.install(true);
+  for (const agent of ['.claude', '.agents']) {
+    const root = path.join(f.user, agent, 'skills/neef');
+    const skill = fs.readFileSync(path.join(root, 'SKILL.md'), 'utf8');
+    const guidance = fs.readFileSync(path.join(root, 'references/review.md'), 'utf8');
+    assert.match(skill, /`review \[ref\]`: read `references\/review\.md`; challenge boundary/);
+    assert.match(guidance, /External recommendation state is the only permitted write/);
+    assert.match(guidance, /project source and Git must stay unchanged/);
+    assert.match(guidance, /fresh native delegate/);
   }
 });
 
