@@ -13,10 +13,11 @@ const commandCatalog = [
   { name: 'auto', usage: 'auto <feature>', intent: 'build', changes: 'Task decisions and plan, then project files and safe local commits after sign-off', stops: 'All questions asked, challenged plan signed off once, then every phase run until complete or blocked' },
   { name: 'plan', usage: 'plan <feature>', intent: 'explore', changes: 'External task state only', stops: 'Plan saved; continue runs ready phases until complete or blocked' },
   { name: 'challenge', usage: 'challenge [--deep] <topic>', intent: 'choose', changes: 'May save external recommendations; project/Git unchanged', stops: 'Evidence-based critique and improvements; no implementation' },
+  { name: 'review', usage: 'review [ref]', intent: 'choose', changes: 'May save external recommendations and run known tests; project/Git unchanged', stops: 'Last task\'s commits (or ref..HEAD) graded against saved decisions; findings and one recommendation, no fixes' },
   { name: 'prototype', usage: 'prototype <description>', aliases: ['proto'], intent: 'explore', changes: 'External scratch demo and README; source/Git/task state unchanged', stops: 'Working demo and handoff; no automatic production promotion' },
   { name: 'options', usage: 'options [goal]', aliases: ['ask'], intent: 'choose', changes: 'Nothing during advice (read-only)', stops: 'Ranked choices, or the best-fit command for a goal; never invokes it. A later explicit selection can execute its action' },
   { name: 'setup', usage: 'setup', intent: 'inspect', changes: 'External context and managed AGENTS.md/CLAUDE.md directions', stops: 'Context and next-prompt rule saved; no project commands run' },
-  { name: 'merge', usage: 'merge [branch...] [--keep]', intent: 'build', changes: 'main gains the chosen branches; merged branches and their clean worktrees are deleted unless --keep', stops: 'Chosen branches merged into main, or stopped at the first conflict with main restored' },
+  { name: 'merge', usage: 'merge [branch...] [--keep]', intent: 'build', changes: 'main gains the chosen branches; merged branches and their worktrees are deleted unless --keep', stops: 'Chosen branches merged into main, or stopped at the first conflict with main untouched' },
   { name: 'next', usage: 'next', aliases: ['continue'], intent: 'build', changes: 'Project files and task state; frequent safe local commits', stops: 'Unfinished task resumed until complete or blocked; otherwise one useful follow-up done' },
   { name: 'status', usage: 'status', intent: 'inspect', changes: 'Nothing (read-only)', stops: 'Progress, Git, verification and blockers reported' },
   { name: 'help', usage: 'help', intent: 'inspect', changes: 'Nothing (read-only)', stops: 'Grouped command guide and aliases displayed' },
@@ -32,6 +33,7 @@ export const commandDescriptions = {
   auto: 'Ask everything up front, sign off once, then build hands-off',
   plan: 'Save an implementation plan without changing code',
   challenge: 'Critique an approach and suggest improvements',
+  review: 'Check the last task\'s commits against what was agreed',
   prototype: 'Build an isolated demo to test an idea',
   options: 'Rank next actions, or find the best command for a goal',
   setup: 'Discover the project and save its context',
@@ -55,6 +57,13 @@ function git(root, args, options = {}) {
   });
   if (result.error || result.status !== 0) fail(result.error?.message || result.stderr.trim() || `Git failed: ${args[0]}`);
   return result.stdout;
+}
+
+// Like git(), but reports the exit status for commands whose nonzero exit is an answer.
+function gitStatus(root, args) {
+  const result = spawnSync('git', ['-C', root, ...args], { encoding: 'utf8', env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' } });
+  if (result.error || result.status > 1) fail(result.error?.message || result.stderr.trim() || `Git failed: ${args[0]}`);
+  return result.status;
 }
 
 function canonical(p) {
@@ -267,6 +276,27 @@ function stateInputErrors(input) {
   return errors;
 }
 
+// A task may commit before its first save. Start from the earliest `begin` baseline taken since
+// the previous save when it lies in HEAD's history; otherwise from HEAD at this first save.
+function taskStart(p, previous, head) {
+  const directory = path.join(home(), 'baselines');
+  if (!p.isGit || !head || !exists(directory)) return head;
+  const since = previous?.updated ? Date.parse(previous.updated) : 0;
+  const candidates = [];
+  for (const name of fs.readdirSync(directory).filter(name => /^[a-f0-9-]{36}\.json$/.test(name))) {
+    try {
+      const file = path.join(directory, name);
+      const mtime = fs.statSync(file).mtimeMs;
+      if (mtime < since) continue;
+      const baseline = json(file);
+      if (!baseline.kind && baseline.project === p.root && baseline.head) candidates.push({ mtime, head: baseline.head });
+    } catch { /* Unreadable baselines never block a save. */ }
+  }
+  candidates.sort((a, b) => a.mtime - b.mtime);
+  const ancestor = start => { try { return gitStatus(p.root, ['merge-base', '--is-ancestor', start, head]) === 0; } catch { return false; } };
+  return candidates.find(candidate => ancestor(candidate.head))?.head ?? head;
+}
+
 function stateWrite(p, expected, input) {
   const file = stateFile(p);
   const errors = stateInputErrors(input);
@@ -279,6 +309,8 @@ function stateWrite(p, expected, input) {
     const actual = snapshot(p);
     const value = { version: 1, project: p.root, revision: crypto.randomUUID(), updated: new Date().toISOString(),
       task: input.task, progress: input.progress, branch: actual.branch, head: actual.head,
+      // Where this task's history begins: review grades the commits made since.
+      start: current.state?.task === input.task ? current.state.start ?? null : taskStart(p, current.state, actual.head),
       baseline: Object.hasOwn(input, 'baseline') ? input.baseline : (current.state?.task === input.task ? current.state.baseline : null) ?? null,
       ...(current.state?.context ? { context: current.state.context } : {}),
       ...(current.state?.recommendations ? { recommendations: current.state.recommendations } : {}),
@@ -684,6 +716,13 @@ function pruneBaselines() {
     try { if (fs.statSync(file).mtimeMs < cutoff) fs.unlinkSync(file); } catch { /* Pruning never blocks development. */ }
   }
 }
+// A linked worktree has its own git dir inside the shared common dir; the main folder's are the same.
+function linkedWorktree(p) {
+  if (!p.isGit) return false;
+  const [gitDir, commonDir] = git(p.root, ['rev-parse', '--path-format=absolute', '--git-dir', '--git-common-dir']).trim().split(/\r?\n/);
+  return canonical(gitDir) !== canonical(commonDir);
+}
+
 function begin(p, slug) {
   // A completely empty folder is a new project: give it Git on main so work can be committed at once.
   const gitInitialized = !p.isGit && fs.readdirSync(p.root).length === 0;
@@ -697,12 +736,13 @@ function begin(p, slug) {
   if (!p.isGit) return { baseline: null, ...snapshot(p), revision: initialized.revision, context, note: 'Non-Git project; no branch or commit. Ask before running git init to enable commits' };
   const before = snapshot(p);
   if (!before.branch) fail('Detached HEAD; select main explicitly');
-  if (before.branch !== 'main') fail('Development requires main; preserve the current branch and report the mismatch');
+  const linked = linkedWorktree(p);
+  if (!linked && before.branch !== 'main') fail('Development requires main outside a linked worktree; preserve the current branch and report the mismatch');
   pruneBaselines();
   const id = crypto.randomUUID();
   atomic(baselineFile(id), JSON.stringify({ project: p.root, slug: slug || null, ...before }));
   const greenfield = !before.head && before.changes.length === 0;
-  return { baseline: id, ...before, ...(gitInitialized ? { gitInitialized } : {}), ...(greenfield ? { greenfield } : {}), revision: initialized.revision, context };
+  return { baseline: id, ...before, ...(linked ? { worktree: 'linked' } : {}), ...(gitInitialized ? { gitInitialized } : {}), ...(greenfield ? { greenfield } : {}), revision: initialized.revision, context };
 }
 
 function prepare(p, id, input) {
@@ -780,73 +820,140 @@ function commit(p, token) {
   });
 }
 
+// Read-only review scope: the last task's commits since its recorded start, or ref..HEAD,
+// with the saved agreement to grade them against and the known test commands.
+function review(p, ref) {
+  if (!p.isGit) fail('Review needs a Git project');
+  const saved = stateRead(p);
+  if (saved.error) fail(saved.error);
+  const state = saved.state?.task ? saved.state : null;
+  const actual = snapshot(p);
+  let base;
+  let head = actual.head;
+  if (ref !== undefined) {
+    if (!ref || ref.startsWith('-')) fail('Invalid ref');
+    try { base = git(p.root, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]).trim(); } catch { fail(`Unknown ref: ${ref}`); }
+  } else {
+    if (!state) fail('No saved NEEF task; pass a ref to review');
+    if (!state.start) fail('Saved task has no recorded start; pass a ref to review');
+    base = state.start;
+    if (state.progress === 'complete' && state.head) head = state.head;
+  }
+  if (!head) fail('No commits to review');
+  const commits = git(p.root, ['log', '--format=%H%x09%s', `${base}..${head}`]).split('\n').filter(Boolean)
+    .map(line => ({ sha: line.slice(0, line.indexOf('\t')), subject: line.slice(line.indexOf('\t') + 1) }));
+  const agreed = state ? Object.fromEntries(['task', 'progress', 'decisions', 'verification', 'plan', 'outcomes']
+    .filter(key => state[key] !== undefined).map(key => [key, state[key]])) : null;
+  return { project: p.root, revision: saved.revision, range: `${base}..${head}`, commits,
+    diffstat: commits.length ? git(p.root, ['diff', '--stat', base, head]).trim() : '', agreed,
+    commands: state?.context?.commands || saved.state?.context?.commands || [], actual };
+}
+
+// Merge branches into main in the main folder: fast-forward when possible, otherwise one merge
+// commit. Conflicts are detected with merge-tree before the main folder is touched.
 function worktreeList(root) {
-  const trees = [];
-  for (const block of git(root, ['worktree', 'list', '--porcelain']).split(/\n\n+/)) {
-    const tree = Object.fromEntries(block.split('\n').filter(Boolean).map(line => [line.split(' ')[0], line.slice(line.indexOf(' ') + 1)]));
-    if (!tree.worktree) continue;
-    let resolved = null;
-    try { resolved = canonical(tree.worktree); } catch { /* Missing or prunable worktree. */ }
-    trees.push({ path: tree.worktree, resolved, branch: tree.branch?.replace(/^refs\/heads\//, '') || null });
-  }
-  return trees;
+  return git(root, ['worktree', 'list', '--porcelain']).split(/\r?\n\r?\n/).map(block => {
+    const lines = block.split(/\r?\n/);
+    const value = key => lines.find(line => line.startsWith(`${key} `))?.slice(key.length + 1) || null;
+    return { path: value('worktree'), branch: value('branch')?.replace(/^refs\/heads\//, '') || null };
+  }).filter(tree => tree.path);
 }
 
-function mainWorktree(p) {
-  if (!p.isGit) fail('Not a Git project');
-  try { git(p.root, ['rev-parse', '--verify', '--quiet', 'refs/heads/main']); } catch { fail('No main branch'); }
+const mergeHeadPath = target => path.resolve(target.root, git(target.root, ['rev-parse', '--git-path', 'MERGE_HEAD']).trim());
+
+function mainFolder(p) {
   const trees = worktreeList(p.root);
-  return { trees, main: trees.find(tree => tree.branch === 'main' && tree.resolved) };
+  const target = project(trees[0]?.path || fail('Main folder not found'));
+  const before = snapshot(target);
+  if (before.branch !== 'main') fail('Main folder is not on main; preserve it and report the mismatch');
+  if (before.changes.some(item => item.code[0] !== ' ' && item.code !== '??')) fail('Main folder has staged changes or conflicts; leave them untouched');
+  if (exists(mergeHeadPath(target))) fail('Main folder has a merge in progress; leave it untouched');
+  return { target, trees };
 }
 
+function mergeInto(target, branch, head) {
+  const before = snapshot(target).head;
+  if (gitStatus(target.root, ['merge-base', '--is-ancestor', head, before]) === 0) return { merged: false, reason: 'Already in main', head: before };
+  const fastForward = gitStatus(target.root, ['merge-base', '--is-ancestor', before, head]) === 0;
+  if (!fastForward && gitStatus(target.root, ['merge-tree', '--write-tree', '--quiet', before, head]) !== 0) fail('Branch conflicts with main; nothing merged and both sides left as they were');
+  let output;
+  try { output = git(target.root, ['merge', fastForward ? '--ff-only' : '--no-ff', '--no-edit', branch]); }
+  catch (error) {
+    if (exists(mergeHeadPath(target))) git(target.root, ['merge', '--abort']);
+    fail(`Merge refused: ${error.message}; main folder left as it was`);
+  }
+  return { merged: true, fastForward, head: snapshot(target).head, output, ...(fastForward ? {} : { recheck: 'Main has a new merge commit; rerun focused checks in the main folder' }) };
+}
+
+// Agent path: a completed linked worktree's own branch. Never deletes the branch or worktree.
+function merge(p) {
+  if (!linkedWorktree(p)) fail('Merge runs from a linked worktree');
+  const source = snapshot(p);
+  if (!source.branch) fail('Detached HEAD');
+  if (source.branch === 'main') fail('Worktree is on main; nothing to merge');
+  if (source.changes.length) fail('Worktree has uncommitted changes; preserve them and finish the task before merging');
+  const saved = stateRead(p);
+  if (saved.error) fail(saved.error);
+  // Completion must be recorded after the branch's last commit, so later commits are never merged unverified.
+  if (!saved.state?.task || saved.state.progress !== 'complete' || saved.state.head !== source.head) fail('Worktree task is not complete; finish and verify it before merging');
+  const { target } = mainFolder(p);
+  return { branch: source.branch, mainFolder: target.root, ...mergeInto(target, source.branch, source.head) };
+}
+
+function branchWorktree(trees, branch) {
+  const tree = trees.find(item => item.branch === branch);
+  if (!tree) return null;
+  try { return project(tree.path); } catch { return { root: tree.path, missing: true }; }
+}
+
+// User path: branches ahead of main, each with its worktree, uncommitted changes and NEEF completion.
 function mergeCandidates(p) {
-  const { trees, main } = mainWorktree(p);
-  const branches = git(p.root, ['for-each-ref', '--format=%(refname:short)%00%(subject)', 'refs/heads']).split('\n').filter(Boolean)
-    .map(line => line.split('\0')).filter(([name]) => name !== 'main');
+  if (!p.isGit) fail('Not a Git project');
+  const trees = worktreeList(p.root);
   const candidates = [];
-  for (const [branch, subject] of branches) {
-    const [behind, ahead] = git(p.root, ['rev-list', '--left-right', '--count', `main...refs/heads/${branch}`]).trim().split(/\s+/).map(Number);
+  for (const line of git(p.root, ['for-each-ref', '--format=%(refname:short)%00%(objectname)%00%(subject)', 'refs/heads']).split('\n').filter(Boolean)) {
+    const [branch, head, subject] = line.split('\0');
+    if (branch === 'main') continue;
+    const [behind, ahead] = git(p.root, ['rev-list', '--left-right', '--count', `main...${head}`]).trim().split(/\s+/).map(Number);
     if (!ahead) continue;
-    const tree = trees.find(item => item.branch === branch);
-    const dirty = tree?.resolved ? !!git(tree.resolved, ['status', '--porcelain']).trim() : false;
-    candidates.push({ branch, ahead, behind, fastForward: behind === 0, subject, worktree: tree?.path || null, dirty });
+    const tree = branchWorktree(trees, branch);
+    const saved = tree && !tree.missing ? stateRead(tree).state : null;
+    candidates.push({ branch, ahead, behind, fastForward: behind === 0, subject, worktree: tree?.root || null,
+      dirty: !!tree && !tree.missing && snapshot(tree).changes.length > 0,
+      taskComplete: saved?.task ? saved.progress === 'complete' && saved.head === head : null });
   }
-  return { main: main?.path || null, candidates };
+  return { mainFolder: trees[0]?.path || null, candidates };
 }
 
-function merge(p, branches, keep) {
-  if (!branches.length) fail('Usage: merge <branch...> [--keep]');
-  const { trees, main } = mainWorktree(p);
-  if (!main) fail('main is not checked out in any worktree; check it out first');
-  if (git(main.resolved, ['status', '--porcelain', '--untracked-files=no']).trim()) fail(`main worktree has uncommitted changes: ${main.path}`);
-  for (const branch of branches) {
+// Merges the user's chosen branches in order, stopping at the first refusal. Unless keep, each
+// merged branch and its worktree are deleted; Git refuses dirty worktrees and unmerged branches.
+function mergeBranches(p, branches, keep) {
+  if (!branches.length) fail('Usage: merge [branch...] [--keep]');
+  const { target, trees } = mainFolder(p);
+  const sources = branches.map(branch => {
     if (branch === 'main' || branch.startsWith('-')) fail(`Invalid branch: ${branch}`);
-    try { git(p.root, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]); } catch { fail(`No such branch: ${branch}`); }
-  }
-  const here = canonical(process.cwd());
+    let head;
+    try { head = git(p.root, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]).trim(); } catch { fail(`No such branch: ${branch}`); }
+    const tree = branchWorktree(trees, branch);
+    if (tree && !tree.missing && snapshot(tree).changes.length) fail(`${branch} has uncommitted changes in ${tree.root}; commit or preserve them first`);
+    return { branch, head, tree };
+  });
+  const here = [canonical(process.cwd()), p.root];
   const merged = [];
-  for (const [index, branch] of branches.entries()) {
-    const fastForward = spawnSync('git', ['-C', main.resolved, 'merge-base', '--is-ancestor', 'main', `refs/heads/${branch}`]).status === 0;
-    try {
-      git(main.resolved, fastForward ? ['merge', '--ff-only', `refs/heads/${branch}`] : ['merge', '--no-ff', '--no-edit', `refs/heads/${branch}`]);
-    } catch (error) {
-      const conflicts = git(main.resolved, ['diff', '--name-only', '--diff-filter=U']).split('\n').filter(Boolean);
-      // Abort only a merge this call started; main returns to its pre-merge commit.
-      try { git(main.resolved, ['merge', '--abort']); } catch { /* No merge in progress. */ }
-      return { main: git(main.resolved, ['rev-parse', '--short', 'HEAD']).trim(), merged, failed: { branch, error: error.message, conflicts }, notAttempted: branches.slice(index + 1) };
-    }
-    const result = { branch, method: fastForward ? 'fast-forward' : 'merge commit', deleted: false };
+  for (const [index, { branch, head, tree }] of sources.entries()) {
+    let result;
+    try { result = { branch, ...mergeInto(target, branch, head), deleted: false }; }
+    catch (error) { return { mainFolder: target.root, head: snapshot(target).head, merged, failed: { branch, error: error.message }, notAttempted: branches.slice(index + 1) }; }
     merged.push(result);
     if (keep) continue;
-    const tree = trees.find(item => item.branch === branch);
-    if (tree?.resolved && (here === tree.resolved || here.startsWith(`${tree.resolved}${path.sep}`))) { result.kept = 'Current worktree; remove it after leaving'; continue; }
+    if (tree && here.some(dir => dir === tree.root || dir.startsWith(`${tree.root}${path.sep}`))) { result.kept = 'Current worktree; remove it after leaving'; continue; }
     try {
-      if (tree) git(main.resolved, ['worktree', 'remove', tree.path]); // Refuses dirty or untracked work.
-      git(main.resolved, ['branch', '-d', branch]);
+      if (tree) git(target.root, ['worktree', 'remove', tree.root]);
+      git(target.root, ['branch', '-d', branch]);
       result.deleted = true;
     } catch (error) { result.kept = error.message; }
   }
-  return { main: git(main.resolved, ['rev-parse', '--short', 'HEAD']).trim(), merged };
+  return { mainFolder: target.root, head: snapshot(target).head, merged };
 }
 
 function commandVersion(command) {
@@ -857,13 +964,22 @@ function commandVersion(command) {
   return result.status === 0 ? result.stdout.trim() : null;
 }
 
+// merge relies on `git merge-tree --write-tree`, added in Git 2.38.
+export function gitMergeReady(versionText) {
+  const match = /(\d+)\.(\d+)/.exec(versionText || '');
+  return !!match && (Number(match[1]) > 2 || (Number(match[1]) === 2 && Number(match[2]) >= 38));
+}
+
 export function doctor() {
   const user = process.env.NEEF_USER_HOME || os.homedir();
   const roots = ['.agents/skills', '.claude/skills', '.codex/skills', '.copilot/skills', '.config/opencode/skills', '.config/zed/skills', '.claude/commands'];
   const checks = [];
-  const add = (name, ok, fix) => checks.push({ name, ok, ...(!ok ? { fix } : {}) });
+  const add = (name, ok, fix, severity) => checks.push({ name, ok, ...(!ok ? { fix } : {}), ...(severity ? { severity } : {}) });
   add('Node 20+', Number(process.versions.node.split('.')[0]) >= 20, 'Install Node.js 20 or later');
-  for (const command of ['git', 'claude', 'codex']) add(command, !!commandVersion(command), `Install ${command} and ensure it is on PATH`);
+  const gitVersion = commandVersion('git');
+  add('git', !!gitVersion, 'Install git and ensure it is on PATH');
+  if (gitVersion) add('Git 2.38+ for merge', gitMergeReady(gitVersion), `Found ${gitVersion}; upgrade Git to 2.38 or later before using merge`, 'warning');
+  for (const command of ['claude', 'codex']) add(command, !!commandVersion(command), `Install ${command} and ensure it is on PATH`);
   const shared = path.join(home(), 'neef.mjs');
   add('shared utility', exists(shared), 'Run node scripts/install.mjs --apply from the source project');
   const receipt = path.join(home(), 'install.json');
@@ -900,7 +1016,7 @@ export function doctor() {
     catch { add('Skills CLI metadata', false, 'Inspect invalid lock file; do not overwrite unrelated entries'); }
   }
   add('legacy ED absent', obsolete.length === 0, 'Inventory and remove only the eight exact ED installations with backups');
-  return { ok: checks.every(check => check.ok), checks, obsolete, discovery: 'Paths and configuration checked; native invocation requires a fresh agent session.' };
+  return { ok: checks.every(check => check.ok || check.severity === 'warning'), checks, obsolete, discovery: 'Paths and configuration checked; native invocation requires a fresh agent session.' };
 }
 
 export async function main(args = process.argv.slice(2)) {
@@ -916,7 +1032,7 @@ export async function main(args = process.argv.slice(2)) {
         .map(({ usage, changes, stops, aliases = [] }) => ({ command: usage, changes, stops, aliases })) })),
     invocation: { codex: '$neef <command>', claude: '/neef <command>' },
     aliases: { codex: subskillNames.map(command => `$neef-${command}`), claude: subskillNames.map(command => `/neef-${command}`) },
-    helperCommands: ['style [simple|guided|technical] (read or save global explanation preference)', 'prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'merge-candidates (read-only: local branches ahead of main with worktree and dirty flags)', 'merge <branch...> [--keep] (fast-forward or merge commit into the main worktree; stops and aborts at the first conflict; deletes merged branches and clean worktrees unless --keep)', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?,outcomes?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', outcomes: 'Development completion requires [{id,description,required,status,evidence}], with unique ids and at least one required outcome. Status is pending/passed/failed/blocked; passed outcomes need nonempty evidence. Required outcomes must pass, blockers must be explicitly cleared, and plan phases must finish before completion. Same-task writes preserve omitted outcomes; new tasks do not inherit them. Legacy saved states remain readable. Evidence is agent-reported, not independently proven.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?}]}. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. Shared state remains under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: `${commandCatalog.map(({ usage, aliases = [] }) => `${usage}${aliases.map(alias => ` (${alias} alias)`).join('')}`).join(', ')} are agent skill modes; prototype builds or refines isolated external demos and hands approved concepts to development without automatic production changes; options ranks project actions, or with a goal recommends an existing command, read-only including external state and without execution; bare shape offers three project-specific starters and waits without writes; shaping uses native questions and state-write then implements unless --discuss or discussion-only was requested; auto asks every decision in batched rounds, saves and self-challenges a plan, needs one explicit sign-off, then runs all phases without further prompts until complete or blocked; plan saves a complexity-sized full-feature roadmap then stops; challenge is read-only except external recommendations-write and never implements; next resumes unfinished work and runs all ready plan phases until complete or blocked, otherwise starts one revalidated follow-up` };
+    helperCommands: ['style [simple|guided|technical] (read or save global explanation preference)', 'prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'review [ref] (read-only: the last task\'s commits since its first begin or first save, whichever is earlier, or ref..HEAD, with saved decisions, plan, outcomes and known test commands)', 'merge-candidates (read-only: local branches ahead of main with worktree, dirty and taskComplete flags)', 'merge <branch...> [--keep] (user-chosen branches into main in order; stops at the first conflict; deletes merged branches and their worktrees unless --keep)', 'merge (from a linked worktree whose task is complete: merges its branch into main in the main folder; fast-forward else one merge commit; refuses conflicts, staged or in-progress work and never deletes branches)', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?,outcomes?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', outcomes: 'Development completion requires [{id,description,required,status,evidence}], with unique ids and at least one required outcome. Status is pending/passed/failed/blocked; passed outcomes need nonempty evidence. Required outcomes must pass, blockers must be explicitly cleared, and plan phases must finish before completion. Same-task writes preserve omitted outcomes; new tasks do not inherit them. Legacy saved states remain readable. Evidence is agent-reported, not independently proven.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?}]}. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. Shared state remains under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: `${commandCatalog.map(({ usage, aliases = [] }) => `${usage}${aliases.map(alias => ` (${alias} alias)`).join('')}`).join(', ')} are agent skill modes; prototype builds or refines isolated external demos and hands approved concepts to development without automatic production changes; options ranks project actions, or with a goal recommends an existing command, read-only including external state and without execution; bare shape offers three project-specific starters and waits without writes; shaping uses native questions and state-write then implements unless --discuss or discussion-only was requested; auto asks every decision in batched rounds, saves and self-challenges a plan, needs one explicit sign-off, then runs all phases without further prompts until complete or blocked; plan saves a complexity-sized full-feature roadmap then stops; challenge is read-only except external recommendations-write and never implements; review grades the last task's commits (or ref..HEAD) against its saved decisions, may run known test commands as evidence and has the same write boundary as challenge; next resumes unfinished work and runs all ready plan phases until complete or blocked, otherwise starts one revalidated follow-up` };
   if (command === 'doctor') return doctor();
   const p = project(cwd);
   if (command === 'style') {
@@ -938,7 +1054,8 @@ export async function main(args = process.argv.slice(2)) {
   if (command === 'prepare') return prepare(p, argument, input());
   if (command === 'commit') return commit(p, argument);
   if (command === 'merge-candidates') return mergeCandidates(p);
-  if (command === 'merge') return merge(p, args.slice(1).filter(arg => arg !== '--keep'), args.includes('--keep'));
+  if (command === 'merge') return args.length > 1 ? mergeBranches(p, args.slice(1).filter(arg => arg !== '--keep'), args.includes('--keep')) : merge(p);
+  if (command === 'review') return review(p, argument);
   fail(`Unknown helper command: ${command}; run help`);
 }
 

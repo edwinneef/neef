@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { gitMergeReady } from '../scripts/neef.mjs';
 
 const passedOutcomes = [{ id: 'fixture', description: 'Complete the fixture task', required: true, status: 'passed', evidence: 'Fixture assertions passed.' }];
 
@@ -318,6 +319,98 @@ test('begin preserves a different branch and refuses development outside main', 
   assert.equal(fs.readFileSync(path.join(f.root, 'user.txt'), 'utf8'), 'unfinished user work\n');
 });
 
+function worktreeFixture(t) {
+  const f = fixture(t);
+  const root = path.join(path.dirname(f.root), 'feature-worktree');
+  f.git('worktree', 'add', '-q', '-b', 'feature', root);
+  const run = (args, input, error) => {
+    const result = spawnSync(process.execPath, [helper, '--project', root, ...args], { encoding: 'utf8', input: input === undefined ? undefined : JSON.stringify(input), env: f.env(f.home) });
+    assert.equal(result.status, error ? 1 : 0, result.stdout + result.stderr);
+    const output = JSON.parse(result.stdout);
+    if (error) assert.match(output.error, error);
+    return output;
+  };
+  // Commit one owned change on the worktree branch and mark the worktree task complete.
+  const finish = (name, value) => {
+    const begin = run(['begin', 'worktree task']);
+    fs.writeFileSync(path.join(root, name), value);
+    const reviewed = run(['prepare', begin.baseline], { files: [name], message: `Change ${name} in worktree` });
+    const committed = run(['commit', reviewed.token]);
+    run(['state-write', committed.revision], { task: 'Worktree task', progress: 'complete', outcomes: passedOutcomes, verification: 'Fixture assertions passed', recommendations: { primary: null, alternatives: [], reason: 'Fixture worktree task is complete.' } });
+  };
+  return { ...f, worktree: root, wrun: run, finish };
+}
+
+test('a linked worktree develops and commits on its own branch while the main folder still requires main', t => {
+  const f = worktreeFixture(t);
+  const begin = f.wrun(['begin', 'worktree feature']);
+  assert.equal(begin.branch, 'feature');
+  assert.equal(begin.worktree, 'linked');
+  fs.writeFileSync(path.join(f.worktree, 'owned.txt'), 'worktree change\n');
+  const reviewed = f.wrun(['prepare', begin.baseline], { files: ['owned.txt'], message: 'Change on worktree branch' });
+  assert.equal(f.wrun(['commit', reviewed.token]).branch, 'feature');
+  assert.equal(f.git('show', 'feature:owned.txt'), 'worktree change');
+  assert.equal(f.git('show', 'main:owned.txt'), 'before');
+  assert.equal(f.run(['begin', 'main folder']).worktree, undefined);
+  f.git('switch', '-q', '-c', 'side');
+  f.run(['begin', 'side branch'], undefined, /Development requires main outside a linked worktree/);
+  assert.equal(spawnSync('git', ['-C', f.worktree, 'switch', '-q', '--detach'], { env: f.env(f.home) }).status, 0);
+  f.wrun(['begin', 'detached worktree'], undefined, /Detached HEAD/);
+});
+
+test('merge brings a completed worktree branch into main: fast-forward, then one merge commit', t => {
+  const f = worktreeFixture(t);
+  f.run(['merge'], undefined, /Merge runs from a linked worktree/);
+  const begin = f.wrun(['begin', 'unfinished']);
+  fs.writeFileSync(path.join(f.worktree, 'owned.txt'), 'first\n');
+  f.wrun(['merge'], undefined, /uncommitted changes/);
+  f.wrun(['commit', f.wrun(['prepare', begin.baseline], { files: ['owned.txt'], message: 'First change' }).token]);
+  f.wrun(['merge'], undefined, /task is not complete/);
+  f.finish('worktree.txt', 'from worktree\n');
+  const mainHead = f.git('rev-parse', 'main');
+  f.write('worktree.txt', 'user draft in main folder\n');
+  f.wrun(['merge'], undefined, /Merge refused: .*main folder left as it was/s);
+  assert.equal(f.git('rev-parse', 'main'), mainHead);
+  assert.equal(fs.readFileSync(path.join(f.root, 'worktree.txt'), 'utf8'), 'user draft in main folder\n');
+  fs.rmSync(path.join(f.root, 'worktree.txt'));
+  const fast = f.wrun(['merge']);
+  assert.equal(fast.merged, true);
+  assert.equal(fast.fastForward, true);
+  assert.equal(f.git('rev-parse', 'main'), f.git('rev-parse', 'feature'));
+  assert.equal(fs.readFileSync(path.join(f.root, 'worktree.txt'), 'utf8'), 'from worktree\n');
+  assert.equal(f.wrun(['merge']).reason, 'Already in main');
+  f.write('main.txt', 'main moved\n');
+  f.git('add', '--', 'main.txt');
+  f.git('commit', '-q', '-m', 'Main moves on');
+  f.finish('second.txt', 'second\n');
+  const merged = f.wrun(['merge']);
+  assert.equal(merged.fastForward, false);
+  assert.match(merged.recheck, /rerun focused checks/);
+  assert.equal(f.git('rev-list', '--parents', '-n', '1', 'main').split(' ').length, 3);
+  assert.equal(f.git('show', 'main:second.txt'), 'second');
+  assert.equal(f.git('branch', '--format=%(refname:short)'), 'feature\nmain');
+});
+
+test('merge refuses conflicts and unsafe main-folder states without touching either side', t => {
+  const f = worktreeFixture(t);
+  f.write('owned.txt', 'main edit\n');
+  f.git('commit', '-q', '-am', 'Main edits owned');
+  f.finish('owned.txt', 'worktree edit\n');
+  const mainHead = f.git('rev-parse', 'main');
+  const featureHead = f.git('rev-parse', 'feature');
+  f.wrun(['merge'], undefined, /conflicts with main; nothing merged/);
+  assert.equal(f.git('rev-parse', 'main'), mainHead);
+  assert.equal(f.git('rev-parse', 'feature'), featureHead);
+  assert.equal(f.git('status', '--porcelain'), '');
+  f.write('user.txt', 'staged user work\n');
+  f.git('add', '--', 'user.txt');
+  f.wrun(['merge'], undefined, /staged changes or conflicts/);
+  assert.equal(f.git('diff', '--cached', '--name-only'), 'user.txt');
+  f.git('switch', '-q', '-c', 'side');
+  f.wrun(['merge'], undefined, /Main folder is not on main/);
+  assert.equal(f.git('branch', '--show-current'), 'side');
+});
+
 test('invalid or oversized state and missing recovery backup fail without overwriting data', t => {
   const f = fixture(t, false);
   f.state('missing', 'Invalid progress', { progress: 'unknown' }, /Invalid state fields: progress must be "active" or "complete"/);
@@ -618,7 +711,7 @@ test('every main command installs a described subskill that routes through canon
   const plan = f.install();
   assert.equal(fs.existsSync(f.user), false);
   f.install(true);
-  const commands = ['task', 'shape', 'auto', 'plan', 'challenge', 'prototype', 'options', 'setup', 'merge', 'next', 'status', 'help'];
+  const commands = ['task', 'shape', 'auto', 'plan', 'challenge', 'review', 'prototype', 'options', 'setup', 'merge', 'next', 'status', 'help'];
   for (const command of ['proto', 'ask', 'continue', 'doctor']) for (const agent of ['.agents', '.claude']) assert.equal(fs.existsSync(path.join(f.user, agent, 'skills', `neef-${command}`)), false);
   assert.match(fs.readFileSync(path.join(f.user, '.claude/skills/neef-next/SKILL.md'), 'utf8'), /description: "Resume unfinished work, or do the next useful thing. Use only when explicitly invoked."/);
   assert.doesNotMatch(fs.readFileSync(path.join(f.user, '.claude/skills/neef-plan/SKILL.md'), 'utf8'), /Run Neef's/);
@@ -829,6 +922,15 @@ test('doctor reports a healthy isolated install, then edited files, locks and co
     assert.equal(broken[name]?.ok, false, name);
     assert.ok(broken[name].fix, name);
   }
+});
+
+test('doctor warns, without failing, when Git is older than 2.38 for merge', () => {
+  for (const version of ['git version 2.38.0', 'git version 2.54.0.windows.1', 'git version 2.39.3 (Apple Git-146)', 'git version 3.0.0']) assert.equal(gitMergeReady(version), true, version);
+  for (const version of ['git version 2.37.9', 'git version 1.99.0', '', null]) assert.equal(gitMergeReady(version), false, String(version));
+  const result = spawnSync(process.execPath, [helper, 'doctor'], { encoding: 'utf8' });
+  const check = JSON.parse(result.stdout).checks.find(item => item.name === 'Git 2.38+ for merge');
+  assert.equal(check.severity, 'warning');
+  assert.equal(check.ok, gitMergeReady(spawnSync('git', ['--version'], { encoding: 'utf8' }).stdout));
 });
 
 test('installer refuses unowned skill files and an existing installation lock', t => {
@@ -1695,6 +1797,66 @@ test('challenge routing stops before development in both installed copies', t =>
   }
 });
 
+test('review scopes the last task\'s commits from its first save and stays read-only', t => {
+  const f = fixture(t);
+  f.run(['review'], undefined, /No saved NEEF task; pass a ref/);
+  const before = f.git('rev-parse', 'HEAD');
+  const shaped = f.state('missing', 'Review me', { decisions: 'Owned file says after' });
+  assert.equal(shaped.state.start, before);
+  const begin = f.run(['begin', 'review me']);
+  f.write('owned.txt', 'after\n');
+  const committed = f.run(['commit', f.prepare(begin.baseline, ['owned.txt'], 'Make owned say after').token]);
+  const kept = f.state(committed.revision, 'Review me', { progress: 'complete', outcomes: passedOutcomes, recommendations: noRecommendation });
+  assert.equal(kept.state.start, before);
+  f.write('user.txt', 'later user commit\n');
+  f.git('commit', '-qam', 'Later user commit');
+  const stateBefore = fs.readFileSync(f.statePath(), 'utf8');
+  const scoped = f.run(['review']);
+  assert.equal(scoped.range, `${before}..${kept.state.head}`);
+  assert.deepEqual(scoped.commits.map(commit => commit.subject), ['Make owned say after']);
+  assert.equal(scoped.agreed.decisions, 'Owned file says after');
+  assert.match(scoped.diffstat, /owned\.txt/);
+  assert.deepEqual(f.run(['review', before]).commits.map(commit => commit.subject), ['Later user commit', 'Make owned say after']);
+  f.run(['review', 'no-such-ref'], undefined, /Unknown ref/);
+  f.run(['review', '--all'], undefined, /Invalid ref/);
+  assert.equal(fs.readFileSync(f.statePath(), 'utf8'), stateBefore);
+  assert.equal(f.git('status', '--porcelain'), '');
+  assert.equal(f.state(kept.revision, 'Next task').state.start, f.git('rev-parse', 'HEAD'));
+});
+
+test('review starts at the task\'s first begin when it commits before its first save', t => {
+  const f = fixture(t);
+  f.run(['begin', 'before previous save']);
+  const previous = f.state(f.run(['status']).revision, 'Previous task', { progress: 'complete', outcomes: passedOutcomes, recommendations: noRecommendation });
+  f.write('user.txt', 'unrelated earlier commit\n');
+  f.git('commit', '-qam', 'Earlier commit between tasks');
+  const before = f.git('rev-parse', 'HEAD');
+  const begin = f.run(['begin', 'commit first']);
+  f.write('owned.txt', 'committed before saving\n');
+  const committed = f.run(['commit', f.prepare(begin.baseline, ['owned.txt'], 'Commit before first save').token]);
+  const saved = f.state(committed.revision, 'Commit first');
+  assert.notEqual(previous.state.head, before);
+  assert.equal(saved.state.start, before);
+  assert.deepEqual(f.run(['review']).commits.map(commit => commit.subject), ['Commit before first save']);
+  f.write('owned.txt', 'later\n');
+  f.git('commit', '-qam', 'Later commit');
+  assert.equal(f.state(saved.revision, 'Brand new task').state.start, f.git('rev-parse', 'HEAD'));
+});
+
+test('review routing keeps the challenge boundary in both installed copies', t => {
+  const f = installation(t);
+  f.install(true);
+  for (const agent of ['.claude', '.agents']) {
+    const root = path.join(f.user, agent, 'skills/neef');
+    const skill = fs.readFileSync(path.join(root, 'SKILL.md'), 'utf8');
+    const guidance = fs.readFileSync(path.join(root, 'references/review.md'), 'utf8');
+    assert.match(skill, /`review \[ref\]`: read `references\/review\.md`; challenge boundary/);
+    assert.match(guidance, /External recommendation state is the only permitted write/);
+    assert.match(guidance, /project source and Git must stay unchanged/);
+    assert.match(guidance, /fresh native delegate/);
+  }
+});
+
 test('auto routing gates execution on one explicit sign-off in both installed copies', t => {
   const f = installation(t);
   f.install(true);
@@ -1705,7 +1867,7 @@ test('auto routing gates execution on one explicit sign-off in both installed co
     assert.match(skill, /`auto <feature>` or `next` starting `auto:`: read `references\/auto\.md`/);
     assert.match(guidance, /Only an explicit approval signs off/);
     assert.match(guidance, /never executes phases/);
-    assert.match(guidance, /no pushing, merging/);
+    assert.match(guidance, /no pushing, new branches or destructive actions/);
     assert.match(guidance, /Do not ask the user to confirm phases/);
     assert.match(guidance, /A bare `next` or `continue`.*is not approval/);
     assert.match(guidance, /sign-off are mandatory, however clear or small the request/);
@@ -1808,7 +1970,7 @@ test('a linked external home outside the project still supports continuity', t =
   assert.equal(f.git('status', '--porcelain'), '');
 });
 
-test('merge lists branches ahead of main, fast-forwards or merges, and deletes clean worktrees', t => {
+test('merge with chosen branches lists candidates, fast-forwards or merges, and deletes branches and worktrees', t => {
   const f = fixture(t);
   const tree = name => path.join(path.dirname(f.root), name);
   const commitIn = (dir, file, value) => {
@@ -1818,35 +1980,37 @@ test('merge lists branches ahead of main, fast-forwards or merges, and deletes c
   };
   f.git('worktree', 'add', '-b', 'diverged', tree('diverged'));
   commitIn(tree('diverged'), 'diverged.txt', 'diverged\n');
-  fs.writeFileSync(path.join(tree('diverged'), 'scratch.txt'), 'untracked\n');
   f.git('branch', 'merged-already');
   commitIn(f.root, 'main.txt', 'main\n');
   f.git('worktree', 'add', '-b', 'linear', tree('linear'));
   commitIn(tree('linear'), 'linear.txt', 'linear\n');
   f.git('worktree', 'add', '-b', 'kept', tree('kept'));
   commitIn(tree('kept'), 'kept.txt', 'kept\n');
+  fs.writeFileSync(path.join(tree('kept'), 'scratch.txt'), 'untracked\n');
   const listed = f.run(['merge-candidates']).candidates;
+  const row = name => listed.find(item => item.branch === name);
   assert.deepEqual(listed.map(item => item.branch).sort(), ['diverged', 'kept', 'linear']);
-  const diverged = listed.find(item => item.branch === 'diverged');
-  assert.equal(diverged.dirty, true);
-  assert.equal(diverged.fastForward, false);
-  assert.equal(listed.find(item => item.branch === 'linear').fastForward, true);
+  assert.equal(row('diverged').fastForward, false);
+  assert.equal(row('linear').fastForward, true);
+  assert.equal(row('kept').dirty, true);
+  assert.equal(row('linear').taskComplete, null);
+  f.run(['merge', 'linear', 'kept'], undefined, /kept has uncommitted changes/);
+  assert.equal(f.git('show', 'HEAD:main.txt'), 'main');
+  assert.equal(fs.existsSync(path.join(f.root, 'linear.txt')), false);
   const result = f.run(['merge', 'linear', 'diverged']);
-  assert.deepEqual(result.merged.map(({ branch, method }) => [branch, method]), [['linear', 'fast-forward'], ['diverged', 'merge commit']]);
-  assert.equal(result.merged[0].deleted, true);
+  assert.deepEqual(result.merged.map(({ branch, fastForward, deleted }) => [branch, fastForward, deleted]), [['linear', true, true], ['diverged', false, true]]);
   assert.equal(fs.existsSync(tree('linear')), false);
-  assert.equal(result.merged[1].deleted, false);
-  assert.match(result.merged[1].kept, /untracked|modified/);
-  assert.equal(fs.readFileSync(path.join(tree('diverged'), 'scratch.txt'), 'utf8'), 'untracked\n');
+  assert.equal(fs.existsSync(tree('diverged')), false);
   assert.equal(f.git('show', 'HEAD:diverged.txt'), 'diverged');
   assert.equal(f.git('show', 'HEAD:linear.txt'), 'linear');
-  assert.match(f.git('branch', '--list', 'linear'), /^$/);
+  assert.equal(f.git('branch', '--list', 'linear', 'diverged'), '');
+  fs.rmSync(path.join(tree('kept'), 'scratch.txt'));
   assert.equal(f.run(['merge', 'kept', '--keep']).merged[0].deleted, false);
   assert.match(f.git('branch', '--list', 'kept'), /kept/);
   assert.equal(fs.existsSync(tree('kept')), true);
 });
 
-test('merge stops at a conflict, restores main and refuses a dirty main or unknown branch', t => {
+test('merge with chosen branches stops at a conflict with main untouched and refuses bad names', t => {
   const f = fixture(t);
   f.git('branch', 'conflict');
   f.git('branch', 'later');
@@ -1863,13 +2027,11 @@ test('merge stops at a conflict, restores main and refuses a dirty main or unkno
   const head = f.git('rev-parse', 'HEAD');
   const result = f.run(['merge', 'conflict', 'later']);
   assert.equal(result.failed.branch, 'conflict');
-  assert.deepEqual(result.failed.conflicts, ['owned.txt']);
+  assert.match(result.failed.error, /conflicts with main/);
   assert.deepEqual(result.notAttempted, ['later']);
   assert.equal(f.git('rev-parse', 'HEAD'), head);
   assert.equal(f.git('status', '--porcelain'), '');
-  f.run(['merge', 'nope'], undefined, /No such branch: nope/);
-  f.run(['merge', 'main'], undefined, /Invalid branch/);
-  f.write('user.txt', 'dirty\n');
-  f.run(['merge', 'later'], undefined, /uncommitted changes/);
+  f.run(['merge', 'nope', 'later'], undefined, /No such branch: nope/);
+  f.run(['merge', 'main', 'later'], undefined, /Invalid branch/);
   assert.equal(f.git('rev-parse', 'HEAD'), head);
 });

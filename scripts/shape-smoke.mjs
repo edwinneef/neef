@@ -14,7 +14,8 @@ const deep = process.argv.includes('--deep');
 const discussion = process.argv.includes('--discussion-only') || process.argv.includes('--discuss');
 const starters = process.argv.includes('--starters');
 const challenge = process.argv.includes('--challenge');
-const clear = challenge || process.argv.includes('--clear');
+const review = process.argv.includes('--review');
+const clear = challenge || review || process.argv.includes('--clear');
 const automatic = process.argv.includes('--automatic');
 const autoChange = process.argv.includes('--auto-change');
 const auto = autoChange || process.argv.includes('--auto');
@@ -67,11 +68,41 @@ async function run(host) {
   const task = auto ? 'Change the default greeting to Hello, Neef!, add an exported farewell(name) returning Goodbye, <name>!, cover both with focused tests, and preserve named greetings.'
     : clear || automatic ? 'Change only the default greeting to Hello, Neef!, update its focused test, and preserve named greetings.'
     : 'Handle empty and whitespace-only names in the published greet API.';
-  const prompt = challenge
+  const prompt = review ? `${invocation} review`
+    : challenge
     ? `${invocation} challenge${deep ? ' --deep' : ''} Evaluate the greeting implementation against README.md and recommend the highest-value improvement. Save actionable advice for next.`
     : auto ? `${invocation} auto ${task}`
     : `${invocation}${automatic ? '' : ` shape${deep ? ' --deep' : ''}${discussion ? ' --discuss' : ''}`}${starters ? '' : ` ${task}`}`;
+  let reviewed;
+  if (review) {
+    // A completed NEEF task whose commit misses one agreed decision: named greetings break.
+    const neef = (args, input) => {
+      const result = spawnSync(process.execPath, [helper, ...args], { cwd: root, env, input: input && JSON.stringify(input), encoding: 'utf8', timeout: 30000 });
+      if (result.status !== 0) throw new Error(result.stdout);
+      return JSON.parse(result.stdout);
+    };
+    const decisions = 'Default greeting becomes Hello, Neef!; named greetings stay Hello, <name>!; focused tests cover both.';
+    const shaped = neef(['state-write', 'missing'], { task: 'Change the default greeting', progress: 'active', decisions });
+    fs.writeFileSync(path.join(root, 'index.mjs'), 'export function greet() { return "Hello, Neef!"; }\n');
+    fs.writeFileSync(path.join(root, 'index.test.mjs'), fs.readFileSync(path.join(root, 'index.test.mjs'), 'utf8').replace('"Hello, world!"', '"Hello, Neef!"'));
+    git(root, ['commit', '-qam', 'Change the default greeting to Hello, Neef!']);
+    reviewed = neef(['state-write', shaped.revision], { task: 'Change the default greeting', progress: 'complete', decisions, verification: 'Default greeting test passes',
+      outcomes: [{ id: 'default', description: 'Default greeting is Hello, Neef!', required: true, status: 'passed', evidence: 'index.test.mjs default test' }],
+      recommendations: { primary: null, alternatives: [], reason: 'Task complete.' } }).state;
+  }
   const first = await turn(prompt, 1);
+  if (review) {
+    const saved = state();
+    const head = git(root, ['rev-parse', 'HEAD']);
+    const kept = ['task', 'progress', 'decisions', 'verification', 'start', 'head'].every(key => JSON.stringify(saved?.[key]) === JSON.stringify(reviewed[key]));
+    const advice = `${JSON.stringify(saved?.recommendations?.primary)} ${first.final}`;
+    const passed = first.code === 0 && kept && head === reviewed.head && git(root, ['branch', '--show-current']) === initialBranch
+      && git(root, ['status', '--porcelain']) === '' && !!saved?.recommendations?.primary && /named|Ada|<name>/i.test(advice);
+    fs.writeFileSync(path.join(artifacts, `${host}.result.json`), JSON.stringify({ host, root, passed, kept, first, reviewed, saved }, null, 2));
+    console.log(JSON.stringify({ host, passed, kept, root, first: first.final }));
+    if (!passed) process.exitCode = 1;
+    return;
+  }
   if (starters) {
     const saved = state();
     const result = { host, root, first, head: git(root, ['rev-parse', 'HEAD']), status: git(root, ['status', '--porcelain']), state: saved };

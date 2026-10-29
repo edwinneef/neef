@@ -7,7 +7,7 @@ Current evidence for NEEF and how to reproduce it. The dated history of earlier 
 `npm run check` syntax-checks the helper and installer, then runs `node --test tests/*.test.mjs` with isolated `NEEF_HOME`, `NEEF_USER_HOME` and Git configuration. It covers:
 
 - State: revisions, locks, corruption recovery, the 8 KiB / 40-line budget, outcome records, plans, recommendations and continuity across tasks.
-- Git safety: main-only `begin`, baselines, `prepare` refusals, reviewed-token expiry, a failing pre-commit hook after the index lock, reviewed-diff drift, linked paths and submodules.
+- Git safety: main-only `begin` outside linked worktrees, worktree-branch commits and `merge` (fast-forward, merge commit, conflict and unsafe main-folder refusals), baselines, `prepare` refusals, reviewed-token expiry, a failing pre-commit hook after the index lock, reviewed-diff drift, linked paths and submodules.
 - Storage boundaries: state, baselines, preferences, prototypes and backups stay outside the project; baseline pruning keeps recent and referenced files.
 - Setup: discovery limits, managed AGENTS.md/CLAUDE.md blocks, backups, upgrades and rollback (rollback test runs on Windows only).
 - Installation: dry run, receipt hashes, backups, retirement of owned files, refusal of edited or unmanaged files, every reference installed for both hosts, and `doctor`.
@@ -22,7 +22,7 @@ Each runner uses the installed helper and refuses to start when `~/.neef/neef.mj
 | Runner | Scenarios (flags) |
 | --- | --- |
 | `scripts/smoke.mjs` | ordinary task (default), `--setup`, `--directions`, `--help`, `--alias`, `--next`, `--next-active`, `--next-discovery`, `--next-blocked`, `--next-exhausted`, `--next-denied`, `--completion`, `--completion-open`, `--continuity`; `--claude-only` / `--codex-only` |
-| `scripts/shape-smoke.mjs` | `--starters`, `--deep`, `--discuss`, `--discussion-only`, `--automatic`, `--auto`, `--auto-change`, `--clear`, `--challenge` |
+| `scripts/shape-smoke.mjs` | `--starters`, `--deep`, `--discuss`, `--discussion-only`, `--automatic`, `--auto`, `--auto-change`, `--clear`, `--challenge`, `--review` |
 | `scripts/plan-smoke.mjs` | `--small`, `--large`; `--claude` / `--codex` |
 | `scripts/advisor-smoke.mjs` | options (default), `--selection`, `--exhausted`, `--prototype`; `--claude` / `--codex` |
 | `scripts/prototype-smoke.mjs` | UI demo, refinement, handoff and algorithm demo (default), `--ui-only`; `--claude` / `--codex` |
