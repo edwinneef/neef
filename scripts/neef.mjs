@@ -55,6 +55,13 @@ function git(root, args, options = {}) {
   return result.stdout;
 }
 
+// Like git(), but reports the exit status for commands whose nonzero exit is an answer.
+function gitStatus(root, args) {
+  const result = spawnSync('git', ['-C', root, ...args], { encoding: 'utf8', env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' } });
+  if (result.error || result.status > 1) fail(result.error?.message || result.stderr.trim() || `Git failed: ${args[0]}`);
+  return result.status;
+}
+
 function canonical(p) {
   const resolved = fs.realpathSync.native(p);
   return process.platform === 'win32' ? resolved.replace(/^\\\\\?\\/, '').toLowerCase() : resolved;
@@ -682,6 +689,13 @@ function pruneBaselines() {
     try { if (fs.statSync(file).mtimeMs < cutoff) fs.unlinkSync(file); } catch { /* Pruning never blocks development. */ }
   }
 }
+// A linked worktree has its own git dir inside the shared common dir; the main folder's are the same.
+function linkedWorktree(p) {
+  if (!p.isGit) return false;
+  const [gitDir, commonDir] = git(p.root, ['rev-parse', '--path-format=absolute', '--git-dir', '--git-common-dir']).trim().split(/\r?\n/);
+  return canonical(gitDir) !== canonical(commonDir);
+}
+
 function begin(p, slug) {
   // A completely empty folder is a new project: give it Git on main so work can be committed at once.
   const gitInitialized = !p.isGit && fs.readdirSync(p.root).length === 0;
@@ -695,12 +709,13 @@ function begin(p, slug) {
   if (!p.isGit) return { baseline: null, ...snapshot(p), revision: initialized.revision, context, note: 'Non-Git project; no branch or commit. Ask before running git init to enable commits' };
   const before = snapshot(p);
   if (!before.branch) fail('Detached HEAD; select main explicitly');
-  if (before.branch !== 'main') fail('Development requires main; preserve the current branch and report the mismatch');
+  const linked = linkedWorktree(p);
+  if (!linked && before.branch !== 'main') fail('Development requires main outside a linked worktree; preserve the current branch and report the mismatch');
   pruneBaselines();
   const id = crypto.randomUUID();
   atomic(baselineFile(id), JSON.stringify({ project: p.root, slug: slug || null, ...before }));
   const greenfield = !before.head && before.changes.length === 0;
-  return { baseline: id, ...before, ...(gitInitialized ? { gitInitialized } : {}), ...(greenfield ? { greenfield } : {}), revision: initialized.revision, context };
+  return { baseline: id, ...before, ...(linked ? { worktree: 'linked' } : {}), ...(gitInitialized ? { gitInitialized } : {}), ...(greenfield ? { greenfield } : {}), revision: initialized.revision, context };
 }
 
 function prepare(p, id, input) {
@@ -778,6 +793,39 @@ function commit(p, token) {
   });
 }
 
+// Merge a completed linked worktree's branch into main in the main folder: fast-forward when
+// possible, otherwise one merge commit. Conflicts are detected before the main folder is touched.
+function merge(p) {
+  if (!linkedWorktree(p)) fail('Merge runs from a linked worktree');
+  const source = snapshot(p);
+  if (!source.branch) fail('Detached HEAD');
+  if (source.branch === 'main') fail('Worktree is on main; nothing to merge');
+  if (source.changes.length) fail('Worktree has uncommitted changes; preserve them and finish the task before merging');
+  const saved = stateRead(p);
+  if (saved.error) fail(saved.error);
+  // Completion must be recorded after the branch's last commit, so later commits are never merged unverified.
+  if (!saved.state?.task || saved.state.progress !== 'complete' || saved.state.head !== source.head) fail('Worktree task is not complete; finish and verify it before merging');
+  const listed = git(p.root, ['worktree', 'list', '--porcelain']).split(/\r?\n/).find(line => line.startsWith('worktree '));
+  const target = project(listed?.slice('worktree '.length) || fail('Main folder not found'));
+  const before = snapshot(target);
+  if (before.branch !== 'main') fail('Main folder is not on main; preserve it and report the mismatch');
+  if (before.changes.some(item => item.code[0] !== ' ' && item.code !== '??')) fail('Main folder has staged changes or conflicts; leave them untouched');
+  const mergeHead = () => exists(path.resolve(target.root, git(target.root, ['rev-parse', '--git-path', 'MERGE_HEAD']).trim()));
+  if (mergeHead()) fail('Main folder has a merge in progress; leave it untouched');
+  const result = { branch: source.branch, mainFolder: target.root };
+  if (gitStatus(p.root, ['merge-base', '--is-ancestor', source.head, before.head]) === 0) return { ...result, merged: false, reason: 'Already in main', head: before.head };
+  const fastForward = gitStatus(p.root, ['merge-base', '--is-ancestor', before.head, source.head]) === 0;
+  if (!fastForward && gitStatus(p.root, ['merge-tree', '--write-tree', '--quiet', before.head, source.head]) !== 0) fail('Branch conflicts with main; nothing merged and both sides left as they were');
+  let output;
+  try { output = git(target.root, ['merge', fastForward ? '--ff-only' : '--no-ff', '--no-edit', source.branch]); }
+  catch (error) {
+    if (mergeHead()) git(target.root, ['merge', '--abort']);
+    fail(`Merge refused: ${error.message}; main folder left as it was`);
+  }
+  const after = snapshot(target);
+  return { ...result, merged: true, fastForward, head: after.head, output, ...(fastForward ? {} : { recheck: 'Main has a new merge commit; rerun focused checks in the main folder' }) };
+}
+
 function commandVersion(command) {
   // Windows npm shims need cmd; command names here are fixed, never user input.
   const result = spawnSync(process.platform === 'win32' ? 'cmd.exe' : command,
@@ -845,7 +893,7 @@ export async function main(args = process.argv.slice(2)) {
         .map(({ usage, changes, stops, aliases = [] }) => ({ command: usage, changes, stops, aliases })) })),
     invocation: { codex: '$neef <command>', claude: '/neef <command>' },
     aliases: { codex: subskillNames.map(command => `$neef-${command}`), claude: subskillNames.map(command => `/neef-${command}`) },
-    helperCommands: ['style [simple|guided|technical] (read or save global explanation preference)', 'prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?,outcomes?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', outcomes: 'Development completion requires [{id,description,required,status,evidence}], with unique ids and at least one required outcome. Status is pending/passed/failed/blocked; passed outcomes need nonempty evidence. Required outcomes must pass, blockers must be explicitly cleared, and plan phases must finish before completion. Same-task writes preserve omitted outcomes; new tasks do not inherit them. Legacy saved states remain readable. Evidence is agent-reported, not independently proven.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?}]}. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. Shared state remains under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: `${commandCatalog.map(({ usage, aliases = [] }) => `${usage}${aliases.map(alias => ` (${alias} alias)`).join('')}`).join(', ')} are agent skill modes; prototype builds or refines isolated external demos and hands approved concepts to development without automatic production changes; options ranks project actions, or with a goal recommends an existing command, read-only including external state and without execution; bare shape offers three project-specific starters and waits without writes; shaping uses native questions and state-write then implements unless --discuss or discussion-only was requested; auto asks every decision in batched rounds, saves and self-challenges a plan, needs one explicit sign-off, then runs all phases without further prompts until complete or blocked; plan saves a complexity-sized full-feature roadmap then stops; challenge is read-only except external recommendations-write and never implements; next resumes unfinished work and runs all ready plan phases until complete or blocked, otherwise starts one revalidated follow-up` };
+    helperCommands: ['style [simple|guided|technical] (read or save global explanation preference)', 'prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'merge (from a linked worktree whose task is complete: merges its branch into main in the main folder; fast-forward else one merge commit; refuses conflicts, staged or in-progress work and never deletes branches)', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?,outcomes?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', outcomes: 'Development completion requires [{id,description,required,status,evidence}], with unique ids and at least one required outcome. Status is pending/passed/failed/blocked; passed outcomes need nonempty evidence. Required outcomes must pass, blockers must be explicitly cleared, and plan phases must finish before completion. Same-task writes preserve omitted outcomes; new tasks do not inherit them. Legacy saved states remain readable. Evidence is agent-reported, not independently proven.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?}]}. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. Shared state remains under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: `${commandCatalog.map(({ usage, aliases = [] }) => `${usage}${aliases.map(alias => ` (${alias} alias)`).join('')}`).join(', ')} are agent skill modes; prototype builds or refines isolated external demos and hands approved concepts to development without automatic production changes; options ranks project actions, or with a goal recommends an existing command, read-only including external state and without execution; bare shape offers three project-specific starters and waits without writes; shaping uses native questions and state-write then implements unless --discuss or discussion-only was requested; auto asks every decision in batched rounds, saves and self-challenges a plan, needs one explicit sign-off, then runs all phases without further prompts until complete or blocked; plan saves a complexity-sized full-feature roadmap then stops; challenge is read-only except external recommendations-write and never implements; next resumes unfinished work and runs all ready plan phases until complete or blocked, otherwise starts one revalidated follow-up` };
   if (command === 'doctor') return doctor();
   const p = project(cwd);
   if (command === 'style') {
@@ -866,6 +914,7 @@ export async function main(args = process.argv.slice(2)) {
   if (command === 'state-recover') return stateRecover(p, argument);
   if (command === 'prepare') return prepare(p, argument, input());
   if (command === 'commit') return commit(p, argument);
+  if (command === 'merge') return merge(p);
   fail(`Unknown helper command: ${command}; run help`);
 }
 

@@ -17,7 +17,7 @@ The zones organize every invocation. Show headings only when useful; small tasks
 - **Evaluate:** Match every required outcome to its result and evidence. Missing required evidence keeps development unfinished.
 - **Follow-up:** Report results, changed files, checks and required gaps, then give one concrete advisory next command.
 
-Implement and verify the request, commit only owned work when safe, and save continuity for either agent. Otherwise record the blocker and preserved work. NEEF authorizes scoped local edits, checks and commits on main. Keep development on main; create no branches or worktrees. If another branch is checked out, preserve it and report the mismatch; pause project edits and commits until main is selected. Pushing, merging, destructive actions and scope expansion need separate user authorization.
+Implement and verify the request, commit only owned work when safe, and save continuity for either agent. Otherwise record the blocker and preserved work. NEEF authorizes scoped local edits, checks and commits on main, or on a linked worktree's branch; create no branches or worktrees. In the main folder off main, preserve the branch, report it and pause edits and commits. Pushing, destructive actions and scope expansion need separate user authorization; merge only per `references/completion.md`.
 
 Use Node 20+ and Git with `~/.neef/neef.mjs`; resolve the actual home and quote absolute paths. Run `node <helper> help` when command contracts are missing or changed. Commands use cwd as the project; `--project <path>` overrides it.
 
@@ -58,6 +58,7 @@ Before task-state writes, read `references/completion.md` for outcome records, r
 Commit small completed increments often, after focused checks; each completed phase, or coherent part of one, is a commit opportunity. Inspect each increment's diff and distinguish pre-existing failures from regressions. Track owned files explicitly. Never discard, stash, clean, reset, force-push, rewrite history, delete branches, or change global Git settings. Never include unrelated work.
 
 Run `prepare <baseline-id>` with stdin JSON `{"files":["relative/path"],"message":"Describe the change"}`. Inspect its staged diff and returned token before `commit <token>`. The helper cannot prove authorship of later edits: confirm every selected change belongs to this task. Never re-baseline dirty overlapping work to evade ownership checks. If a file had user edits before NEEF began, preserve it and skip its commit. If a safe commit is unavailable, leave edits intact and report why. Git hooks remain active and are trusted project code.
+
 
 ## Follow-up
 

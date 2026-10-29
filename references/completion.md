@@ -36,6 +36,10 @@ Report the result and relevant evidence briefly, including any required gap. Sca
 
 Prototype completion follows `references/prototype.md`: demonstrate the bounded concept and state shortcuts and limits. Its handoff does not acquire production outcome records, commits or task-state writes. Production development retains the required outcomes and evidence above.
 
+## Merge a linked worktree
+
+When `begin` reports `worktree: "linked"`, the task's commits land on that worktree's branch. After the final state save marks the task complete, run helper `merge` from the worktree. It brings the branch into main in the main folder: fast-forward when possible, otherwise one merge commit. If it refuses (conflict, main folder off main, staged or in-progress work, completion not recorded after the last commit), leave both sides intact, save the task active with that blocker and report it. After a merge commit, rerun the focused checks in the main folder; report failures as a blocker without reverting. Never delete the branch or worktree.
+
 ## Save task continuity
 
 Use `state-write <revision>` with stdin JSON containing `task`, `progress` (`active` or `complete`), `baseline`, `decisions`, `verification`, `next`, `blockers` and development `outcomes` (contract above); the four note fields remain strings. Reuse the latest revision from `begin`, `commit`, bootstrap/setup or state mutation. Use `status` when no revision is available, a check fails, or progress needs reconciliation. Save at useful milestones and before stopping. HEAD changes expire a baseline; begin again before the next increment's edits. Inspect a corrupt state's backup before `state-recover <revision>`.
