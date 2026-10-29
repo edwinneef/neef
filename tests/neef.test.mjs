@@ -689,6 +689,9 @@ test('help groups every command and alias by intent without bootstrapping a proj
   assert.match(row('options').stops, /later explicit selection/);
   assert.match(row('options').stops, /never invokes/);
   assert.deepEqual(row('options').aliases, ['ask']);
+  assert.equal(row('prompt').command, 'prompt <idea>');
+  assert.match(row('prompt').changes, /read-only/);
+  assert.match(row('prompt').stops, /never runs it/);
   assert.match(row('next').stops, /resumed until complete or blocked/);
   assert.deepEqual(row('next').aliases, ['continue']);
   assert.equal(row('ask'), undefined);
@@ -711,7 +714,7 @@ test('every main command installs a described subskill that routes through canon
   const plan = f.install();
   assert.equal(fs.existsSync(f.user), false);
   f.install(true);
-  const commands = ['task', 'shape', 'auto', 'plan', 'challenge', 'review', 'prototype', 'options', 'setup', 'next', 'status', 'help'];
+  const commands = ['task', 'shape', 'auto', 'plan', 'challenge', 'review', 'prototype', 'options', 'prompt', 'setup', 'next', 'status', 'help'];
   for (const command of ['proto', 'ask', 'continue', 'doctor']) for (const agent of ['.agents', '.claude']) assert.equal(fs.existsSync(path.join(f.user, agent, 'skills', `neef-${command}`)), false);
   assert.match(fs.readFileSync(path.join(f.user, '.claude/skills/neef-next/SKILL.md'), 'utf8'), /description: "Resume unfinished work, or do the next useful thing. Use only when explicitly invoked."/);
   assert.doesNotMatch(fs.readFileSync(path.join(f.user, '.claude/skills/neef-plan/SKILL.md'), 'utf8'), /Run Neef's/);
@@ -828,6 +831,8 @@ test('advisor aliases install shared read-only guidance without replacing unfini
     assert.equal(fs.readFileSync(path.join(root, 'references/follow-up.md'), 'utf8'), followUp);
     assert.match(skill, /`options \[goal\]` or `ask <goal>`: read `references\/advisor.md`/);
     assert.match(skill, /Advice is read-only, including external state/);
+    assert.match(skill, /`prompt <idea>`: read `references\/prompt.md`; read-only, then stop/);
+    assert.match(fs.readFileSync(path.join(root, 'references/prompt.md'), 'utf8'), /Do not run it, start a task/);
     assert.match(followUp, /Finish each task with `state-write`, saving progress and this evaluation atomically/);
     assert.match(skill, /read `references\/follow-up.md` to save progress/);
   }
@@ -835,6 +840,7 @@ test('advisor aliases install shared read-only guidance without replacing unfini
   assert.ok(help.commands.includes('options [goal]'));
   assert.ok(help.commands.includes('ask [goal] (alias of options)'));
   assert.ok(help.commands.includes('prototype <description>'));
+  assert.ok(help.commands.includes('prompt <idea>'));
   assert.deepEqual(f.run(['status']), before);
   assert.equal(f.run(['next']).state.task, saved.state.task);
   assert.match(guidance, /Advice ends before work begins/);
