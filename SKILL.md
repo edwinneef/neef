@@ -23,7 +23,7 @@ Use Node 20+ and Git with `~/.neef/neef.mjs`; resolve the actual home and quote 
 
 ## Route the invocation
 
-For every invocation, read `references/explanation-styles.md` and run helper `style` to apply the explanation preference.
+Always read `references/explanation-styles.md` and apply helper `style`.
 
 UI work: read `references/personal-design.md`.
 
@@ -38,6 +38,7 @@ Route leading mode commands first; match bare modes exactly. Ask for missing sub
 - `review [ref]`: read `references/review.md`; challenge boundary, but known test commands may run as evidence.
 - `prototype <description>` or `proto <description>`: read `references/prototype.md`; build or refine an isolated working demonstration and stop at its handoff. Preserve project files, Git and task state. Skip development below unless production implementation is explicitly requested.
 - `options [goal]` or `ask <goal>`: read `references/advisor.md`; inspect and recommend, then stop. Advice is read-only, including external state. Skip all sections below until the user explicitly selects work.
+- `prompt <idea>`: read `references/prompt.md`; read-only, then stop.
 - `merge [branch...] [--keep]`: read `references/merge.md`; only it may delete branches.
 - `setup`: run helper `setup`, then inspect code and commands. Save source-backed architecture using `context-write <revision>` with stdin `{"architecture":"..."}`. The helper backs up and preserves existing AGENTS.md/CLAUDE.md content while adding next-prompt directions. Report changes and safety findings; run no project commands, installs or hooks, and never replace instructions or generate configuration.
 - `doctor`: run helper `doctor`. Report failed checks and concrete fixes; do not repair implicitly.
@@ -57,7 +58,7 @@ Before task-state writes, read `references/completion.md` for outcome records, r
 
 ## Evaluate and commit
 
-Commit small completed increments often, after focused checks; each completed phase, or coherent part of one, is a commit opportunity. Inspect each increment's diff and distinguish pre-existing failures from regressions. Track owned files explicitly. Never discard, stash, clean, reset, force-push, rewrite history, delete branches, or change global Git settings. Never include unrelated work.
+Commit small completed increments often, after focused checks, such as each completed phase or coherent part of one. Inspect each increment's diff and distinguish pre-existing failures from regressions. Track owned files explicitly. Never discard, stash, clean, reset, force-push, rewrite history, delete branches, or change global Git settings. Never include unrelated work.
 
 Run `prepare <baseline-id>` with stdin JSON `{"files":["relative/path"],"message":"Describe the change"}`. Inspect its staged diff and returned token before `commit <token>`. The helper cannot prove authorship of later edits: confirm every selected change belongs to this task. Never re-baseline dirty overlapping work to evade ownership checks. If a file had user edits before NEEF began, preserve it and skip its commit. If a safe commit is unavailable, leave edits intact and report why. Git hooks remain active and are trusted project code.
 
