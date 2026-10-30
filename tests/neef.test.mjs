@@ -1888,6 +1888,7 @@ test('auto routing gates execution on one explicit sign-off in both installed co
     assert.match(guidance, /Do not ask the user to confirm phases/);
     assert.match(guidance, /A bare `next` or `continue`.*is not approval/);
     assert.match(guidance, /sign-off are mandatory, however clear or small the request/);
+    assert.match(guidance, /user input each phase still needs from its `userInput`/);
     assert.match(fs.readFileSync(path.join(root, 'references/plan.md'), 'utf8'), /starts `auto:`, the plan is not signed off: read `references\/auto\.md`/);
   }
 });
