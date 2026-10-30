@@ -1718,6 +1718,15 @@ test('plans preserve continuity through setup, advice, recovery and same-task wr
   assert.equal(newTask.state.plan, undefined);
 });
 
+test('plan phases can name the input only the user can supply', t => {
+  const f = fixture(t);
+  const plan = featurePlan();
+  plan.phases[1].userInput = 'Choose the public entry point name';
+  const saved = f.state('missing', 'Plan feature', { plan });
+  assert.equal(saved.state.plan.phases[1].userInput, 'Choose the public entry point name');
+  assert.equal(saved.state.plan.phases[0].userInput, undefined);
+});
+
 test('invalid roadmap dependencies, phase statuses and acceptance evidence cannot overwrite saved work', t => {
   const f = fixture(t);
   const saved = f.state('missing', 'Plan feature', { plan: featurePlan() });
@@ -1735,6 +1744,8 @@ test('invalid roadmap dependencies, phase statuses and acceptance evidence canno
     plan => { plan.scale = 'small'; },
     plan => { plan.phases = plan.phases.slice(0, 1); },
     plan => { plan.phases = []; },
+    plan => { plan.phases[1].userInput = ''; },
+    plan => { plan.phases[1].userInput = 'x'.repeat(301); },
   ];
   for (const mutate of mutations) {
     const plan = featurePlan();
