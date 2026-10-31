@@ -1099,17 +1099,34 @@ test('setup upgrades an unedited earlier direction block in place', t => {
   assert.deepEqual(f.run(['setup']).directions, { files: [], backup: null });
 });
 
+// Reverts the direction block to the release that wrote modes as `/neef next` instead of `/neef-next`.
+const spacedModes = text => {
+  const spaced = text.replace(/current host's syntax, never a bare prose prompt: .*? or `\$neef \.\.\.`\./, () => "current host's syntax (`/neef ...` in Claude Code, `$neef ...` in Codex), never a bare prose prompt.")
+    .replace('bare `neef-next`', 'bare `neef next`').replace('`/neef-shape <next goal>`', '`/neef shape <next goal>`');
+  assert.notEqual(spaced, text);
+  return spaced;
+};
+
 test('setup adds user-unblock guidance to the previous NEEF-command direction block', t => {
   const f = fixture(t);
   const unblock = / When only the user can unblock the work[^\n]*?policy denial\./;
   const current = fs.readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
   assert.match(current, unblock);
-  const previous = current.replace(unblock, '');
+  const previous = spacedModes(current.replace(unblock, ''));
   f.write('CLAUDE.md', previous);
   assert.deepEqual(f.run(['setup']).directions.files, ['AGENTS.md', 'CLAUDE.md']);
   const claude = fs.readFileSync(path.join(f.root, 'CLAUDE.md'), 'utf8');
   assert.equal(claude, current);
   assert.match(claude, /placeholders list what NEEF needs reported back/);
+});
+
+test('setup upgrades the spaced-mode direction block to hyphenated mode skills', t => {
+  const f = fixture(t);
+  const current = fs.readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+  assert.match(current, /`\$neef-next \.\.\.` in Codex/);
+  f.write('CLAUDE.md', spacedModes(current));
+  f.run(['setup']);
+  assert.equal(fs.readFileSync(path.join(f.root, 'CLAUDE.md'), 'utf8'), current);
 });
 
 test('setup refuses unsafe or edited instructions before changing either instruction file', t => {
