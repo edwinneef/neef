@@ -14,4 +14,4 @@ Report, for each decision or required outcome: met, partly met or missed, with c
 
 When actionable, persist the single highest-value fix and at most two alternatives with `recommendations-write <current-revision>`, using the `primary:{kind,action,reason}`, `alternatives:[...]` schema. Use RECOMMENDED or OPTIONAL; REQUIRED stays reserved for unfinished original scope. Preserve the task, progress, decisions, next, baseline and context. After a revision conflict, read status again and reconcile; report persistence failures. With nothing to fix, save `primary:null`, `alternatives:[]` and a reason. External recommendation state is the only permitted write.
 
-End with the host's next command for the top fix when there is one (`/neef next` in Claude Code, `$neef next` in Codex). Stop here, even when a fix is obvious.
+End with the host's next command for the top fix when there is one (`/neef-next` in Claude Code, `$neef-next` in Codex). Stop here, even when a fix is obvious.
