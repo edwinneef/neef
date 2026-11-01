@@ -749,7 +749,7 @@ test('every main command installs a described subskill that routes through canon
   const plan = f.install();
   assert.equal(fs.existsSync(f.user), false);
   f.install(true);
-  const commands = ['task', 'shape', 'auto', 'plan', 'challenge', 'review', 'prototype', 'options', 'prompt', 'setup', 'merge', 'next', 'status', 'help'];
+  const commands = ['task', 'shape', 'auto', 'plan', 'challenge', 'review', 'docs', 'prototype', 'options', 'prompt', 'setup', 'merge', 'next', 'status', 'help'];
   for (const command of ['proto', 'ask', 'continue', 'doctor']) for (const agent of ['.agents', '.claude']) assert.equal(fs.existsSync(path.join(f.user, agent, 'skills', `neef-${command}`)), false);
   assert.match(fs.readFileSync(path.join(f.user, '.claude/skills/neef-next/SKILL.md'), 'utf8'), /description: "Resume unfinished work, or do the next useful thing. Use only when explicitly invoked."/);
   assert.doesNotMatch(fs.readFileSync(path.join(f.user, '.claude/skills/neef-plan/SKILL.md'), 'utf8'), /Run Neef's/);
@@ -1923,6 +1923,35 @@ test('review routing keeps the challenge boundary in both installed copies', t =
     assert.match(guidance, /External recommendation state is the only permitted write/);
     assert.match(guidance, /project source and Git must stay unchanged/);
     assert.match(guidance, /fresh native delegate/);
+  }
+});
+
+test('docs lists agent instruction files first, skips history and ignored files, and stays read-only', t => {
+  const f = fixture(t);
+  for (const name of ['AGENTS.md', 'pkg/CLAUDE.md', '.claude/commands/run.md', 'skills/x/SKILL.md', 'README.md', 'docs/api.md', 'CHANGELOG.md', 'LICENSE.md', 'ignored/notes.md', 'code.js']) f.write(name, 'x\n');
+  f.write('.gitignore', 'ignored/\n');
+  f.git('add', 'AGENTS.md', 'README.md', '.gitignore');
+  f.git('commit', '-qm', 'Add docs');
+  const stateDir = path.join(f.home, 'state');
+  const statusBefore = f.git('status', '--porcelain');
+  const result = f.run(['docs']);
+  assert.deepEqual(result.agent, ['.claude/commands/run.md', 'AGENTS.md', 'pkg/CLAUDE.md', 'skills/x/SKILL.md']);
+  assert.deepEqual(result.docs, ['README.md', 'docs/api.md']);
+  assert.deepEqual(result.skipped, ['CHANGELOG.md', 'LICENSE.md']);
+  assert.equal(f.git('status', '--porcelain'), statusBefore);
+  assert.equal(fs.existsSync(stateDir) && fs.readdirSync(stateDir).length > 0, false);
+});
+
+test('docs routing keeps the challenge boundary in both installed copies', t => {
+  const f = installation(t);
+  f.install(true);
+  for (const agent of ['.claude', '.agents']) {
+    const root = path.join(f.user, agent, 'skills/neef');
+    const skill = fs.readFileSync(path.join(root, 'SKILL.md'), 'utf8');
+    const guidance = fs.readFileSync(path.join(root, 'references/docs.md'), 'utf8');
+    assert.match(skill, /`docs`: read `references\/docs\.md`; challenge boundary/);
+    assert.match(guidance, /External recommendation state is the only permitted write/);
+    assert.match(guidance, /leave project files and Git unchanged/);
   }
 });
 

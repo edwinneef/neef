@@ -36,6 +36,7 @@ Route leading mode commands first; match bare modes exactly. Ask for missing sub
 - `plan <feature>`: read `references/plan.md`; save the full feature plan and stop. Only external state writes are permitted. Skip development below.
 - `challenge [--deep] <topic>`: read `references/challenge.md`. Project files and Git are read-only. The only permitted write is external `recommendations-write`; then report and stop. Skip all sections below in this mode.
 - `review [ref]`: read `references/review.md`; challenge boundary, but known test commands may run as evidence.
+- `docs`: read `references/docs.md`; challenge boundary.
 - `prototype <description>` or `proto <description>`: read `references/prototype.md`; build or refine an isolated working demonstration and stop at its handoff. Preserve project files, Git and task state. Skip development below unless production implementation is explicitly requested.
 - `options [goal]` or `ask <goal>`: read `references/advisor.md`; inspect and recommend, then stop. Advice is read-only, including external state. Skip all sections below until the user explicitly selects work.
 - `prompt <idea>`: read `references/prompt.md`; read-only, then stop.
@@ -50,11 +51,11 @@ Route leading mode commands first; match bare modes exactly. Ask for missing sub
 
 Read applicable AGENTS.md, CLAUDE.md, relevant code and helper `status`; `next` already includes status. Reuse instructions already read in this session unless changed. `begin` bootstraps missing `context`. Cached facts never override current instructions. On persistence failure, preserve state, report it and continue independent work. Reconcile stale state; retain unfinished work unless the user replaces it. Before edits that may be committed, run `begin <short-task-slug>` for a baseline. Commits require the returned baseline ID.
 
-For development, read `references/completion.md`. Make the smallest change with focused checks; fix introduced regressions. Keep existing stacks, patterns and tooling. If `begin` reports `greenfield`, read `references/start.md`. Runnable work ends verified to start, with run command or URL. Ordinary work needs no extra plans, full suite, review or interview. Execute authorized plan phases until complete or no safe work remains. Inspect and use reasonable defaults; ask only for essential missing information or authority. Continue independent work around blockers. Batch independent calls; give brief progress updates.
+For development and before task-state writes, read `references/completion.md`. Make the smallest change with focused checks; fix introduced regressions. Keep existing stacks, patterns and tooling. If `begin` reports `greenfield`, read `references/start.md`. Runnable work ends verified to start, with run command or URL. Ordinary work needs no extra plans, full suite, review or interview. Execute authorized plan phases until complete or no safe work remains. Inspect and use reasonable defaults; ask only for essential missing information or authority. Continue independent work around blockers. Batch independent calls; give brief progress updates.
 
 Use native delegates only for independent investigation or disjoint edits. Bound their scope; own integration, verification, Git and state.
 
-Before task-state writes, read `references/completion.md` for outcome records, revision reuse and recovery. Save at useful milestones and before stopping.
+Save at useful milestones and before stopping.
 
 ## Evaluate and commit
 
