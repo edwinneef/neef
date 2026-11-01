@@ -115,6 +115,16 @@ test('explanation style defaults read-only and persists globally without touchin
   assert.deepEqual(fs.readdirSync(f.root), []);
 });
 
+test('style saves kid and documents it for a 12-year-old with examples and analogies', t => {
+  const f = fixture(t, false);
+  assert.equal(f.run(['style', 'kid']).style, 'kid');
+  assert.equal(f.run(['style']).style, 'kid');
+  assert.ok(f.run(['style']).available.includes('kid'));
+  const guide = fs.readFileSync(new URL('../references/explanation-styles.md', import.meta.url), 'utf8');
+  assert.match(guide, /## Kid\r?\n\r?\nExplain as you would to a curious 12-year-old\..*example or analogy for each new idea/);
+  assert.match(guide, /`\$neef style kid`/);
+});
+
 test('style rejects invalid input and preserves corrupt or locked preferences', t => {
   const f = fixture(t, false);
   f.run(['style', 'verbose'], undefined, /Choose style/);
@@ -450,7 +460,7 @@ test('every script parses and help lists every catalog mode', () => {
     assert.equal(result.status, 0, `${name}: ${result.stderr}`);
   }
   const help = JSON.parse(spawnSync(process.execPath, [helper, 'help'], { encoding: 'utf8' }).stdout);
-  for (const usage of ['<task>', 'style [simple|guided|technical]', 'doctor', 'prototype <description> (proto alias)']) assert.ok(help.modes.includes(usage), usage);
+  for (const usage of ['<task>', 'style [simple|guided|technical|kid]', 'doctor', 'prototype <description> (proto alias)']) assert.ok(help.modes.includes(usage), usage);
 });
 
 test('non-empty non-Git project supports state without creating Git or scaffolding', t => {

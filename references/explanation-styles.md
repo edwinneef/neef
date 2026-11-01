@@ -1,12 +1,12 @@
 # Explanation styles
 
-The initial default is Simple. Change it with `$neef style simple`, `$neef style guided` or `$neef style technical` in Codex; use `/neef` in Claude Code. `$neef style` shows the current choice. An explicit request such as "use Technical for this task" overrides only that task. Apply the style to questions, progress updates and final replies, within the host's and user's instructions. Styles change explanations, never permissions, workflow or required evidence.
+The initial default is Simple. Change it with `$neef style simple`, `$neef style guided`, `$neef style technical` or `$neef style kid` in Codex; use `/neef` in Claude Code. `$neef style` shows the current choice. An explicit request such as "use Technical for this task" overrides only that task. Apply the style to questions, progress updates and final replies, within the host's and user's instructions. Styles change explanations, never permissions, workflow or required evidence.
 
 ## Read or change the preference
 
 Run helper `style` to read the saved default on every invocation. An explicit task override takes precedence and never writes the preference. If reading fails, report that briefly, preserve the file and use Simple unless the task explicitly requests another style.
 
-For `style [simple|guided|technical]`, run helper `style` with the supplied name, or without one to show the current default and choices. A name saves the default across projects. Report the result and stop; do not begin a task, commit or replace task state.
+For `style [simple|guided|technical|kid]`, run helper `style` with the supplied name, or without one to show the current default and choices. A name saves the default across projects. Report the result and stop; do not begin a task, commit or replace task state.
 
 ## Simple
 
@@ -19,6 +19,10 @@ Lead with the result, then give numbered steps when action is needed. Explain th
 ## Technical
 
 Explain what changed, the relevant files or functions, why that approach was chosen, and how it was verified. State material tradeoffs and remaining uncertainty. Use precise technical language, but keep the explanation focused on the task rather than narrating every tool call.
+
+## Kid
+
+Explain as you would to a curious 12-year-old. Use short sentences and everyday words. Give a familiar example or analogy for each new idea, such as comparing a commit to a save point in a game. Lead with what happened and why it matters. Replace jargon with plain words; when a term is needed, explain it in one sentence. Stay accurate and respectful, without baby talk. Keep every required instruction, warning and next step, written so a 12-year-old could follow them.
 
 ## When the user needs to act
 

@@ -32,7 +32,7 @@ Once it works, describe the next change normally, such as “let me cancel a boo
 
 Simple is the initial default: short, everyday language with exact actions when you need to do something. Guided adds numbered steps and brief reasons. Technical explains what changed, where, why and how it was checked.
 
-Use `$neef style guided` in Codex or `/neef style guided` in Claude Code to save a default across all projects. Replace `guided` with `simple` or `technical`; omit the name to see the current setting. Add "use Technical for this task" to a request for a temporary override. Styles affect explanations only, including questions and progress updates. Every style retains the instructions and evidence you need.
+Use `$neef style guided` in Codex or `/neef style guided` in Claude Code to save a default across all projects. Replace `guided` with `simple`, `technical` or `kid` (explains like you are 12, with examples and analogies); omit the name to see the current setting. Add "use Technical for this task" to a request for a temporary override. Styles affect explanations only, including questions and progress updates. Every style retains the instructions and evidence you need.
 
 The preference lives in `~/.neef/preferences.json` (or `NEEF_HOME`), separate from project task state. Changing it preserves the previous file as `.bak`; reinstalling NEEF preserves the preference. Start a fresh agent session after installing updated skill instructions.
 
