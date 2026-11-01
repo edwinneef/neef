@@ -1,12 +1,12 @@
 # Explanation styles
 
-The initial default is Simple. Change it with `$neef style simple`, `$neef style guided`, `$neef style technical` or `$neef style kid` in Codex; use `/neef` in Claude Code. `$neef style` shows the current choice. An explicit request such as "use Technical for this task" overrides only that task. Apply the style to questions, progress updates and final replies, within the host's and user's instructions. Styles change explanations, never permissions, workflow or required evidence.
+The initial default is Simple. Change it with `$neef style simple`, `$neef style guided`, `$neef style technical` or `$neef style kid` in Codex; use `/neef` in Claude Code. `$neef style` shows the current choice. Add `--here` to set a style for the current project only, such as `$neef style kid --here`; it overrides the global default there, and `$neef style clear --here` removes it. An explicit request such as "use Technical for this task" overrides only that task. Apply the style to questions, progress updates and final replies, within the host's and user's instructions. Styles change explanations, never permissions, workflow or required evidence.
 
 ## Read or change the preference
 
-Run helper `style` to read the saved default on every invocation. An explicit task override takes precedence and never writes the preference. If reading fails, report that briefly, preserve the file and use Simple unless the task explicitly requests another style.
+Run helper `style` to read the effective style on every invocation: the project override when `scope` is `project`, otherwise the global default. An explicit task override takes precedence and never writes the preference. If reading fails, report that briefly, preserve the file and use Simple unless the task explicitly requests another style.
 
-For `style [simple|guided|technical|kid]`, run helper `style` with the supplied name, or without one to show the current default and choices. A name saves the default across projects. Report the result and stop; do not begin a task, commit or replace task state.
+For `style [simple|guided|technical|kid] [--here]`, run helper `style` with the supplied name and flag, or without them to show the current style, its scope and the choices. A name saves the default across projects; with `--here` it saves an override for this project only. `style clear --here` removes the override. Report the result and stop; do not begin a task, commit or replace task state.
 
 ## Simple
 

@@ -125,6 +125,31 @@ test('style saves kid and documents it for a 12-year-old with examples and analo
   assert.match(guide, /`\$neef style kid`/);
 });
 
+test('style --here overrides the global default for one project only', t => {
+  const f = fixture(t, false);
+  const other = path.join(path.dirname(f.root), 'other-project');
+  fs.mkdirSync(other);
+  const elsewhere = args => {
+    const result = spawnSync(process.execPath, [helper, '--project', other, ...args], { encoding: 'utf8', env: f.env(f.home) });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    return JSON.parse(result.stdout);
+  };
+  f.run(['style', 'technical']);
+  assert.deepEqual(f.run(['style', 'kid', '--here']), { ...f.run(['style']), style: 'kid', scope: 'project', global: 'technical' });
+  assert.equal(elsewhere(['style']).style, 'technical');
+  assert.equal(elsewhere(['style']).scope, 'global');
+  f.run(['style', 'guided']);
+  assert.equal(f.run(['style']).style, 'kid');
+  assert.equal(elsewhere(['style']).style, 'guided');
+  assert.deepEqual(f.run(['style', 'clear', '--here']), { ...f.run(['style']), style: 'guided', scope: 'global' });
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.home, 'preferences.json'), 'utf8')), { version: 1, style: 'guided' });
+  f.run(['style', 'clear'], undefined, /Choose style/);
+  f.run(['style', '--here'], undefined, /Usage/);
+  fs.writeFileSync(path.join(f.home, 'preferences.json'), '{"version":1,"style":"simple","projects":{"x":"loud"}}');
+  f.run(['style'], undefined, /Invalid preferences/);
+  assert.deepEqual(fs.readdirSync(f.root), []);
+});
+
 test('style rejects invalid input and preserves corrupt or locked preferences', t => {
   const f = fixture(t, false);
   f.run(['style', 'verbose'], undefined, /Choose style/);
@@ -460,7 +485,7 @@ test('every script parses and help lists every catalog mode', () => {
     assert.equal(result.status, 0, `${name}: ${result.stderr}`);
   }
   const help = JSON.parse(spawnSync(process.execPath, [helper, 'help'], { encoding: 'utf8' }).stdout);
-  for (const usage of ['<task>', 'style [simple|guided|technical|kid]', 'doctor', 'prototype <description> (proto alias)']) assert.ok(help.modes.includes(usage), usage);
+  for (const usage of ['<task>', 'style [simple|guided|technical|kid] [--here]', 'doctor', 'prototype <description> (proto alias)']) assert.ok(help.modes.includes(usage), usage);
 });
 
 test('non-empty non-Git project supports state without creating Git or scaffolding', t => {

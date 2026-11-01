@@ -30,7 +30,7 @@ UI work: read `references/personal-design.md`.
 Route leading mode commands first; match bare modes exactly. Ask for missing subjects except shape. Otherwise, demo-only tasks use `references/prototype.md` and skip development below; otherwise develop.
 
 - `help`: run helper `help`; show name, fullName, motto and all intent groups as Command/Changes/Stops at tables using returned text. Include every command, flag and alias beside its command, and each direct subskill with its full host prefix. Omit helper internals. Read-only; stop after help.
-- `style [simple|guided|technical|kid]`: follow the style-setting route in `references/explanation-styles.md`, then stop.
+- `style [simple|guided|technical|kid] [--here]`: follow the style-setting route in `references/explanation-styles.md`, then stop.
 - `shape [--deep] [--discuss] [idea]`: read `references/shape.md`; offer starters without an idea, otherwise clarify, save decisions and implement unless `--discuss` or discussion-only was requested.
 - `auto <feature>` or `next` starting `auto:`: read `references/auto.md`.
 - `plan <feature>`: read `references/plan.md`; save the full feature plan and stop. Only external state writes are permitted. Skip development below.
