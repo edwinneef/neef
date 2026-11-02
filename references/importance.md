@@ -6,7 +6,7 @@ Importance sets how much testing and independent checking a task gets: `explore`
 
 `importance [explore|normal|important] [--here]`: run helper `importance` with the supplied arguments and report the result. A level saves the global default; `--here` saves an override for this project only; `importance clear --here` removes it; no level shows the effective one. Stop without starting a task.
 
-A task level comes from, in order: `--importance <level>` on the invocation (any task route), the level saved in task state, then helper `status` `importance` (project override, else global default). Pass the chosen level as `importance` in `state-write` when starting a task so `next` resumes at it. Same-task saves keep it; a new task starts from the default unless a level is supplied.
+A task level comes from, in order: `--importance <level>` on the invocation (any task route), the level saved in task state, then helper `status` `importance` (project override, else global default). Pass the chosen level as `importance` in `state-write` when starting a task so `next` resumes at it. Same-task saves keep it; a new task saved without a level records the effective default at that moment, so later default changes do not shift it.
 
 Raise, never lower, on your own: when work touches authentication, permissions, secrets, data deletion or migration, a shared or public API, money or irreversible operations, say so in one line and ask whether to run at `important`. Do not change the level until the user agrees. Lowering is the user's call.
 

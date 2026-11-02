@@ -378,7 +378,8 @@ function stateWrite(p, expected, input) {
       // Where this task's history begins: review grades the commits made since.
       start: current.state?.task === input.task ? current.state.start ?? null : taskStart(p, current.state, actual.head),
       baseline: Object.hasOwn(input, 'baseline') ? input.baseline : (current.state?.task === input.task ? current.state.baseline : null) ?? null,
-      ...(input.importance ?? (current.state?.task === input.task ? current.state.importance : undefined) ? { importance: input.importance ?? current.state.importance } : {}),
+      // A new task without a level records the effective default, so a later default change cannot shift it.
+      importance: input.importance ?? (current.state?.task === input.task ? current.state.importance : undefined) ?? effectiveImportance(p).level,
       ...(current.state?.context ? { context: current.state.context } : {}),
       ...(current.state?.recommendations ? { recommendations: current.state.recommendations } : {}),
       decisions: input.decisions ?? (current.state?.task === input.task ? current.state.decisions : '') ?? '',

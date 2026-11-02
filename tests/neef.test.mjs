@@ -222,7 +222,7 @@ test('importance defaults to normal, saves per project and leaves style intact',
   f.run(['importance'], undefined, /Invalid preferences/);
 });
 
-test('task importance is validated, kept for the same task and wins in status', t => {
+test('task importance is validated, recorded from the effective default, kept for the same task and wins in status', t => {
   const f = fixture(t, false);
   f.run(['importance', 'explore', '--here']);
   const first = f.run(['status']);
@@ -232,8 +232,9 @@ test('task importance is validated, kept for the same task and wins in status', 
   assert.deepEqual(f.run(['status']).importance, { level: 'important', scope: 'task' });
   assert.equal(f.state(saved.revision, 'Careful task', { next: 'continue' }).state.importance, 'important');
   const other = f.state(f.run(['status']).revision, 'Different task');
-  assert.equal(other.state.importance, undefined);
-  assert.deepEqual(f.run(['status']).importance, { level: 'explore', scope: 'project' });
+  assert.equal(other.state.importance, 'explore', 'a new task without a level records the effective one');
+  f.run(['importance', 'clear', '--here']);
+  assert.deepEqual(f.run(['status']).importance, { level: 'explore', scope: 'task' }, 'a later default change does not shift a saved task');
   f.state(other.revision, 'Different task', { importance: 'critical' }, /importance must be explore, normal or important/);
 });
 
