@@ -4,7 +4,7 @@ import { scenarios } from './content';
 import { Page } from './host';
 import { order, Reveal, useReducedMotion } from './motion';
 import { Nav } from './Nav';
-import { Faq, Footer, Install, Meaning, Modes, Needed, Risky, Tomorrow } from './sections';
+import { Compare, Faq, Footer, Install, Meaning, Modes, Needed, Risky, Tomorrow } from './sections';
 import { Timeline } from './Timeline';
 
 export default function App() {
@@ -66,6 +66,7 @@ export default function App() {
       <Needed />
       <Tomorrow />
       <Modes />
+      <Compare />
       <Faq />
       <Install />
     </main>

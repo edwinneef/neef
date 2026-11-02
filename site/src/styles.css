@@ -219,6 +219,15 @@ main[data-swapping] .scn { opacity: 0; transform: translateY(6px); }
 .faq dt { font: 400 1.3rem/1.25 var(--serif); letter-spacing: -.015em; }
 .faq dd { margin: 8px 0 0; color: var(--muted); max-width: 52ch; }
 
+/* How NEEF compares: their approach muted, NEEF's in ink beside it */
+.compare { list-style: none; margin: 0; padding: 0; }
+.compare li { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: baseline; padding: 24px 0; border-top: 1px solid var(--line); }
+.c-kind b { display: block; font: 400 1.3rem/1.25 var(--serif); letter-spacing: -.015em; }
+.c-kind small { display: block; margin-top: 4px; color: var(--muted); font-size: .88rem; }
+.c-they { color: var(--muted); max-width: 44ch; }
+.c-neef { max-width: 44ch; padding-left: 14px; border-left: 3px solid var(--accent); }
+.c-more { margin-top: 28px; font-weight: 600; }
+
 /* Install */
 .install-grid { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 56px; align-items: start; }
 .install-grid .lede { margin-top: 16px; }
@@ -243,6 +252,7 @@ footer .wrap { display: flex; justify-content: space-between; gap: 20px; flex-wr
   .tempts button .sub { display: none; }
   .tempts button b { font-size: .92rem; line-height: 1.3; }
   .modes, .faq { grid-template-columns: 1fr; }
+  .compare li { grid-template-columns: 1fr; gap: 10px; }
   .letters { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px 28px; }
   .moments li { grid-template-columns: 56px minmax(0, 1fr); }
   .moments li p { grid-column: 2; }

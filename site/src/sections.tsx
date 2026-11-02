@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { meaning, modes, moments, PHASES, questions, scenarios, temptations } from './content';
+import { COMPARISON_URL, comparisons, meaning, modes, moments, PHASES, questions, scenarios, temptations } from './content';
 import { Cmd, Hx, hostName, prefix, usePage } from './host';
 import { Mark } from './Logo';
 import { order, Reveal, useInView } from './motion';
@@ -121,6 +121,19 @@ export function Faq() {
     <Reveal as="dl" group className="faq">{questions.map(({ question, answer }, i) => <div key={question} style={order(i)}>
       <dt>{question}</dt><dd>{answer}</dd>
     </div>)}</Reveal>
+  </div></section>;
+}
+
+/** Where NEEF sits next to similar tools: one row per kind of tool, theirs beside NEEF's. */
+export function Compare() {
+  return <section id="compare"><div className="wrap">
+    <Head title={<>Other tools build apps too.<br />Here’s the difference.</>}>Two kinds of tool do something similar. This is what changes when you use NEEF instead.</Head>
+    <Reveal as="ul" group className="compare">{comparisons.map(({ kind, names, they, neef }, i) => <li key={kind} style={order(i)}>
+      <p className="c-kind"><b>{kind}</b><small>{names}</small></p>
+      <p className="c-they">{they}</p>
+      <p className="c-neef"><span className="sr-only">NEEF: </span>{neef}</p>
+    </li>)}</Reveal>
+    <Reveal><p className="c-more"><a href={COMPARISON_URL}>Read the full comparison, with sources</a></p></Reveal>
   </div></section>;
 }
 

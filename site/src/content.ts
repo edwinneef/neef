@@ -115,6 +115,13 @@ export const moments = [
 ] as const;
 
 /** Newcomer questions; where to get NEEF is answered by the install section right below. */
+export const COMPARISON_URL = 'https://github.com/edwinneef/neef/blob/main/docs/competitors.md';
+
+export const comparisons = [
+  { kind: 'App builders in the browser', names: 'Lovable, Bolt.new, Replit Agent', they: 'Turn a sentence into an app, but your project lives on their platform.', neef: 'Works on your computer, in the assistant you already use, and on projects you already have.' },
+  { kind: 'Planning add-ons for assistants', names: 'Spec Kit, BMAD Method, Superpowers', they: 'Add structure, but most want a spec, plan or role documents before any code.', neef: 'Goes from your request to checked, saved work. Planning is there when you want it.' },
+];
+
 export const questions = [
   { question: 'Is NEEF an AI?', answer: 'No. It’s a set of working rules and a small helper program for the AI assistant you already use: Claude Code or Codex. The assistant does the building; NEEF gives it a consistent way to work.' },
   { question: 'Do I need to be a programmer?', answer: 'You can describe what you want in normal words. NEEF reports what it changed, what it checked and what comes next. You do need Claude Code or Codex, Node.js 20 or newer, and Git installed.' },
