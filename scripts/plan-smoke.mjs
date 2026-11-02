@@ -65,7 +65,7 @@ async function run(host, scale) {
   assert.ok(scale === 'small' ? saved.plan.phases.length === 1 : saved.plan.phases.length > 1);
 
   // Fresh sessions must recover the entire roadmap from external state.
-  const continued = await turn(`${prefix} continue`, 'continue');
+  const continued = await turn(`${prefix}-next approve the plan`, 'continue');
   const finished = state();
   const completed = finished?.plan?.phases.filter(phase => phase.status === 'complete') || [];
   assert.equal(continued.code, 0, continued.final);

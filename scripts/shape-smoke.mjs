@@ -71,7 +71,7 @@ async function run(host) {
   const prompt = review ? `${invocation} review`
     : challenge
     ? `${invocation} challenge${deep ? ' --deep' : ''} Evaluate the greeting implementation against README.md and recommend the highest-value improvement. Save actionable advice for next.`
-    : auto ? `${invocation} auto ${task}`
+    : auto ? `${invocation}-plan ${task}`
     : `${invocation}${automatic ? '' : ` shape${deep ? ' --deep' : ''}${discussion ? ' --discuss' : ''}`}${starters ? '' : ` ${task}`}`;
   let reviewed;
   if (review) {
@@ -117,7 +117,7 @@ async function run(host) {
     // Sign-off gate: a fresh next (or, with --auto-change, a change request) must not run an unsigned plan; approval then runs every phase.
     const snapshot = () => ({ head: git(root, ['rev-parse', 'HEAD']), branch: git(root, ['branch', '--show-current']), status: git(root, ['status', '--porcelain']), state: state() });
     const untouched = view => view.head === initial && view.branch === initialBranch && view.status === ''
-      && view.state?.progress === 'active' && !view.state.baseline && /^auto:/.test(view.state.next || '') && !!view.state.plan?.phases?.length;
+      && view.state?.progress === 'active' && !view.state.baseline && /^plan:/.test(view.state.next || '') && !!view.state.plan?.phases?.length;
     const unsigned = snapshot();
     const change = 'Change the plan before I approve: calling farewell() with no name must return Goodbye, world!. Do not build yet.';
     const held = first.code === 0 && untouched(unsigned) ? await turn(autoChange ? change : `${invocation} next`, 2, autoChange ? first.session : undefined) : null;
