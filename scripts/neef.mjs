@@ -169,6 +169,20 @@ function lock(file, action) {
 }
 
 const stateFile = p => path.join(home(), 'state', `${p.id}.json`);
+// The plan lives beside the small state file; the state's planHash ties both to one revision.
+const planFile = p => stateFile(p).replace(/.json$/, '.plan.json');
+const planLimit = 32768;
+// A crash between the plan and state writes leaves the previous plan in .bak, still matching the state.
+function loadPlan(p, planHash) {
+  if (typeof planHash !== 'string') fail('Invalid plan reference');
+  const file = planFile(p);
+  for (const candidate of [file, `${file}.bak`]) {
+    if (!exists(candidate)) continue;
+    const raw = read(candidate);
+    if (hash(raw) === planHash) return JSON.parse(raw);
+  }
+  fail(`Plan file missing or does not match state: inspect ${file} and its .bak`);
+}
 const explanationStyles = ['simple', 'guided', 'technical', 'kid'];
 function explanationStyle(p, selected, here = false) {
   const file = path.join(home(), 'preferences.json');
@@ -226,6 +240,7 @@ function stateRead(p) {
   const raw = read(file);
   try {
     const value = JSON.parse(raw);
+    if (Object.hasOwn(value, 'planHash')) { value.plan = loadPlan(p, value.planHash); delete value.planHash; }
     if (!validState(value, p)) fail('Invalid schema or project identity');
     return { revision: hash(raw), state: value };
   } catch (error) { return { revision: hash(raw), state: null, error: `Invalid state preserved: ${error.message}`, backup: exists(`${file}.bak`) }; }
@@ -268,15 +283,25 @@ function saveState(p, current, value) {
   const file = stateFile(p);
   // Keep project context readable as one field without expanding a small state
   // file into a permanent discovery report.
-  const { context, recommendations, plan, outcomes, ...task } = value;
+  const { context, recommendations, plan, outcomes, planHash: _, ...task } = value;
+  const planContents = plan ? `${JSON.stringify(plan)}
+` : null;
+  if (planContents && Buffer.byteLength(planContents) > planLimit) fail(`Plan must stay under 32 KiB (this write: ${Buffer.byteLength(planContents)} bytes); shorten phases or acceptance criteria`);
+  if (planContents) task.planHash = hash(planContents);
   let contents = JSON.stringify(task, null, 2);
-  for (const [key, field] of Object.entries({ context, recommendations, plan, outcomes })) {
+  for (const [key, field] of Object.entries({ context, recommendations, outcomes })) {
     if (field) contents = `${contents.slice(0, -2)},\n  "${key}": ${JSON.stringify(field)}\n}`;
   }
   contents += '\n';
   const bytes = Buffer.byteLength(contents);
   const lines = contents.split('\n').length;
-  if (bytes > 8192 || lines > 40) fail(`State must stay under 8 KiB and 40 lines (this write: ${bytes} bytes, ${lines} lines); shorten plan, outcomes or notes`);
+  if (bytes > 8192 || lines > 40) fail(`State must stay under 8 KiB and 40 lines (this write: ${bytes} bytes, ${lines} lines); shorten outcomes or notes`);
+  // A plan-free state leaves any old plan file in place so its .bak can still recover it.
+  const plans = planFile(p);
+  if (planContents && (!exists(plans) || read(plans) !== planContents)) {
+    if (exists(plans)) atomic(`${plans}.bak`, read(plans));
+    atomic(plans, planContents);
+  }
   if (current.state) atomic(`${file}.bak`, read(file));
   atomic(file, contents);
   return stateRead(p);
@@ -458,6 +483,7 @@ function stateRecover(p, expected) {
     const current = stateRead(p);
     if (!current.error || current.revision !== expected) fail('Recovery needs corrupt state and its current revision');
     const backup = json(`${file}.bak`);
+    if (Object.hasOwn(backup, 'planHash')) { backup.plan = loadPlan(p, backup.planHash); delete backup.planHash; }
     if (!validState(backup, p)) fail('Backup is invalid');
     const preserved = `${file}.corrupt-${crypto.randomUUID()}`;
     atomic(preserved, read(file));
@@ -727,7 +753,7 @@ function pruneBaselines() {
   if (!exists(directory)) return;
   const referenced = new Set();
   const stateDir = path.join(home(), 'state');
-  if (exists(stateDir)) for (const name of fs.readdirSync(stateDir).filter(name => name.endsWith('.json'))) {
+  if (exists(stateDir)) for (const name of fs.readdirSync(stateDir).filter(name => name.endsWith('.json') && !name.endsWith('.plan.json'))) {
     try { const baseline = json(path.join(stateDir, name)).baseline; if (baseline) referenced.add(`${baseline}.json`); } catch { /* Doctor reports invalid state. */ }
   }
   const cutoff = Date.now() - baselineRetention;
@@ -1039,7 +1065,7 @@ export function doctor() {
   catch { add('state directory permissions', false, 'Reinstall or correct state directory permissions'); }
   if (exists(stateDir)) for (const name of fs.readdirSync(stateDir)) {
     if (name.endsWith('.lock')) add(`state lock ${name}`, false, 'Inspect recorded owner; remove only if confirmed stale');
-    if (!name.endsWith('.json')) continue;
+    if (!name.endsWith('.json') || name.endsWith('.plan.json')) continue;
     try { const value = json(path.join(stateDir, name)); add(`state ${name}`, validState(value, { root: value.project }), 'Inspect preserved file and .bak; use state-recover'); }
     catch { add(`state ${name}`, false, 'Inspect preserved file and .bak; use state-recover'); }
   }
@@ -1070,7 +1096,7 @@ export async function main(args = process.argv.slice(2)) {
         .map(({ usage, changes, stops, aliases = [] }) => ({ command: usage, changes, stops, aliases })) })),
     invocation: { codex: '$neef <command>', claude: '/neef <command>' },
     aliases: { codex: subskillNames.map(command => `$neef-${command}`), claude: subskillNames.map(command => `/neef-${command}`) },
-    helperCommands: ['style [simple|guided|technical|kid] [--here] (read the effective style or save the global default; --here saves a project override, style clear --here removes it)', 'prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'docs (read-only: Git-tracked and untracked-but-not-ignored .md files split into agent instructions, other docs and skipped changelogs/licenses, with known commands)', 'review [ref] (read-only: the last task\'s commits since its first begin or first save, whichever is earlier, or ref..HEAD, with saved decisions, plan, outcomes and known test commands)', 'merge-candidates (read-only: local branches ahead of main with worktree, dirty and taskComplete flags)', 'merge <branch...> [--keep] (user-chosen branches into main in order; stops at the first conflict; deletes merged branches and their worktrees unless --keep)', 'merge (from a linked worktree whose task is complete: merges its branch into main in the main folder; fast-forward else one merge commit; refuses conflicts, staged or in-progress work and never deletes branches)', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?,outcomes?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', outcomes: 'Development completion requires [{id,description,required,status,evidence}], with unique ids and at least one required outcome. Status is pending/passed/failed/blocked; passed outcomes need nonempty evidence. Required outcomes must pass, blockers must be explicitly cleared, and plan phases must finish before completion. Same-task writes preserve omitted outcomes; new tasks do not inherit them. Legacy saved states remain readable. Evidence is agent-reported, not independently proven.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?,userInput?}]}. userInput names the decision, credential, approval or manual step only the user can supply for that phase. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. Shared state remains under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: `${commandCatalog.map(({ usage, aliases = [] }) => `${usage}${aliases.map(alias => ` (${alias} alias)`).join('')}`).join(', ')} are agent skill modes; prototype builds or refines isolated external demos and hands approved concepts to development without automatic production changes; options ranks project actions, or with a goal recommends an existing command, read-only including external state and without execution; prompt rewrites a rough idea into one ready-to-paste NEEF command for the best-fit mode, read-only and without execution; bare shape offers three project-specific starters and waits without writes; shaping uses native questions and state-write then implements unless --discuss or discussion-only was requested; auto asks every decision in batched rounds, saves and self-challenges a plan, needs one explicit sign-off, then runs all phases without further prompts until complete or blocked; plan saves a complexity-sized full-feature roadmap then stops; challenge is read-only except external recommendations-write and never implements; review grades the last task's commits (or ref..HEAD) against its saved decisions, may run known test commands as evidence and has the same write boundary as challenge; docs lists .md files, agent instructions first, so the agent can judge each claim against the code and report stale ones without edits, with challenge's write boundary; next resumes unfinished work and runs all ready plan phases until complete or blocked, otherwise starts one revalidated follow-up` };
+    helperCommands: ['style [simple|guided|technical|kid] [--here] (read the effective style or save the global default; --here saves a project override, style clear --here removes it)', 'prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'docs (read-only: Git-tracked and untracked-but-not-ignored .md files split into agent instructions, other docs and skipped changelogs/licenses, with known commands)', 'review [ref] (read-only: the last task\'s commits since its first begin or first save, whichever is earlier, or ref..HEAD, with saved decisions, plan, outcomes and known test commands)', 'merge-candidates (read-only: local branches ahead of main with worktree, dirty and taskComplete flags)', 'merge <branch...> [--keep] (user-chosen branches into main in order; stops at the first conflict; deletes merged branches and their worktrees unless --keep)', 'merge (from a linked worktree whose task is complete: merges its branch into main in the main folder; fast-forward else one merge commit; refuses conflicts, staged or in-progress work and never deletes branches)', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?,outcomes?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', outcomes: 'Development completion requires [{id,description,required,status,evidence}], with unique ids and at least one required outcome. Status is pending/passed/failed/blocked; passed outcomes need nonempty evidence. Required outcomes must pass, blockers must be explicitly cleared, and plan phases must finish before completion. Same-task writes preserve omitted outcomes; new tasks do not inherit them. Legacy saved states remain readable. Evidence is agent-reported, not independently proven.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?,userInput?}]}. userInput names the decision, credential, approval or manual step only the user can supply for that phase. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. The plan is stored beside the state as <id>.plan.json under 32 KiB, under the same lock and revision; the rest of the state stays under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests', modes: `${commandCatalog.map(({ usage, aliases = [] }) => `${usage}${aliases.map(alias => ` (${alias} alias)`).join('')}`).join(', ')} are agent skill modes; prototype builds or refines isolated external demos and hands approved concepts to development without automatic production changes; options ranks project actions, or with a goal recommends an existing command, read-only including external state and without execution; prompt rewrites a rough idea into one ready-to-paste NEEF command for the best-fit mode, read-only and without execution; bare shape offers three project-specific starters and waits without writes; shaping uses native questions and state-write then implements unless --discuss or discussion-only was requested; auto asks every decision in batched rounds, saves and self-challenges a plan, needs one explicit sign-off, then runs all phases without further prompts until complete or blocked; plan saves a complexity-sized full-feature roadmap then stops; challenge is read-only except external recommendations-write and never implements; review grades the last task's commits (or ref..HEAD) against its saved decisions, may run known test commands as evidence and has the same write boundary as challenge; docs lists .md files, agent instructions first, so the agent can judge each claim against the code and report stale ones without edits, with challenge's write boundary; next resumes unfinished work and runs all ready plan phases until complete or blocked, otherwise starts one revalidated follow-up` };
   if (command === 'doctor') return doctor();
   const p = project(cwd);
   if (command === 'style') {

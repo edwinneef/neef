@@ -64,7 +64,7 @@ function fixture(t, initialize = true) {
   }
   const prepare = (baseline, files = ['owned.txt'], message = 'Implement change', error) => run(['prepare', baseline], { files, message }, error);
   const state = (revision, task = 'Implement feature', extra = {}, error) => run(['state-write', revision], { task, progress: 'active', ...extra }, error);
-  const statePath = () => path.join(home, 'state', fs.readdirSync(path.join(home, 'state')).find(name => name.endsWith('.json')));
+  const statePath = () => path.join(home, 'state', fs.readdirSync(path.join(home, 'state')).find(name => name.endsWith('.json') && !name.endsWith('.plan.json')));
   // Direct helper calls share the fixture's isolated Git configuration.
   const env = neefHome => ({ ...process.env, NEEF_HOME: neefHome, GIT_CONFIG_GLOBAL: gitConfig, GIT_CONFIG_NOSYSTEM: '1' });
   return { root, home, git, write, run, prepare, state, statePath, env };
@@ -1802,6 +1802,43 @@ test('plans preserve continuity through setup, advice, recovery and same-task wr
   assert.equal(newTask.state.plan, undefined);
 });
 
+test('a six-phase plan lives in its own file beside a near-full state and survives recovery', t => {
+  const f = fixture(t);
+  const ids = ['schema', 'store', 'api', 'cli', 'docs', 'release'];
+  const plan = { goal: 'Ship a six-phase feature', scale: 'large', rationale: 'Each phase depends on the one before it.',
+    phases: ids.map((id, index) => ({ id, task: `Phase ${id}: ${'t'.repeat(500)}`, dependsOn: index ? [ids[index - 1]] : [],
+      acceptance: Array(5).fill(`Criterion for ${id}: ${'a'.repeat(300)}`), status: index ? 'pending' : 'active' })) };
+  const outcomes = [{ id: 'feature', description: 'd'.repeat(400), required: true, status: 'pending', evidence: 'e'.repeat(800) }];
+  f.run(['setup']);
+  const advice = f.run(['recommendations-write', f.run(['status']).revision], { primary: recommendation(), alternatives: [] });
+  const saved = f.state(advice.revision, 'Six-phase feature', { plan, outcomes, decisions: 'x'.repeat(2500) });
+  assert.deepEqual(saved.state.plan, plan);
+  assert.ok(saved.state.context && saved.state.recommendations);
+  const stored = JSON.parse(fs.readFileSync(f.statePath(), 'utf8'));
+  assert.equal(stored.plan, undefined);
+  const planPath = f.statePath().replace(/.json$/, '.plan.json');
+  assert.deepEqual(JSON.parse(fs.readFileSync(planPath, 'utf8')), plan);
+  assert.ok(fs.statSync(planPath).size > 8192);
+  // A plan change alone moves the shared revision.
+  const changed = structuredClone(plan);
+  changed.phases[0].verification = 'Schema checks pass';
+  changed.phases[0].status = 'complete';
+  changed.phases[1].status = 'active';
+  const updated = f.state(saved.revision, saved.state.task, { plan: changed });
+  assert.notEqual(updated.revision, saved.revision);
+  f.state(saved.revision, saved.state.task, { plan }, /Stale state revision/);
+  fs.writeFileSync(planPath, '{}');
+  assert.match(f.run(['status']).error, /Plan file missing or does not match state/);
+  fs.writeFileSync(f.statePath(), '{broken');
+  const recovered = f.run(['state-recover', f.run(['status']).revision]);
+  assert.deepEqual(recovered.state.plan, plan);
+  assert.deepEqual(recovered.state.outcomes, outcomes);
+  const newTask = f.state(recovered.revision, 'Different feature');
+  assert.equal(newTask.state.plan, undefined);
+  assert.equal(newTask.state.outcomes, undefined);
+  assert.equal(f.run(['status']).state.plan, undefined);
+});
+
 test('plan phases can name the input only the user can supply', t => {
   const f = fixture(t);
   const plan = featurePlan();
@@ -1838,8 +1875,8 @@ test('invalid roadmap dependencies, phase statuses and acceptance evidence canno
     assert.equal(fs.readFileSync(f.statePath(), 'utf8'), before);
   }
   const oversized = featurePlan();
-  oversized.phases[0].acceptance = Array(30).fill('x'.repeat(400));
-  f.state(saved.revision, saved.state.task, { plan: oversized }, /State must stay under/);
+  oversized.phases[0].acceptance = Array(90).fill('x'.repeat(400));
+  f.state(saved.revision, saved.state.task, { plan: oversized }, /Plan must stay under 32 KiB/);
   assert.equal(fs.readFileSync(f.statePath(), 'utf8'), before);
   const small = featurePlan();
   small.scale = 'small';
