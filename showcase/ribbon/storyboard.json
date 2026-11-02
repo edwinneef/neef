@@ -2,6 +2,13 @@
   "title": "NEEF: a screenshot becomes a theme",
   "durationSeconds": 60,
   "output": { "width": 1920, "height": 1080, "fps": 30, "format": "mp4", "videoCodec": "h264", "audioCodec": "aac" },
+  "promptCaptions": [
+    { "start": 11, "end": 18, "label": "Prompt (shortened)", "text": "$neef-prototype build a screenshot-to-theme demo", "source": "Earlier prototype request in this thread" },
+    { "start": 20, "end": 27, "label": "Feedback (shortened)", "text": "Stronger colors. Make the whole preview themeable.", "source": "User feedback on color strength and the unchanged photo" },
+    { "start": 28, "end": 35, "label": "Prompt (shortened)", "text": "$neef implement the approved Ribbon app", "source": "Upcoming implementation request; confirm against the request actually used" },
+    { "start": 37, "end": 43, "label": "Prompt (shortened)", "text": "$neef-prototype try a live CSS export panel", "source": "Upcoming isolated export-section prototype; confirm against the request actually used" },
+    { "start": 43, "end": 49, "label": "Prompt (shortened)", "text": "$neef apply the chosen export panel", "source": "Upcoming explicit implementation request after section selection; confirm against the request actually used" }
+  ],
   "segments": [
     { "start": 0, "end": 5, "shot": "Open on the finished Ribbon map reveal; drag across both themed regions.", "caption": "One screenshot. A complete theme.", "narration": "One screenshot. A complete theme. This is what we're building." },
     { "start": 5, "end": 11, "shot": "Brief NEEF introduction over the real app, then the actual first prototype prompt as a labeled transcript insert.", "caption": "Navigate → Execute → Evaluate → Follow-up", "narration": "NEEF scopes the work, builds it, checks the result, and saves what comes next." },

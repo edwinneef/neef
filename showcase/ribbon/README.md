@@ -12,6 +12,12 @@ Use the approved Ribbon handoff at `C:\Users\edwin\.neef\prototypes\d7c0586df05c
 
 The second prototype is central: demonstrate that NEEF can reconsider one section after the app works. Keep the first build's export simple so there is an honest before/after improvement to show.
 
+### Short prompt captions
+
+`storyboard.json` includes five timed `promptCaptions`: the first prototype, visual feedback, implementation, the second prototype, and applying the selected section. Show them as concise captions over the matching footage, with the supplied `Prompt (shortened)` or `Feedback (shortened)` label. Keep the real `$neef-prototype` and `$neef` names visible so the workflow is recognizable.
+
+Each caption replaces the generic segment caption while it is visible. Use no more than two lines, break after the command name if needed, and keep it clear of upload, reveal and export controls. Restore the generic caption afterward where time remains. Preserve the exact full prompts below as the source record. Upcoming captions are planned copy: reconcile them with the requests actually executed before the final edit. They are summaries, not verbatim quotes or simulated live typing.
+
 ## Prompts and footage
 
 Already used in this thread; use labeled transcript inserts, never fabricated live typing:
