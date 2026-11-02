@@ -7,3 +7,14 @@ Label original unfinished scope REQUIRED, keep progress active and finish it whe
 Persist `recommendations` with `primary:{kind,action,reason}` and `alternatives:[...]`. Each action must specify the change and intended result; its reason must cite current code or an established goal. When none is supported, save `primary:null`, `alternatives:[]` and a brief `reason`. Finish each task with `state-write`, saving progress and this evaluation atomically. For revalidation without changing task progress, use `recommendations-write <current-revision>` with that JSON. The existing task `next` field remains only an unfinished task's next step. `next` must revalidate saved recommendations even when Git has not changed.
 
 Mark complete only when done. Report actual work, verification, relevant Git and the grounded next action. End with one copyable host-syntax NEEF command carrying the recommended action, followed by its intended result; never a bare prose prompt. A bare next command must not hide the actual recommendation. When blocked or pausing, give the reason in one line, keep preconditions in prose and name the input needed. When only the user can unblock, such as approving a host prompt, changing permissions or running a step themselves, name that exact step and end with a resume command whose placeholders list what NEEF needs back, for example `/neef check 1 result: <pass/fail>, <log path>`. Never suggest diagnosing or retrying a permission or policy denial; never bypass it or repeat an unchanged blocker. When goals are exhausted, say so and invite the next goal. Unfinished work reports REQUIRED scope and the host's `neef next` command. Static checks do not prove native invocation.
+
+## Report layout
+
+Task and mode reports (development, plan, challenge, review, docs, options, next) use four bold headings, in this order, spelling NEEF:
+
+- **N · Narrative:** one line saying what happened.
+- **E · Edits:** changed files, one per line, or "none".
+- **E · Evaluation:** passed, failed, skipped and remaining gaps; REQUIRED gaps first.
+- **F · Follow-up:** one next command and its intended result.
+
+Size is a guideline: about five lines per section, summarizing the rest. Omit nothing required; blocked reports keep the exact user step and resume command in Follow-up. `help`, `status` and `style` keep their own formats, and one-line answers stay short. Progress updates appear at milestones only. Explanation styles change tone, never these headings.

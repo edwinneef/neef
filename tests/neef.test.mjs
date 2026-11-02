@@ -2277,3 +2277,11 @@ test('merge with chosen branches stops at a conflict with main untouched and ref
   f.run(['merge', 'main', 'later'], undefined, /Invalid branch/);
   assert.equal(f.git('rev-parse', 'HEAD'), head);
 });
+
+test('reply layout is defined once in follow-up and referenced by plan, challenge and styles', () => {
+  const read = n => fs.readFileSync(new URL(`../references/${n}.md`, import.meta.url), 'utf8');
+  const followUp = read('follow-up');
+  for (const h of ['N · Narrative', 'E · Edits', 'E · Evaluation', 'F · Follow-up']) assert.ok(followUp.includes(`**${h}:**`), h);
+  assert.match(followUp, /Size is a guideline/);
+  for (const n of ['plan', 'challenge', 'explanation-styles']) assert.match(read(n), /follow-up\.md` \(Report layout\)/, n);
+});
