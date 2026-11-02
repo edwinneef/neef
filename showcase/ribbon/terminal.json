@@ -1,0 +1,25 @@
+{
+  "segments": [
+    {"start":0,"end":10,"narration":"Start with the request. NEEF helps your coding agent navigate the idea before building it."},
+    {"start":10,"end":19,"narration":"See the prototype. Give it feedback. Stronger colors. Make the whole preview respond."},
+    {"start":19,"end":29,"narration":"Execute the chosen direction. NEEF carries the approved design into a working app."},
+    {"start":29,"end":39,"narration":"Evaluate the result. Check the build, then prove the exported CSS works in another interface."},
+    {"start":39,"end":50,"narration":"Follow up with another prototype. Add typography. Compare three font pairings before choosing one."},
+    {"start":50,"end":60,"narration":"Apply the choice. Navigate, execute, evaluate, follow up. That is NEEF: an idea carried through."}
+  ],
+  "shots": [
+    {"d":6,"terminal":true,"p":0,"title":"Navigate","prompt":"$neef-prototype build a local screenshot-to-theme demo","log":["Start with a prototype.","Local extraction / editable colors / CSS export"]},
+    {"d":4,"clip":"nativeUploadClip.mp4","p":0,"title":"The request becomes a prototype."},
+    {"d":5,"terminal":true,"p":0,"title":"Refine the direction","prompt":"Stronger colors. Make the whole preview themeable.","log":["Feedback shapes the next iteration.","Selected direction: Ribbon"]},
+    {"d":4,"clip":"refinedPrototypeClip.mp4","p":0,"title":"The feedback becomes visible.","close":true},
+    {"d":6,"terminal":true,"p":1,"title":"Execute","prompt":"$neef implement the approved Ribbon app","log":["Build the selected direction.","Keep the approved reveal and color controls."]},
+    {"d":4,"clip":"heroClip.mp4","p":1,"title":"The chosen direction becomes a working app.","close":true},
+    {"d":6,"terminal":true,"p":2,"title":"Evaluate","prompt":"$neef verify the build and exported CSS","log":["Recorded evidence summary","Build passed / 3 tests passed","Downloaded CSS loaded on an independent page"]},
+    {"d":4,"clip":"proofClip.mp4","p":2,"title":"Real exported CSS, used in another interface."},
+    {"d":7,"terminal":true,"p":3,"title":"Follow-up","prompt":"$neef-prototype add a typography section\nwith three font pairings","log":["Prototype again, inside the same project.","Compare Clear / Editorial / Compact"]},
+    {"d":4,"clip":"typographyPrototypeClip.mp4","p":3,"title":"The next idea comes to life."},
+    {"d":4,"terminal":true,"p":3,"title":"Carry the choice through","prompt":"$neef apply the chosen typography section","log":["The chosen section joins the working app."]},
+    {"d":3,"clip":"appTypographyClip.mp4","p":3,"title":"Chosen, implemented, ready to use."},
+    {"d":3,"card":true,"p":3,"title":"NEEF","sub":"Your idea, carried through.","loop":true,"end":true}
+  ]
+}

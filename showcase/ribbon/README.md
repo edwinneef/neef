@@ -4,6 +4,9 @@ Status: delivered under the user's autonomous completion request. The standalone
 
 ## Delivery
 
+- Terminal-led revision: `D:\projects\ribbon-showcase-delivery\NEEF-Terminal-60s.mp4`. Full-screen terminal-style prompt typing leads each result; 13 shots alternate prompts and real recorded browser outcomes. The commands are shortened reconstructions, explicitly labeled, and the output lines summarize existing evidence rather than impersonating an unedited agent transcript. NEEF's active phase/logo square remains visible. Original edits are retained.
+- Terminal source: `terminal.json`; generate its narration into `<new-render-folder>/voice`, then run `node showcase/ribbon/render-reel.mjs <original-clips-folder> <new-render-folder> terminal`. Evidence: `.test-artifacts/ribbon-showcase/terminal-20261102` (probe and inspected terminal frames). Verified 60.000 seconds, 1920×1080 at 30fps, AAC narration and English subtitles; audio peak -0.5 dB.
+
 - Highlight reel revision: `D:\projects\ribbon-showcase-delivery\NEEF-Ribbon-Reel-60s.mp4`. A separate 17-shot, 60-second edit matching the website's tobacco light/dark colors and Georgia headings. The logo tiles follow Navigate → Execute → Evaluate → Follow-up clockwise, with persistent phase labels, short prompt summaries, the late typography prototype and independent CSS proof. The original walkthrough remains available. Audio uses local synthesized narration and a quiet original synthesized pulse.
 - Reel sources: `reel.json` and `render-reel.mjs`. Generate narration with `narrate.ps1 -Storyboard showcase/ribbon/reel.json -OutputDirectory <new-render-folder>/voice`, then run `node showcase/ribbon/render-reel.mjs <original-clips-folder> <new-render-folder>`. Reproduction expects the original `*Clip.mp4` recordings, not the earlier composed video. Evidence: `.test-artifacts/ribbon-showcase/reel-20261102`.
 

@@ -5,11 +5,13 @@ import path from 'node:path';
 // A distinct edit: the original walkthrough and raw recordings stay untouched.
 const source=path.resolve(process.argv[2]||'.test-artifacts/ribbon-showcase/final-20261102');
 const root=path.resolve(process.argv[3]||'.test-artifacts/ribbon-showcase/reel-20261102');
-const story=JSON.parse(await readFile(new URL('reel.json',import.meta.url),'utf8'));
+const terminal=process.argv[4]==='terminal';
+const story=JSON.parse(await readFile(new URL(terminal?'terminal.json':'reel.json',import.meta.url),'utf8'));
+const outputName=terminal?'NEEF-Terminal-60s':'NEEF-Ribbon-Reel-60s';
 await mkdir(root,{recursive:true});
 const fonts={sans:'segoeui.ttf',serif:'georgia.ttf',mono:'consola.ttf'};
 const phases=['Navigate','Execute','Evaluate','Follow-up'];
-const shots=[
+const shots=story.shots||[
   {d:3,title:'One screenshot.',sub:'A whole new theme.',card:true,p:-1},
   {d:4,clip:'heroClip.mp4',title:'Move the divider. Change the whole view.',p:-1,close:true},
   {d:4,title:'Your coding agent,',sub:'with a clear loop.',card:true,p:-1,loop:true},
@@ -46,9 +48,26 @@ function mark(x,y,size,p,dark,animated=false){
   });
 }
 for(let i=0;i<shots.length;i++){
-  const s=shots[i],dark=s.card&&(i%2===0||s.end),bg=dark?'211d18':'efe8da',ink=dark?'ede3d3':'382e25',muted=dark?'b9ac98':'625745';
+  const s=shots[i],dark=s.terminal||s.card&&(i%2===0||s.end),bg=dark?'211d18':'efe8da',ink=dark?'ede3d3':'382e25',muted=dark?'b9ac98':'625745';
   let filters=[],inputs=[],head='';
-  if(s.clip){
+  if(s.terminal){
+    inputs=['-f','lavfi','-i',`color=c=0x${bg}:s=1920x1080:r=30:d=${s.d}`];
+    filters.push(await type(s.title,64,100,150,ink,'serif'));
+    filters.push(await type('Codex / NEEF',23,100,260,muted,'mono'));
+    const stamp=t=>`0:${String(Math.floor(t/60)).padStart(2,'0')}:${(t%60).toFixed(2).padStart(5,'0')}`;
+    const escape=t=>t.replaceAll('\\','\\\\').replaceAll('{','\\{').replaceAll('}','\\}').replaceAll('\n','\\N');
+    const events=[],speed=Math.min(0.042,(s.d-2)/s.prompt.length);
+    for(let c=1;c<=s.prompt.length;c++){
+      const start=.25+(c-1)*speed,end=c===s.prompt.length?s.d:.25+c*speed;
+      events.push(`Dialogue: 0,${stamp(start)},${stamp(end)},Prompt,,0,0,0,,{\\pos(100,350)}${escape(s.prompt.slice(0,c))}_`);
+    }
+    const ass=`[Script Info]\nPlayResX: 1920\nPlayResY: 1080\n[V4+ Styles]\nFormat: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding\nStyle: Prompt,Consolas,38,&H0083ABC9,&H0083ABC9,&H00181D21,&H00181D21,0,0,0,0,100,100,0,0,1,0,0,7,100,100,0,1\n[Events]\nFormat: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text\n${events.join('\n')}\n`;
+    await writeFile(path.join(root,`typing-${i}.ass`),ass);
+    filters.push(`subtitles=filename=typing-${i}.ass`);
+    const logStart=.25+s.prompt.length*speed+.15;
+    for(let l=0;l<s.log.length;l++)filters.push(await type(s.log[l],29,100,565+l*58,l===0?ink:muted,'mono',`:enable='gte(t,${Math.min(s.d-.8,logStart+l*.3)})'`));
+    filters.push(await type('Prompt reconstruction / shortened prompts / real recorded results',22,100,982,muted,'mono'));
+  }else if(s.clip){
     inputs=['-ss',String(s.offset||0),'-i',path.join(source,s.clip)];
     // Close crops retain genuine recorded divider, color and font interactions.
     const crop=s.close?'crop=iw*0.94:ih*0.64:iw*0.03:ih*0.20,':'';
@@ -94,11 +113,12 @@ const stamp=n=>`00:${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).pa
 await writeFile(path.join(root,'NEEF-Ribbon-Reel.srt'),story.segments.map((s,i)=>`${i+1}\n${stamp(s.start)} --> ${stamp(s.end)}\n${s.narration}\n`).join('\n'));
 // Quiet original synthesized pulse; no licensed music or external assets.
 ff(['-f','lavfi','-i',"aevalsrc='0.025*sin(2*PI*82.406*t)*exp(-8*mod(t,0.5))+0.012*sin(2*PI*164.813*t)*exp(-4*mod(t,2))':s=48000:d=60",'-af','afade=t=in:d=1,afade=t=out:st=57:d=3','pulse.wav']);
-ff(['-i','picture.mp4','-i','voice.wav','-i','pulse.wav','-i','NEEF-Ribbon-Reel.srt','-filter_complex','[1:a]loudnorm=I=-16:TP=-2:LRA=9[v];[v][2:a]amix=inputs=2:normalize=0,alimiter=limit=0.85[a]','-map','0:v','-map','[a]','-map','3:s','-c:v','copy','-c:a','aac','-b:a','192k','-c:s','mov_text','-metadata:s:s:0','language=eng','-t','60','-movflags','+faststart','NEEF-Ribbon-Reel-60s.mp4']);
-ff(['-ss','54','-i','NEEF-Ribbon-Reel-60s.mp4','-frames:v','1','poster.png']);
-const probe=run('ffprobe',['-v','error','-show_streams','-show_format','-of','json','NEEF-Ribbon-Reel-60s.mp4']);
+ff(['-i','picture.mp4','-i','voice.wav','-i','pulse.wav','-i','NEEF-Ribbon-Reel.srt','-filter_complex','[1:a]loudnorm=I=-16:TP=-2:LRA=9[v];[v][2:a]amix=inputs=2:normalize=0,alimiter=limit=0.85[a]','-map','0:v','-map','[a]','-map','3:s','-c:v','copy','-c:a','aac','-b:a','192k','-c:s','mov_text','-metadata:s:s:0','language=eng','-t','60','-movflags','+faststart',outputName+'.mp4']);
+ff(['-ss',terminal?'1':'54','-i',outputName+'.mp4','-frames:v','1','poster.png']);
+const probe=run('ffprobe',['-v','error','-show_streams','-show_format','-of','json',outputName+'.mp4']);
 await writeFile(path.join(root,'probe.json'),probe);
 const delivery='D:/projects/ribbon-showcase-delivery';
-for(const file of ['NEEF-Ribbon-Reel-60s.mp4','NEEF-Ribbon-Reel.srt'])await copyFile(path.join(root,file),path.join(delivery,file));
-await copyFile(path.join(root,'poster.png'),path.join(delivery,'reel-poster.png'));
+await copyFile(path.join(root,outputName+'.mp4'),path.join(delivery,outputName+'.mp4'));
+await copyFile(path.join(root,'NEEF-Ribbon-Reel.srt'),path.join(delivery,terminal?'NEEF-Terminal.srt':'NEEF-Ribbon-Reel.srt'));
+await copyFile(path.join(root,'poster.png'),path.join(delivery,terminal?'terminal-poster.png':'reel-poster.png'));
 console.log('Delivered the separate 60-second reel.');
