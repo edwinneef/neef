@@ -18,7 +18,7 @@ Raise, never lower, on your own: when work touches authentication, permissions, 
 | `normal` | Focused tests only for behaviour already settled in `decisions` | None | Smallest meaningful affected check |
 | `important` | Tests for each required outcome, covering its failure case | Fresh native delegate re-verifies the required outcomes before completion | Check results plus the delegate's findings |
 
-A level never skips a required outcome's evidence; `explore` meets it by running the thing. Under `explore`, keep behaviour you are still discovering untested and say which outcomes rest on observation only.
+A level never skips the workflow: run `begin` before the first edit, save state with `importance`, and commit as usual at every level, including `explore`. Only new tests and the second-agent check scale. A level never skips a required outcome's evidence; `explore` meets it by running the thing. Under `explore`, keep behaviour you are still discovering untested and say which outcomes rest on observation only.
 
 ## Second-agent check (`important`)
 

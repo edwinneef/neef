@@ -35,6 +35,7 @@ Codex keeps its workspace sandbox and on-request approval review; Git-writing he
 
 - `important`: passed. Three new tests added and committed, one fresh subagent re-verified the required outcomes, state saved `importance:"important"` and complete, evidence recorded the delegate result.
 - `explore`: partly passed. It added no tests and spawned no delegate, and said its outcomes rested on observation. The run failed overall because the agent edited before `begin`, so the helper refused the commit and the task was never saved complete or with `importance`. This is a start-of-task ordering miss, not an importance behavior; it was not retried.
+- Fix and rerun: `references/importance.md` now says no level skips `begin`, the state save or the commit. A second `explore` run (`node scripts/importance-smoke.mjs explore`) passed: no tests, no delegate, committed, `importance:"explore"` saved.
 - One run per level on one host; no Codex run. Both outcomes are agent behavior, so a repeat may differ.
 
 ## Known gaps

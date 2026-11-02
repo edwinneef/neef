@@ -60,7 +60,9 @@ async function scenario(level) {
 }
 
 console.log(JSON.stringify({ artifacts }));
-for (const level of ['explore', 'important']) {
+// Optional level arguments rerun a single scenario.
+const only = process.argv.slice(2).filter(arg => ['explore', 'important'].includes(arg));
+for (const level of only.length ? only : ['explore', 'important']) {
   try { await scenario(level); } catch (error) {
     fs.writeFileSync(path.join(artifacts, `${level}.failure.txt`), String(error.stack || error));
     console.error(error);
