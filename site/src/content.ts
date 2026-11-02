@@ -133,7 +133,6 @@ export const modes: [command: string, what: string, effect: Effect][] = [
   ['{neef} plan <feature>', 'All questions first, a saved phased plan, one sign-off, then it builds alone.', 'changes your project'],
   ['{neef} challenge <topic>', 'An honest, ranked review.', 'changes nothing'],
   ['{neef} options', 'A few good choices with reasons.', 'changes nothing'],
-  ['{neef} ask <goal>', 'Not sure which one? It tells you.', 'changes nothing'],
-  ['{neef} prompt <idea>', 'Turns a rough idea into a clear command to paste.', 'changes nothing'],
+  ['{neef} ask <goal>', 'Not sure which one? It writes the command for you.', 'changes nothing'],
   ['{neef} help', 'Every command, flag and alias, grouped by what you want.', 'changes nothing'],
 ];

@@ -38,8 +38,7 @@ Route leading mode commands first; match bare modes exactly. Ask for missing sub
 - `review [ref]`: read `references/review.md`; challenge boundary, but known test commands may run as evidence.
 - `docs`: read `references/docs.md`; challenge boundary.
 - `prototype <description>` or `proto <description>`: read `references/prototype.md`; build or refine an isolated working demonstration and stop at its handoff. Preserve project files, Git and task state. Skip development below unless production implementation is explicitly requested.
-- `options [goal]` or `ask <goal>`: read `references/advisor.md`; inspect and recommend, then stop. Advice is read-only, including external state. Skip all sections below until the user explicitly selects work.
-- `prompt <idea>`: read `references/prompt.md`; read-only, then stop.
+- `options [goal]`, `ask <goal>` or `prompt <idea>`: read `references/advisor.md`; inspect and recommend, then stop. Advice is read-only, including external state. Skip all sections below until the user explicitly selects work.
 - `merge [branch...] [--keep]`: read `references/merge.md`; only it may delete branches.
 - `setup`: run helper `setup`, then inspect code and commands. Save source-backed architecture using `context-write <revision>` with stdin `{"architecture":"..."}`. The helper backs up and preserves existing AGENTS.md/CLAUDE.md content while adding next-prompt directions. Report changes and safety findings; run no project commands, installs or hooks, and never replace instructions or generate configuration.
 - `doctor`: run helper `doctor`. Report failed checks and concrete fixes; do not repair implicitly.

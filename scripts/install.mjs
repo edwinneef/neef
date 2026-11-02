@@ -60,7 +60,7 @@ export function install(apply = false) {
   });
   // Retire only receipt-owned references from the previous mode, with backup/rollback.
   const retired = [shared, path.join(user, '.claude/skills/neef'), path.join(user, '.agents/skills/neef')]
-    .flatMap(root => ['grill.md', 'auto.md'].map(name => path.join(root, 'references', name)));
+    .flatMap(root => ['grill.md', 'auto.md', 'prompt.md'].map(name => path.join(root, 'references', name)));
   // Aliases and rare commands no longer get their own subskill folders.
   for (const command of commandNames.filter(name => !subskillNames.includes(name))) for (const agent of ['.claude', '.agents']) {
     const root = path.join(user, agent, 'skills', `neef-${command}`);
