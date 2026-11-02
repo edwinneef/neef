@@ -478,6 +478,38 @@ test('begin prunes stale unreferenced baselines and keeps recent or saved ones',
   assert.equal(JSON.parse(fs.readFileSync(path.join(directory, `${next.baseline}.json`), 'utf8')).slug, 'next increment');
 });
 
+test('commit tokens hold hashes only, are skipped by task-start scans and are pruned on commit', t => {
+  const f = fixture(t);
+  const directory = path.join(f.home, 'baselines');
+  const begin = f.run(['begin', 'hashed tokens']);
+  f.write('owned.txt', 'reviewed secret content\n');
+  const prepared = f.prepare(begin.baseline);
+  assert.match(prepared.diff, /reviewed secret content/);
+  const token = path.join(directory, `${prepared.token}.token.json`);
+  assert.ok(fs.existsSync(token), 'token is named apart from baselines');
+  assert.equal(fs.existsSync(path.join(directory, `${prepared.token}.json`)), false);
+  const stored = fs.readFileSync(token, 'utf8');
+  assert.doesNotMatch(stored, /reviewed secret content|"diff"|"actual"/);
+  assert.match(stored, /"diffHash":"[a-f0-9]{64}"/);
+  assert.match(stored, /"snapshotHash":"[a-f0-9]{64}"/);
+  // A token that would move the task start if parsed: same project, an older HEAD, no kind.
+  const older = f.git('rev-parse', 'HEAD');
+  const decoy = path.join(directory, `${crypto.randomUUID()}.token.json`);
+  const stale = path.join(directory, `${crypto.randomUUID()}.token.json`);
+  const old = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
+  fs.writeFileSync(stale, '{}');
+  fs.utimesSync(stale, old, old);
+  const committed = f.run(['commit', prepared.token]);
+  assert.equal(fs.existsSync(stale), false, 'commit prunes stale tokens');
+  assert.ok(fs.existsSync(token), 'the consumed token is recent and kept');
+  // After a save, only baselines newer than it count; a parsed decoy token would move the next task's start back.
+  const previous = f.state(committed.revision, 'Hashed commit task', { progress: 'complete', outcomes: passedOutcomes, recommendations: { primary: null, alternatives: [], reason: 'Fixture task is complete.' } });
+  fs.writeFileSync(decoy, JSON.stringify({ project: f.root, head: older }));
+  const saved = f.state(previous.revision, 'Task after hashed commit');
+  assert.equal(saved.state.start, committed.head, 'task start ignores token files');
+  assert.equal(f.git('show', 'HEAD:owned.txt'), 'reviewed secret content');
+});
+
 test('every script parses and help lists every catalog mode', () => {
   const scripts = path.dirname(helper);
   for (const name of fs.readdirSync(scripts).filter(name => name.endsWith('.mjs'))) {

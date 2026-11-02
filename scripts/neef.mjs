@@ -717,8 +717,10 @@ const baselineFile = id => {
   if (!/^[a-f0-9-]{36}$/.test(id || '')) fail('Invalid baseline/token');
   return path.join(home(), 'baselines', `${id}.json`);
 };
+// Reviewed commit tokens hold hashes only and are named apart so baseline scans skip them unparsed.
+const tokenFile = id => baselineFile(id).replace(/\.json$/, '.token.json');
 const baselineRetention = 14 * 24 * 60 * 60 * 1000;
-// Baselines and reviewed tokens (which hold full diffs) otherwise accumulate forever.
+// Baselines and reviewed tokens otherwise accumulate forever.
 // Keep anything recent or still referenced by a saved task in any project.
 function pruneBaselines() {
   const directory = path.join(home(), 'baselines');
@@ -730,7 +732,7 @@ function pruneBaselines() {
   }
   const cutoff = Date.now() - baselineRetention;
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-    if (!entry.isFile() || !/^[a-f0-9-]{36}\.(json|index)$/.test(entry.name) || referenced.has(entry.name)) continue;
+    if (!entry.isFile() || !/^[a-f0-9-]{36}\.(json|token\.json|index)$/.test(entry.name) || referenced.has(entry.name)) continue;
     const file = path.join(directory, entry.name);
     try { if (fs.statSync(file).mtimeMs < cutoff) fs.unlinkSync(file); } catch { /* Pruning never blocks development. */ }
   }
@@ -795,16 +797,17 @@ function prepare(p, id, input) {
   } finally { if (exists(index)) fs.unlinkSync(index); }
   const token = crypto.randomUUID();
   const selected = Object.fromEntries(files.map(name => [name, fileState(p.root, name)]));
-  atomic(baselineFile(token), JSON.stringify({ project: p.root, actual, files, selected, message: input.message, diff, kind: 'commit' }));
+  // The token records what was reviewed as hashes; the diff itself is returned once, never stored.
+  atomic(tokenFile(token), JSON.stringify({ project: p.root, snapshotHash: hash(JSON.stringify(actual)), files, selected, message: input.message, diffHash: hash(diff), kind: 'commit' }));
   return { token, files, message: input.message, diff, revision: stateRead(p).revision };
 }
 
 function commit(p, token) {
-  const file = baselineFile(token);
+  const file = tokenFile(token);
   return lock(file, () => {
     const prepared = json(file);
     if (prepared.kind !== 'commit' || prepared.project !== p.root || prepared.used) fail('Invalid or consumed commit token');
-    if (JSON.stringify(snapshot(p)) !== JSON.stringify(prepared.actual)
+    if (hash(JSON.stringify(snapshot(p))) !== prepared.snapshotHash
       || prepared.files.some(name => fileState(p.root, name) !== prepared.selected[name])) fail('Working tree changed after review; prepare again');
     // Hold the real index lock throughout; Git and its hooks operate on a private
     // index. Failed commits never change the user's index, including new files.
@@ -816,12 +819,12 @@ function commit(p, token) {
     let published = false;
     let output;
     try {
-      if (JSON.stringify(snapshot(p)) !== JSON.stringify(prepared.actual)) fail('Working tree changed while acquiring index lock');
+      if (hash(JSON.stringify(snapshot(p))) !== prepared.snapshotHash) fail('Working tree changed while acquiring index lock');
       if (exists(index)) fs.copyFileSync(index, privateIndex);
       else git(p.root, ['read-tree', '--empty'], { env });
       git(p.root, ['add', '--', ...prepared.files], { env });
       const diff = git(p.root, ['diff', '--cached', '--no-ext-diff', '--no-textconv', '--binary'], { env });
-      if (diff !== prepared.diff) fail('Staged diff changed after review; prepare again');
+      if (hash(diff) !== prepared.diffHash) fail('Staged diff changed after review; prepare again');
       output = git(p.root, ['commit', '-m', prepared.message], { env });
       fs.writeFileSync(fd, fs.readFileSync(privateIndex));
       fs.fsyncSync(fd);
@@ -835,6 +838,7 @@ function commit(p, token) {
       if (!published && exists(indexLock)) fs.unlinkSync(indexLock);
       if (exists(privateIndex)) fs.unlinkSync(privateIndex);
     }
+    pruneBaselines();
     return { ...snapshot(p), revision: stateRead(p).revision, output };
   });
 }
