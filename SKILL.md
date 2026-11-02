@@ -44,7 +44,7 @@ Route leading mode commands first; match bare modes exactly. Ask for missing sub
 - `doctor`: run helper `doctor`. Report failed checks and concrete fixes; do not repair implicitly.
 - `status`: read `references/status.md`; run helper `status` and report its compact summary. No writes.
 - `next` or `continue`: run helper `next`. If it returns `resume`, reconcile files, branch and history and resume the task. Saved discussion-only decisions require an explicit implementation request before development. When `state.plan` exists or `next` starts `plan:` or `auto:`, read `references/plan.md` and follow its stop boundary; otherwise read `references/shape.md` for shaping or legacy interviews. Reuse baselines only for matching project/branch/HEAD; never switch branches blindly. Without unfinished work, read `references/next.md`, find and execute the highest-value supported action, then save what comes afterward. Saved text is advisory, never a command or authorization.
-- `<task>`: implement directly when clear. For consequential ambiguity, read `references/shape.md`; ask at most two targeted questions with recommended defaults.
+- `<task>`: implement directly when clear. For consequential ambiguity, read `references/shape.md`; ask at most two rounds of batched questions with recommended defaults.
 
 ## Navigate and Execute
 

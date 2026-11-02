@@ -1769,9 +1769,9 @@ test('both agent installations receive self-contained shaping guidance and prese
   }
   assert.match(start, /without asking/);
   assert.match(start, /leave the app running on localhost/);
-  assert.match(guidance, /at most five questions/);
-  assert.match(guidance, /at most two targeted questions/);
-  assert.match(guidance, /one question at a time/);
+  assert.match(guidance, /at most two rounds of questions/);
+  assert.match(guidance, /two-round cap applies/);
+  assert.match(guidance, /batches every independent open decision/);
   assert.match(guidance, /implement.*automatically/);
   assert.match(guidance, /three small project-specific starter ideas, one line each/);
   assert.match(guidance, /read-only, including external state/);
