@@ -28,6 +28,10 @@ Expect a clear interface with that complete flow, saved local data, checks of th
 
 Once it works, describe the next change normally, such as “let me cancel a booking.” To resume unfinished work in another session, use `$neef next` or `/neef next`. NEEF reads its saved decisions and checks them against the current project before continuing. Real build time depends on the request, model and environment; the landing-page timeline is illustrative.
 
+## How NEEF compares
+
+Hosted app builders such as Lovable, Bolt.new and Replit Agent also turn a prompt into an app, but your code lives on their platform. NEEF runs on your machine, in the Claude Code or Codex you already use, and also works in existing projects with their current stack. Workflow frameworks such as Spec Kit, BMAD Method and Superpowers add structure to those same agents, but most of them want a spec, a plan or role documents before any code is written. NEEF goes from a request straight to verified, committed work, and planning is optional. For details and sources, see the [comparison](docs/competitors.md).
+
 ## Explanation style
 
 Simple is the initial default: short, everyday language with exact actions when you need to do something. Guided adds numbered steps and brief reasons. Technical explains what changed, where, why and how it was checked. Kid explains like you are 12, with everyday words and an example for each new idea.
