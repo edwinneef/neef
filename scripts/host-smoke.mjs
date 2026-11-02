@@ -19,9 +19,9 @@ export function hostPrompt(host, prompt) {
   return host === 'codex' && !prompt.endsWith(gitApproval) ? `${prompt}\n${gitApproval}` : prompt;
 }
 
-export function hostArguments(host, shared, { session, ephemeral = true, chatQuestions = false, root } = {}) {
+export function hostArguments(host, shared, { session, ephemeral = true, chatQuestions = false, root, extraTools = [] } = {}) {
   assert.ok(['claude', 'codex'].includes(host), 'Host must be claude or codex');
-  if (host === 'claude') return ['-p', '--output-format', 'stream-json', '--verbose', '--allowedTools', 'Read,Edit,Write,Bash,Skill',
+  if (host === 'claude') return ['-p', '--output-format', 'stream-json', '--verbose', '--allowedTools', ['Read', 'Edit', 'Write', 'Bash', 'Skill', ...extraTools].join(','),
     ...(chatQuestions ? ['--disallowedTools', 'AskUserQuestion'] : []), ...(session ? ['--resume', session] : [])];
   assert.ok(!session || !ephemeral, 'A resumed host needs a persisted session');
   const config = ['-c', 'approval_policy="on-request"', '-c', 'approvals_reviewer="auto_review"'];
@@ -92,11 +92,11 @@ export async function waitForHost(child, timeoutMs, stopTimeoutMs = 2000) {
   }
 }
 
-export async function runHost({ host, root, shared, prompt, stem, env = process.env, session, ephemeral = true, chatQuestions = false,
+export async function runHost({ host, root, shared, prompt, stem, env = process.env, session, ephemeral = true, chatQuestions = false, extraTools,
   timeoutMs = Number(env.NEEF_SMOKE_TIMEOUT_MS || 600000), stopTimeoutMs = 2000 }) {
   assert.ok(Number.isFinite(timeoutMs) && timeoutMs > 0, 'NEEF_SMOKE_TIMEOUT_MS must be a positive finite number');
   const program = hostExecutable(host, env);
-  const args = hostArguments(host, shared, { session, ephemeral, chatQuestions, root });
+  const args = hostArguments(host, shared, { session, ephemeral, chatQuestions, root, extraTools });
   const input = hostPrompt(host, prompt);
   return runLoggedProcess(program, args, { root, stem, env, input, timeoutMs, stopTimeoutMs });
 }

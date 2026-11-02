@@ -26,9 +26,16 @@ Each runner uses the installed helper and refuses to start when `~/.neef/neef.mj
 | `scripts/plan-smoke.mjs` | `--small`, `--large`; `--claude` / `--codex` |
 | `scripts/advisor-smoke.mjs` | options (default), `--selection`, `--exhausted`, `--prototype`; `--claude` / `--codex` |
 | `scripts/prototype-smoke.mjs` | UI demo, refinement, handoff and algorithm demo (default), `--ui-only`; `--claude` / `--codex` |
+| `scripts/importance-smoke.mjs` | explore then important task, Claude Code only (`Agent` tool allowed) |
 | `scripts/greenfield-smoke.mjs` | `--plan` (read-only, default), `--run` empty-folder booking app; `--claude-only` / `--codex-only` |
 
 Codex keeps its workspace sandbox and on-request approval review; Git-writing helper calls request scoped approval. Host turns time out after ten minutes (`NEEF_SMOKE_TIMEOUT_MS`).
+
+## Importance smoke (2026-11-02, Claude Code 2.1.316, one run)
+
+- `important`: passed. Three new tests added and committed, one fresh subagent re-verified the required outcomes, state saved `importance:"important"` and complete, evidence recorded the delegate result.
+- `explore`: partly passed. It added no tests and spawned no delegate, and said its outcomes rested on observation. The run failed overall because the agent edited before `begin`, so the helper refused the commit and the task was never saved complete or with `importance`. This is a start-of-task ordering miss, not an importance behavior; it was not retried.
+- One run per level on one host; no Codex run. Both outcomes are agent behavior, so a repeat may differ.
 
 ## Known gaps
 
