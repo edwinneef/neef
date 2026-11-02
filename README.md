@@ -60,8 +60,7 @@ Invoke a mode as `/neef <mode>` in Claude Code or `$neef <mode>` in Codex. `help
 | --- | --- | --- | --- |
 | `<task>` | Project files and task state; safe local commits; Git for an empty folder | Scoped work verified and runnable, or a concrete blocker recorded | [completion](references/completion.md) |
 | `shape [--deep] [--discuss] [idea]` | Without an idea: read-only starters; --discuss: external decisions only; otherwise task decisions then project files | Three starter ideas and a choice, or clarified and implemented, unless discussion-only (--discuss) | [shape](references/shape.md) |
-| `auto <feature>` | Task decisions and plan, then project files and safe local commits after sign-off | All questions asked, challenged plan signed off once, then every phase run until complete or blocked | [auto](references/auto.md) |
-| `plan <feature>` | External task state only | Plan saved; continue runs ready phases until complete or blocked | [plan](references/plan.md) |
+| `plan <feature>` (alias `auto`) | Task decisions and plan first (project/Git unchanged); project files and safe local commits only after one explicit sign-off | Questions asked, challenged plan saved and shown for sign-off; approval runs every phase until complete or blocked | [plan](references/plan.md) |
 | `challenge [--deep] <topic>` | May save external recommendations; project/Git unchanged | Evidence-based critique and improvements; no implementation | [challenge](references/challenge.md) |
 | `review [ref]` | May save external recommendations and run known tests; project/Git unchanged | Last task's commits (or ref..HEAD) graded against saved decisions; findings and one recommendation, no fixes | [review](references/review.md) |
 | `docs` | May save external recommendations; project/Git unchanged | Stale .md claims listed with file, line, actual code behavior and a suggested fix; no edits | [docs](references/docs.md) |

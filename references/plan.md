@@ -1,14 +1,18 @@
-# Plan the feature, execute all ready phases
+# Plan first, sign off once, then build
 
-Planning is done when the whole requested feature has a source-backed plan saved in shared state and shown to the user. `plan` then stops. It never implements, runs project commands, changes Git or creates project planning files. Use the existing helper `status` and revision-checked `state-write` for external continuity; no additional tool or setup is required.
+`plan <feature>` (alias `auto`) front-loads every decision, then finishes the feature without further prompts. Planning is done when the whole requested feature has a source-backed, self-challenged plan saved in shared state and shown for sign-off. It then stops until the user explicitly approves; approval runs every phase in the same invocation (`Continue until complete or blocked`). It adds no new state format, files or dependencies: use helper `status` and revision-checked `state-write`.
+
+The plan, challenge and sign-off are mandatory, however clear or small the request. Before sign-off, project files and Git stay unchanged: no `begin`, edits, project commands, commits or project planning files. A clear request skips only the question rounds; a user who wants no sign-off asks for an ordinary task instead.
 
 ## Size the work
 
-Inspect applicable instructions, relevant code, tests and current state. Preserve unrelated unfinished work; if it cannot be reconciled with this feature, ask before replacing it. Resolve technical facts through inspection. Ask at most two consequential unanswered questions across resumed turns, one at a time with a recommended choice. Before asking, save active discussion state with `baseline:null`, agreed decisions and `next:"plan: questions X/2; pending <question>; planning only"`. Wait for the actual answer before dependent work. A resumed discussion finishes and saves the plan, then stops; it never jumps into implementation. Clear requests need no interview. Keep unresolved assumptions visible rather than inventing agreement.
+Inspect applicable instructions, relevant code, tests, current state and established preferences. Preserve unrelated unfinished work; if it cannot be reconciled with this feature, ask before replacing it. Resolve technical facts through inspection and decide routine matters autonomously. Collect every consequential decision whose alternatives materially change behavior, scope, design or cost.
+
+Ask in rounds. Each round batches all independent open questions in one native question call (Claude `AskUserQuestion`, Codex `request_user_input_async` or `request_user_input` in a supported mode), each with concrete choices and a recommended first option tied to the code or goal. A question whose prerequisite is unanswered waits for the next round. After each round, save answers and repeat until nothing meaningful is open; there is no fixed cap, stop at diminishing value. Clear requests need zero rounds. A pending, cancelled or unanswered choice is not agreement; keep unresolved assumptions visible. Before asking, save active discussion state with `baseline:null`, agreed decisions and `next:"plan: awaiting answers; pending <questions>; do not execute"`. Without a native question tool, ask in chat and stop.
 
 Choose the smallest useful plan from actual complexity, rather than feature wording or a fixed phase count. A bounded change with a clear implementation path gets one short phase. Work spanning architectural boundaries, migrations or dependent deliverables gets a roadmap of manageable phases. Explain the sizing briefly. Cover the full requested outcome, including necessary integration and verification; each phase needs a bounded task, explicit dependencies and observable acceptance criteria. Prefer independently verifiable results, and detail the first executable phase more than distant work. Add no mandatory ceremonies, separate specs, orchestration dependencies or GSD commands.
 
-## Save and stop
+## Save the plan
 
 Keep the feature title in `task`, agreed constraints in `decisions`, and `progress:"active"` until every phase is accepted. Save an optional `plan` object in the existing state file through `state-write`:
 
@@ -32,11 +36,23 @@ Keep the feature title in `task`, agreed constraints in `decisions`, and `progre
 
 Use `scale:"large"` for a roadmap. Phase ids are unique; `dependsOn` contains other phase ids and forms an acyclic graph. Status is `pending`, `active` or `complete`, with at most one active phase. Active and complete phases require completed dependencies. Complete phases also require a `verification` string containing their acceptance evidence. Set `userInput` only on a phase that cannot finish without something only the user can give, such as a product decision, credential, account access, host approval or a manual step on their machine; name exactly what is needed. Omit it when inspection or a reasonable default settles the work. The helper stores the plan beside the task state in its own file, under 32 KiB, written under the same lock and revision; keep it concise. Same-task writes preserve an omitted plan; a different task starts without it. Setup and recommendation refreshes preserve the plan.
 
-Planning needs no `begin` baseline. Use `baseline:null`, record inspection as verification, and put the next executable phase and the planning-only stop boundary in `next`. Save a REQUIRED recommendation for that phase, or the exact blocker when none is executable. Show the sized plan, dependencies and acceptance criteria. Mark each phase that needs the user with what they must provide and when, and say plainly when no phase does. Then `Run: $neef-next` for Codex or `/neef-next` for Claude. Saving the plan does not complete the feature or authorize phase execution in this invocation.
+Planning needs no `begin` baseline. Use `baseline:null` and record inspection as verification.
+
+## Challenge it
+
+Challenge the saved plan at standard depth with read-only inspection: test its assumptions against source, look for simpler alternatives, missing edge cases, risky phases and unverifiable acceptance criteria. Fold supported fixes into the plan. Keep remaining concerns and unverified assumptions for the summary; do not invent criticism.
+
+## One sign-off
+
+Show one compact summary: goal, agreed decisions, assumptions NEEF made, phases with dependencies and acceptance criteria, each phase's `userInput` (or that none needs the user), challenge findings and what changed because of them. State the authority it grants: scoped edits, checks and local commits on main, or on a linked worktree's branch followed by its merge into main; no pushing, new branches or destructive actions. Then ask one native question: approve, or request changes. Without a native question tool, ask in chat and stop; end with the host's approval command, `/neef-next approve the plan` in Claude or `$neef-next approve the plan` in Codex.
+
+Only an explicit approval signs off: an approval answer, or a message whose own words approve this plan, such as that command. A bare `next` or `continue`, a saved recommendation or an earlier reply's suggestion is not approval. A change request updates decisions, asks any questions it creates, re-plans, re-challenges and shows a new summary. Silence, timeout or a cancelled prompt is not approval; stop and keep the plan unsigned.
+
+While unsigned, keep `progress:"active"`, `baseline:null` and `next:"plan: awaiting sign-off; do not execute"` with any pending question, plus a REQUIRED recommendation to approve. A saved `auto:` marker from an earlier version means the same. `next` or `continue` on an unsigned plan resumes the questions or sign-off; it never executes phases. On approval, add `Signed off <ISO date>; plan run` to `decisions` and set `next` to the first ready phase. Saving the plan does not complete the feature.
 
 ## Continue until complete or blocked
 
-If the task `next` starts `auto:`, the plan is not signed off: read `references/auto.md` and follow its sign-off rules instead of this section. A bare `next` or `continue` never signs it off.
+Runs only after sign-off, in the same invocation as the approval, or when `next` finds a signed-off plan. If the task `next` starts `plan:` or `auto:`, the plan is not signed off: follow `One sign-off` instead. Do not ask the user to confirm phases, commits or progress; ask only when a new decision would materially change the signed-off scope or behavior, and only after finishing all independent phases. A host permission, sandbox or policy denial is a blocker for the work that needs it: record it, continue independent work and report the exact user step at the end. Sign-off is never authority to bypass a host decision. Resolve new technical uncertainty through inspection and the signed-off decisions; take the safest conventional option for a minor uncovered choice and record it in `decisions`.
 
 On `next` (or `continue`) with this plan active, reconcile the entire saved roadmap with current files, instructions, branch and history. Preserve accepted phases and agreed decisions. Revalidate assumptions for the selected phase and adjust the remaining plan only as source evidence or new user requirements justify. Resume an active phase; otherwise select the earliest pending phase whose dependencies are complete. Before treating the roadmap as blocked, inspect every remaining phase for useful work that can proceed independently.
 

@@ -800,7 +800,7 @@ test('help groups every command and alias by intent without bootstrapping a proj
   assert.equal(row('shape').command, 'shape [--deep] [--discuss] [idea]');
   assert.match(row('shape').changes, /read-only starters.*--discuss: external decisions only/);
   assert.match(row('shape').stops, /implemented.*unless discussion-only/);
-  assert.match(row('plan').stops, /Plan saved.*until complete or blocked/);
+  assert.match(row('plan').stops, /sign-off.*until complete or blocked/);
   assert.match(row('prototype').changes, /scratch.*task state unchanged/);
   assert.deepEqual(row('prototype').aliases, ['proto']);
   assert.match(row('options').changes, /read-only/);
@@ -832,7 +832,7 @@ test('every main command installs a described subskill that routes through canon
   const plan = f.install();
   assert.equal(fs.existsSync(f.user), false);
   f.install(true);
-  const commands = ['task', 'shape', 'auto', 'plan', 'challenge', 'review', 'docs', 'prototype', 'options', 'prompt', 'setup', 'merge', 'next', 'status', 'help'];
+  const commands = ['task', 'shape', 'plan', 'challenge', 'review', 'docs', 'prototype', 'options', 'prompt', 'setup', 'merge', 'next', 'status', 'help'];
   for (const command of ['proto', 'ask', 'continue', 'doctor']) for (const agent of ['.agents', '.claude']) assert.equal(fs.existsSync(path.join(f.user, agent, 'skills', `neef-${command}`)), false);
   assert.match(fs.readFileSync(path.join(f.user, '.claude/skills/neef-next/SKILL.md'), 'utf8'), /description: "Resume unfinished work, or do the next useful thing. Use only when explicitly invoked."/);
   assert.doesNotMatch(fs.readFileSync(path.join(f.user, '.claude/skills/neef-plan/SKILL.md'), 'utf8'), /Run Neef's/);
@@ -2075,25 +2075,48 @@ test('docs routing keeps the challenge boundary in both installed copies', t => 
   }
 });
 
-test('auto routing gates execution on one explicit sign-off in both installed copies', t => {
+test('plan routing (alias auto) gates execution on one explicit sign-off in both installed copies', t => {
   const f = installation(t);
   f.install(true);
   for (const agent of ['.claude', '.agents']) {
     const root = path.join(f.user, agent, 'skills/neef');
     const skill = fs.readFileSync(path.join(root, 'SKILL.md'), 'utf8');
-    const guidance = fs.readFileSync(path.join(root, 'references/auto.md'), 'utf8');
-    assert.match(skill, /`auto <feature>` or `next` starting `auto:`: read `references\/auto\.md`/);
+    const guidance = fs.readFileSync(path.join(root, 'references/plan.md'), 'utf8');
+    assert.match(skill, /`plan <feature>` or `auto <feature>`: read `references\/plan\.md`/);
+    assert.equal(fs.existsSync(path.join(root, 'references/auto.md')), false);
+    assert.doesNotMatch(skill, /auto.md/);
     assert.match(guidance, /Only an explicit approval signs off/);
     assert.match(guidance, /never executes phases/);
     assert.match(guidance, /no pushing, new branches or destructive actions/);
     assert.match(guidance, /Do not ask the user to confirm phases/);
     assert.match(guidance, /A bare `next` or `continue`.*is not approval/);
     assert.match(guidance, /sign-off are mandatory, however clear or small the request/);
-    assert.match(guidance, /user input each phase still needs from its `userInput`/);
-    assert.match(fs.readFileSync(path.join(root, 'references/plan.md'), 'utf8'), /starts `auto:`, the plan is not signed off: read `references\/auto\.md`/);
+    assert.match(guidance, /each phase's `userInput`/);
+    assert.match(guidance, /A saved `auto:` marker/);
   }
+  const help = f.run(['help']);
+  assert.ok(help.commands.includes('plan <feature>'));
+  assert.ok(help.commands.includes('auto <feature> (alias of plan)'));
+  assert.ok(!help.aliases.claude.includes('/neef-auto'));
+  for (const agent of ['.claude', '.agents']) assert.equal(fs.existsSync(path.join(f.user, agent, 'skills/neef-auto')), false);
 });
 
+test('reinstall retires an unedited neef-auto subskill and auto.md', t => {
+  const f = installation(t);
+  f.install(true);
+  const receiptPath = path.join(f.home, 'install.json');
+  const receipt = JSON.parse(fs.readFileSync(receiptPath));
+  const old = [path.join(f.user, '.claude/skills/neef-auto/SKILL.md'), path.join(f.user, '.claude/skills/neef/references/auto.md')];
+  for (const target of old) {
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, 'Old auto');
+    receipt.files[target] = crypto.createHash('sha256').update('Old auto').digest('hex');
+  }
+  fs.writeFileSync(receiptPath, JSON.stringify(receipt));
+  f.install(true);
+  for (const target of old) assert.equal(fs.existsSync(target), false);
+  assert.equal(fs.existsSync(path.join(f.user, '.claude/skills/neef-auto')), false);
+});
 
 test('installer retires only receipt-owned unchanged references and backs them up', t => {
   const f = installation(t);

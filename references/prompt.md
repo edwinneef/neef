@@ -10,7 +10,7 @@ Ask for the idea when it is missing. Ask one targeted question only when the ans
 
 ## Choose the mode
 
-Use the same routing as `references/advisor.md`: a direct task for a clear change, shape for consequential open decisions, auto for answering everything up front and building hands-off, prototype for an isolated demo, plan for a saved roadmap that stops, challenge for a critique, review for checking committed work. Add flags such as `--deep` or `--discuss` only when the idea calls for them.
+Use the same routing as `references/advisor.md`: a direct task for a clear change, shape for consequential open decisions, plan (alias auto) for answering everything up front, signing off once and building hands-off, prototype for an isolated demo, challenge for a critique, review for checking committed work. Add flags such as `--deep` or `--discuss` only when the idea calls for them.
 
 ## Write the prompt
 

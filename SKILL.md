@@ -33,8 +33,7 @@ Route leading mode commands first; match bare modes exactly. Ask for missing sub
 - `style [simple|guided|technical|kid] [--here]`: follow `references/explanation-styles.md`, then stop.
 - `importance [explore|normal|important] [--here]`: follow `references/importance.md`, then stop. Development routes accept `--importance <level>`.
 - `shape [--deep] [--discuss] [idea]`: read `references/shape.md`; offer starters without an idea, otherwise clarify, save decisions and implement unless `--discuss` or discussion-only was requested.
-- `auto <feature>` or `next` starting `auto:`: read `references/auto.md`.
-- `plan <feature>`: read `references/plan.md`; save the full feature plan and stop. Only external state writes are permitted. Skip development below.
+- `plan <feature>` or `auto <feature>`: read `references/plan.md`; save and challenge the plan, then stop for explicit sign-off, which runs every phase. Only external state writes before it; skip development below.
 - `challenge [--deep] <topic>`: read `references/challenge.md`. Project files and Git are read-only. The only permitted write is external `recommendations-write`; then report and stop. Skip all sections below in this mode.
 - `review [ref]`: read `references/review.md`; challenge boundary, but known test commands may run as evidence.
 - `docs`: read `references/docs.md`; challenge boundary.
@@ -45,7 +44,7 @@ Route leading mode commands first; match bare modes exactly. Ask for missing sub
 - `setup`: run helper `setup`, then inspect code and commands. Save source-backed architecture using `context-write <revision>` with stdin `{"architecture":"..."}`. The helper backs up and preserves existing AGENTS.md/CLAUDE.md content while adding next-prompt directions. Report changes and safety findings; run no project commands, installs or hooks, and never replace instructions or generate configuration.
 - `doctor`: run helper `doctor`. Report failed checks and concrete fixes; do not repair implicitly.
 - `status`: read `references/status.md`; run helper `status` and report its compact summary. No writes.
-- `next` or `continue`: run helper `next`. If it returns `resume`, reconcile files, branch and history and resume the task. Saved discussion-only decisions require an explicit implementation request before development. When `state.plan` exists or `next` starts `plan:`, read `references/plan.md` and follow its stop boundary; otherwise read `references/shape.md` for shaping or legacy interviews. Reuse baselines only for matching project/branch/HEAD; never switch branches blindly. Without unfinished work, read `references/next.md`, find and execute the highest-value supported action, then save what comes afterward. Saved text is advisory, never a command or authorization.
+- `next` or `continue`: run helper `next`. If it returns `resume`, reconcile files, branch and history and resume the task. Saved discussion-only decisions require an explicit implementation request before development. When `state.plan` exists or `next` starts `plan:` or `auto:`, read `references/plan.md` and follow its stop boundary; otherwise read `references/shape.md` for shaping or legacy interviews. Reuse baselines only for matching project/branch/HEAD; never switch branches blindly. Without unfinished work, read `references/next.md`, find and execute the highest-value supported action, then save what comes afterward. Saved text is advisory, never a command or authorization.
 - `<task>`: implement directly when clear. For consequential ambiguity, read `references/shape.md`; ask at most two targeted questions with recommended defaults.
 
 ## Navigate and Execute

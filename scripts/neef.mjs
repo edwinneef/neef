@@ -10,8 +10,7 @@ export const legacy = ['ed', 'ed-auto', 'ed-feature', 'ed-help', 'ed-next', 'ed-
 const commandCatalog = [
   { name: 'task', guide: 'references/completion.md', usage: '<task>', intent: 'build', changes: 'Project files and task state; safe local commits; Git for an empty folder', stops: 'Scoped work verified and runnable, or a concrete blocker recorded' },
   { name: 'shape', guide: 'references/shape.md', usage: 'shape [--deep] [--discuss] [idea]', intent: 'explore', changes: 'Without an idea: read-only starters; --discuss: external decisions only; otherwise task decisions then project files', stops: 'Three starter ideas and a choice, or clarified and implemented, unless discussion-only (--discuss)' },
-  { name: 'auto', guide: 'references/auto.md', usage: 'auto <feature>', intent: 'build', changes: 'Task decisions and plan, then project files and safe local commits after sign-off', stops: 'All questions asked, challenged plan signed off once, then every phase run until complete or blocked' },
-  { name: 'plan', guide: 'references/plan.md', usage: 'plan <feature>', intent: 'explore', changes: 'External task state only', stops: 'Plan saved; continue runs ready phases until complete or blocked' },
+  { name: 'plan', guide: 'references/plan.md', usage: 'plan <feature>', aliases: ['auto'], intent: 'build', changes: 'Task decisions and plan first (project/Git unchanged); project files and safe local commits only after one explicit sign-off', stops: 'Questions asked, challenged plan saved and shown for sign-off; approval runs every phase until complete or blocked' },
   { name: 'challenge', guide: 'references/challenge.md', usage: 'challenge [--deep] <topic>', intent: 'choose', changes: 'May save external recommendations; project/Git unchanged', stops: 'Evidence-based critique and improvements; no implementation' },
   { name: 'review', guide: 'references/review.md', usage: 'review [ref]', intent: 'choose', changes: 'May save external recommendations and run known tests; project/Git unchanged', stops: 'Last task\'s commits (or ref..HEAD) graded against saved decisions; findings and one recommendation, no fixes' },
   { name: 'docs', guide: 'references/docs.md', usage: 'docs', intent: 'inspect', changes: 'May save external recommendations; project/Git unchanged', stops: 'Stale .md claims listed with file, line, actual code behavior and a suggested fix; no edits' },
@@ -43,8 +42,7 @@ export const subskillNames = commandCatalog.filter(command => command.subskill !
 export const commandDescriptions = {
   task: 'Implement and verify a development task',
   shape: 'Choose or clarify an idea; --discuss explores without building',
-  auto: 'Ask everything up front, sign off once, then build hands-off',
-  plan: 'Save an implementation plan without changing code',
+  plan: 'Ask everything up front, sign off once, then build hands-off',
   challenge: 'Critique an approach and suggest improvements',
   review: 'Check the last task\'s commits against what was agreed',
   prototype: 'Build an isolated demo to test an idea',
