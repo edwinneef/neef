@@ -5,9 +5,10 @@ import path from 'node:path';
 // A distinct edit: the original walkthrough and raw recordings stay untouched.
 const source=path.resolve(process.argv[2]||'.test-artifacts/ribbon-showcase/final-20261102');
 const root=path.resolve(process.argv[3]||'.test-artifacts/ribbon-showcase/reel-20261102');
-const terminal=process.argv[4]==='terminal';
-const story=JSON.parse(await readFile(new URL(terminal?'terminal.json':'reel.json',import.meta.url),'utf8'));
-const outputName=terminal?'NEEF-Terminal-60s':'NEEF-Ribbon-Reel-60s';
+const four=process.argv[4]==='four';
+const terminal=four||process.argv[4]==='terminal';
+const story=JSON.parse(await readFile(new URL(four?'terminal-four.json':terminal?'terminal.json':'reel.json',import.meta.url),'utf8'));
+const outputName=four?'NEEF-Four-60s':terminal?'NEEF-Terminal-60s':'NEEF-Ribbon-Reel-60s';
 await mkdir(root,{recursive:true});
 const fonts={sans:'segoeui.ttf',serif:'georgia.ttf',mono:'consola.ttf'};
 const phases=['Navigate','Execute','Evaluate','Follow-up'];
@@ -50,7 +51,20 @@ function mark(x,y,size,p,dark,animated=false){
 for(let i=0;i<shots.length;i++){
   const s=shots[i],dark=s.terminal||s.card&&(i%2===0||s.end),bg=dark?'211d18':'efe8da',ink=dark?'ede3d3':'382e25',muted=dark?'b9ac98':'625745';
   let filters=[],inputs=[],head='';
-  if(s.terminal){
+  if(s.grid){
+    const names=['Contact sheet','Projection','Atlas','Proof pair'];
+    for(const file of ['contact','projection','atlas','proof'])inputs.push('-loop','1','-i',path.join(root,file+'.png'));
+    head=`color=c=0x${bg}:s=1920x1080:r=30:d=${s.d}[base];`;
+    for(let n=0;n<4;n++)head+=`[${n}:v]crop=1400:600:100:100,scale=850:364,fps=30,setsar=1[tile${n}];`;
+    for(let n=0;n<4;n++){
+      const x=80+(n%2)*910,y=198+Math.floor(n/2)*416;
+      head+=`[${n===0?'base':'grid'+(n-1)}][tile${n}]overlay=${x}:${y}:enable='gte(t,${n*.22})'[grid${n}];`;
+      filters.push(await type(names[n],24,x,y-36,ink,'sans',`:enable='gte(t,${n*.22})'`));
+    }
+    head+='[grid3]';
+    filters.push(await type(s.title,40,80,83,ink,'serif'));
+    filters.push(await type('Existing prototypes / shortened prompt reconstruction',20,80,1010,muted,'mono'));
+  }else if(s.terminal){
     inputs=['-f','lavfi','-i',`color=c=0x${bg}:s=1920x1080:r=30:d=${s.d}`];
     filters.push(await type(s.title,64,100,150,ink,'serif'));
     filters.push(await type('Codex / NEEF',23,100,260,muted,'mono'));
@@ -114,11 +128,11 @@ await writeFile(path.join(root,'NEEF-Ribbon-Reel.srt'),story.segments.map((s,i)=
 // Quiet original synthesized pulse; no licensed music or external assets.
 ff(['-f','lavfi','-i',"aevalsrc='0.025*sin(2*PI*82.406*t)*exp(-8*mod(t,0.5))+0.012*sin(2*PI*164.813*t)*exp(-4*mod(t,2))':s=48000:d=60",'-af','afade=t=in:d=1,afade=t=out:st=57:d=3','pulse.wav']);
 ff(['-i','picture.mp4','-i','voice.wav','-i','pulse.wav','-i','NEEF-Ribbon-Reel.srt','-filter_complex','[1:a]loudnorm=I=-16:TP=-2:LRA=9[v];[v][2:a]amix=inputs=2:normalize=0,alimiter=limit=0.85[a]','-map','0:v','-map','[a]','-map','3:s','-c:v','copy','-c:a','aac','-b:a','192k','-c:s','mov_text','-metadata:s:s:0','language=eng','-t','60','-movflags','+faststart',outputName+'.mp4']);
-ff(['-ss',terminal?'1':'54','-i',outputName+'.mp4','-frames:v','1','poster.png']);
+ff(['-ss',four?'8':terminal?'1':'54','-i',outputName+'.mp4','-frames:v','1','poster.png']);
 const probe=run('ffprobe',['-v','error','-show_streams','-show_format','-of','json',outputName+'.mp4']);
 await writeFile(path.join(root,'probe.json'),probe);
 const delivery='D:/projects/ribbon-showcase-delivery';
 await copyFile(path.join(root,outputName+'.mp4'),path.join(delivery,outputName+'.mp4'));
-await copyFile(path.join(root,'NEEF-Ribbon-Reel.srt'),path.join(delivery,terminal?'NEEF-Terminal.srt':'NEEF-Ribbon-Reel.srt'));
-await copyFile(path.join(root,'poster.png'),path.join(delivery,terminal?'terminal-poster.png':'reel-poster.png'));
+await copyFile(path.join(root,'NEEF-Ribbon-Reel.srt'),path.join(delivery,four?'NEEF-Four.srt':terminal?'NEEF-Terminal.srt':'NEEF-Ribbon-Reel.srt'));
+await copyFile(path.join(root,'poster.png'),path.join(delivery,four?'four-poster.png':terminal?'terminal-poster.png':'reel-poster.png'));
 console.log('Delivered the separate 60-second reel.');
