@@ -41,6 +41,9 @@ The build type-checks the frontend and writes a static site to `site/dist/`. The
   - Install (copy buttons).
 
 Code: data lives in `src/content.ts`. The other files are:
+- `src/main.tsx`: entry point that mounts `App`;
+- `src/App.tsx`: page layout, theme and the `html.motion` class;
+- `src/styles.css`: tobacco palette (light and dark), system fonts and all styles;
 - `src/host.tsx`: page context and the host-text morph;
 - `src/Logo.tsx`;
 - `src/Nav.tsx`;
