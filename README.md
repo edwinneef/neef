@@ -36,6 +36,12 @@ Use `$neef style guided` in Codex or `/neef style guided` in Claude Code to save
 
 The preference lives in `~/.neef/preferences.json` (or `NEEF_HOME`), separate from project task state. Changing it preserves the previous file as `.bak`; reinstalling NEEF preserves the preference. Start a fresh agent session after installing updated skill instructions.
 
+## Importance
+
+Importance sets how much testing and independent checking a task gets, so exploring stays light and risky work gets scrutiny. `explore` writes no new tests and checks by running the thing. `normal` (the default) adds focused tests only for behavior you have settled. `important` adds tests per required outcome and has a fresh second agent re-verify them before completion. It never changes permissions or required evidence.
+
+Set a default with `/neef importance important` (`$neef importance …` in Codex), add `--here` for this project only, or `/neef importance clear --here` to remove the override. Give one task its own level with `--importance explore`. A task's level is saved in its state, so `next` resumes at it. NEEF may suggest a higher level for risky work (auth, deletion, migrations, shared APIs) and asks first; it never lowers the level itself. See [importance](references/importance.md).
+
 ## How NEEF works
 
 - **Navigate:** Understand the task, codebase, context and relevant decisions.
@@ -68,6 +74,7 @@ Invoke a mode as `/neef <mode>` in Claude Code or `$neef <mode>` in Codex. `help
 | `status` | Nothing (read-only) | Progress, Git, verification and blockers reported | [status](references/status.md) |
 | `help` | Nothing (read-only) | Grouped command guide and aliases displayed | — |
 | `style [simple\|guided\|technical\|kid] [--here]` | With a name: global explanation preference, or this project only with --here; without: read-only | Current style shown or default saved; no project task started | [explanation-styles](references/explanation-styles.md) |
+| `importance [explore\|normal\|important] [--here]` | With a level: global default for how much testing and cross-checking tasks get, or this project only with --here; without: read-only | Current level shown or default saved; no project task started | [importance](references/importance.md) |
 | `doctor` | Nothing; no implicit repairs | Installation health checks and concrete fixes reported | — |
 <!-- modes:end -->
 

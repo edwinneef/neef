@@ -30,7 +30,8 @@ UI work: read `references/personal-design.md`.
 Route leading mode commands first; match bare modes exactly. Ask for missing subjects except shape. Otherwise, demo-only tasks use `references/prototype.md` and skip development below; otherwise develop.
 
 - `help`: run helper `help`; show name, fullName, motto and all intent groups as Command/Changes/Stops at tables using returned text. Include every command, flag and alias beside its command, and each direct subskill with its full host prefix. Omit helper internals. Read-only; stop after help.
-- `style [simple|guided|technical|kid] [--here]`: follow the style-setting route in `references/explanation-styles.md`, then stop.
+- `style [simple|guided|technical|kid] [--here]`: follow `references/explanation-styles.md`, then stop.
+- `importance [explore|normal|important] [--here]`: follow `references/importance.md`, then stop. Development routes accept `--importance <level>`.
 - `shape [--deep] [--discuss] [idea]`: read `references/shape.md`; offer starters without an idea, otherwise clarify, save decisions and implement unless `--discuss` or discussion-only was requested.
 - `auto <feature>` or `next` starting `auto:`: read `references/auto.md`.
 - `plan <feature>`: read `references/plan.md`; save the full feature plan and stop. Only external state writes are permitted. Skip development below.
@@ -49,9 +50,9 @@ Route leading mode commands first; match bare modes exactly. Ask for missing sub
 
 ## Navigate and Execute
 
-Read applicable AGENTS.md, CLAUDE.md, relevant code and helper `status`; `next` already includes status. Reuse instructions already read in this session unless changed. `begin` bootstraps missing `context`. Cached facts never override current instructions. On persistence failure, preserve state, report it and continue independent work. Reconcile stale state; retain unfinished work unless the user replaces it. Before edits that may be committed, run `begin <short-task-slug>` for a baseline. Commits require the returned baseline ID.
+Read applicable AGENTS.md, CLAUDE.md, relevant code and helper `status`; `next` already includes status. `begin` bootstraps missing `context`. Cached facts never override current instructions. On persistence failure, preserve state, report it and continue independent work. Reconcile stale state; retain unfinished work unless the user replaces it. Before edits that may be committed, run `begin <short-task-slug>` for a baseline. Commits require the returned baseline ID.
 
-For development and before task-state writes, read `references/completion.md`. Make the smallest change with focused checks; fix introduced regressions. Keep existing stacks, patterns and tooling. If `begin` reports `greenfield`, read `references/start.md`. Runnable work ends verified to start, with run command or URL. Ordinary work needs no extra plans, full suite, review or interview. Execute authorized plan phases until complete or no safe work remains. Inspect and use reasonable defaults; ask only for essential missing information or authority. Continue independent work around blockers. Batch independent calls; give brief progress updates.
+For development and before task-state writes, read `references/completion.md`. Make the smallest change with focused checks; fix introduced regressions. Keep existing stacks, patterns and tooling. If `begin` reports `greenfield`, read `references/start.md`. Runnable work ends verified to start, with run command or URL. Ordinary work needs no extra plan, suite, review or interview. Execute authorized plan phases until complete or no safe work remains. Inspect and use reasonable defaults; ask only for essential missing input or authority. Continue independent work around blockers. Batch independent calls.
 
 Use native delegates only for independent investigation or disjoint edits. Bound their scope; own integration, verification, Git and state.
 

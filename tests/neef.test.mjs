@@ -197,6 +197,46 @@ test('style refuses linked storage and preserves other preference fields', t => 
   assert.equal(fs.readFileSync(file, 'utf8'), before);
 });
 
+test('importance defaults to normal, saves per project and leaves style intact', t => {
+  const f = fixture(t, false);
+  const other = path.join(path.dirname(f.root), 'other-project');
+  fs.mkdirSync(other);
+  const elsewhere = args => {
+    const result = spawnSync(process.execPath, [helper, '--project', other, ...args], { encoding: 'utf8', env: f.env(f.home) });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    return JSON.parse(result.stdout);
+  };
+  assert.equal(f.run(['importance']).importance, 'normal');
+  assert.equal(fs.existsSync(f.home), false);
+  f.run(['style', 'kid']);
+  assert.equal(f.run(['importance', 'explore']).importance, 'explore');
+  assert.deepEqual(f.run(['importance', 'important', '--here']), { ...f.run(['importance']), importance: 'important', scope: 'project', global: 'explore' });
+  assert.equal(elsewhere(['importance']).importance, 'explore');
+  assert.equal(f.run(['style']).style, 'kid');
+  assert.deepEqual(f.run(['importance', 'clear', '--here']), { ...f.run(['importance']), importance: 'explore', scope: 'global' });
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.home, 'preferences.json'), 'utf8')), { version: 1, style: 'kid', importance: 'explore' });
+  f.run(['importance', 'critical'], undefined, /Choose importance/);
+  f.run(['importance', 'clear'], undefined, /Choose importance/);
+  f.run(['importance', '--here'], undefined, /Usage/);
+  fs.writeFileSync(path.join(f.home, 'preferences.json'), '{"version":1,"style":"simple","importanceProjects":{"x":"loud"}}');
+  f.run(['importance'], undefined, /Invalid preferences/);
+});
+
+test('task importance is validated, kept for the same task and wins in status', t => {
+  const f = fixture(t, false);
+  f.run(['importance', 'explore', '--here']);
+  const first = f.run(['status']);
+  assert.deepEqual(first.importance, { level: 'explore', scope: 'project' });
+  const saved = f.state(first.revision, 'Careful task', { importance: 'important' });
+  assert.equal(saved.state.importance, 'important');
+  assert.deepEqual(f.run(['status']).importance, { level: 'important', scope: 'task' });
+  assert.equal(f.state(saved.revision, 'Careful task', { next: 'continue' }).state.importance, 'important');
+  const other = f.state(f.run(['status']).revision, 'Different task');
+  assert.equal(other.state.importance, undefined);
+  assert.deepEqual(f.run(['status']).importance, { level: 'explore', scope: 'project' });
+  f.state(other.revision, 'Different task', { importance: 'critical' }, /importance must be explore, normal or important/);
+});
+
 test('normal multi-file feature stays on main and records verification', t => {
   const f = fixture(t);
   const begin = f.run(['begin', 'feature']);

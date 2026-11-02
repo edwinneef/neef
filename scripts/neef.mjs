@@ -24,6 +24,7 @@ const commandCatalog = [
   { name: 'status', guide: 'references/status.md', usage: 'status', intent: 'inspect', changes: 'Nothing (read-only)', stops: 'Progress, Git, verification and blockers reported' },
   { name: 'help', usage: 'help', intent: 'inspect', changes: 'Nothing (read-only)', stops: 'Grouped command guide and aliases displayed' },
   { name: 'style', guide: 'references/explanation-styles.md', usage: 'style [simple|guided|technical|kid] [--here]', subskill: false, intent: 'inspect', changes: 'With a name: global explanation preference, or this project only with --here; without: read-only', stops: 'Current style shown or default saved; no project task started' },
+  { name: 'importance', guide: 'references/importance.md', usage: 'importance [explore|normal|important] [--here]', subskill: false, intent: 'inspect', changes: 'With a level: global default for how much testing and cross-checking tasks get, or this project only with --here; without: read-only', stops: 'Current level shown or default saved; no project task started' },
   { name: 'doctor', usage: 'doctor', subskill: false, intent: 'inspect', changes: 'Nothing; no implicit repairs', stops: 'Installation health checks and concrete fixes reported' },
 ];
 // The README mode table is generated from the catalog; a test keeps the two identical.
@@ -194,7 +195,14 @@ function loadPlan(p, planHash) {
   fail(`Plan file missing or does not match state: inspect ${file} and its .bak`);
 }
 const explanationStyles = ['simple', 'guided', 'technical', 'kid'];
-function explanationStyle(p, selected, here = false) {
+const importanceLevels = ['explore', 'normal', 'important'];
+const preferenceKinds = {
+  style: { key: 'style', projects: 'projects', choices: explanationStyles, fallback: 'simple', label: 'style simple, guided, technical or kid' },
+  importance: { key: 'importance', projects: 'importanceProjects', choices: importanceLevels, fallback: 'normal', label: 'importance explore, normal or important' },
+};
+// One preferences file holds a global default plus per-project overrides for each kind.
+function preference(p, kind, selected, here = false) {
+  const { key, projects: projectsKey, choices, fallback, label } = kind;
   const file = path.join(home(), 'preferences.json');
   // A shared preference must never follow a linked file or directory.
   for (let cursor = file; cursor !== path.dirname(cursor); cursor = path.dirname(cursor)) {
@@ -204,40 +212,49 @@ function explanationStyle(p, selected, here = false) {
   const load = () => {
     if (!exists(file)) return { version: 1, style: 'simple' };
     const value = json(file);
-    const projects = value?.projects ?? {};
-    if (value?.version !== 1 || !explanationStyles.includes(value.style) || typeof projects !== 'object' || Array.isArray(projects)
-      || !Object.values(projects).every(style => explanationStyles.includes(style))) fail('Invalid preferences preserved; expected version 1 and style simple, guided, technical or kid');
+    const projects = value?.[projectsKey] ?? {};
+    if (value?.version !== 1 || !explanationStyles.includes(value.style) || (value[key] !== undefined && !choices.includes(value[key]))
+      || typeof projects !== 'object' || Array.isArray(projects) || !Object.values(projects).every(item => choices.includes(item))) fail(`Invalid preferences preserved; expected version 1 and ${label}`);
     return value;
   };
   // A project override wins over the global default for that project only.
   const result = value => {
-    const own = value.projects?.[p.id];
-    return { style: own ?? value.style, available: explanationStyles, scope: own ? 'project' : 'global', global: value.style, file };
+    const own = value[projectsKey]?.[p.id], global = value[key] ?? fallback;
+    return { [key]: own ?? global, available: choices, scope: own ? 'project' : 'global', global, file };
   };
   const update = value => {
-    if (!here) return { ...value, style: selected };
-    const { [p.id]: _, ...others } = value.projects ?? {};
+    if (!here) return { ...value, [key]: selected };
+    const { [p.id]: _, ...others } = value[projectsKey] ?? {};
     const projects = selected === 'clear' ? others : { ...others, [p.id]: selected };
-    const { projects: __, ...rest } = value;
-    return Object.keys(projects).length ? { ...rest, projects } : rest;
+    const { [projectsKey]: __, ...rest } = value;
+    return Object.keys(projects).length ? { ...rest, [projectsKey]: projects } : rest;
   };
   if (selected === undefined) return result(load());
-  if (!explanationStyles.includes(selected) && !(here && selected === 'clear')) fail('Choose style simple, guided, technical or kid');
+  if (!choices.includes(selected) && !(here && selected === 'clear')) fail(`Choose ${label}`);
   requireExternalStorage(p, [file, `${file}.bak`, `${file}.lock`]);
   return lock(file, () => {
     const value = load(), next = update(value);
     if (!exists(file) || JSON.stringify(next) !== JSON.stringify(value)) {
       if (exists(file)) atomic(`${file}.bak`, read(file));
-      atomic(file, `${JSON.stringify(next, null, 2)}\n`);
+      atomic(file, `${JSON.stringify(next, null, 2)}
+`);
     }
     return result(next);
   });
+}
+const explanationStyle = (p, selected, here) => preference(p, preferenceKinds.style, selected, here);
+// Task level beats the project override, which beats the global default.
+function effectiveImportance(p, task) {
+  if (task) return { level: task, scope: 'task' };
+  try { const { importance, scope } = preference(p, preferenceKinds.importance); return { level: importance, scope }; }
+  catch { return { level: 'normal', scope: 'default' }; }
 }
 function validState(value, p) {
   return value?.version === 1 && value.project === p.root && typeof value.task === 'string'
     && ['active', 'complete'].includes(value.progress) && typeof value.revision === 'string'
     && (value.context === undefined || (value.context?.version === 1
       && ['minimal', 'full'].includes(value.context.depth) && typeof value.context.fingerprint === 'string'))
+    && (value.importance === undefined || importanceLevels.includes(value.importance))
     && (value.recommendations === undefined || validRecommendations(value.recommendations))
     && (value.outcomes === undefined || (validOutcomes(value.outcomes)
       && (value.progress !== 'complete' || !completionError(value))))
@@ -264,7 +281,7 @@ export function status(p) {
     if (saved.state.branch !== actual.branch) discrepancies.push('Saved branch differs; inspect before continuing');
     if (saved.state.head !== actual.head) discrepancies.push('HEAD changed; reconcile saved progress with history and files');
   }
-  return { project: p.root, ...saved, actual, discrepancies };
+  return { project: p.root, ...saved, importance: effectiveImportance(p, saved.state?.importance), actual, discrepancies };
 }
 
 function prototypeWorkspace(p, slug) {
@@ -325,6 +342,7 @@ function stateInputErrors(input) {
     .filter(key => (key === 'task' ? true : input[key] != null) && typeof input[key] !== 'string')
     .map(key => `${key} must be a string (got ${kind(input[key])})`);
   if (!['active', 'complete'].includes(input.progress)) errors.push('progress must be "active" or "complete"');
+  if (input.importance !== undefined && !importanceLevels.includes(input.importance)) errors.push('importance must be explore, normal or important');
   return errors;
 }
 
@@ -364,6 +382,7 @@ function stateWrite(p, expected, input) {
       // Where this task's history begins: review grades the commits made since.
       start: current.state?.task === input.task ? current.state.start ?? null : taskStart(p, current.state, actual.head),
       baseline: Object.hasOwn(input, 'baseline') ? input.baseline : (current.state?.task === input.task ? current.state.baseline : null) ?? null,
+      ...(input.importance ?? (current.state?.task === input.task ? current.state.importance : undefined) ? { importance: input.importance ?? current.state.importance } : {}),
       ...(current.state?.context ? { context: current.state.context } : {}),
       ...(current.state?.recommendations ? { recommendations: current.state.recommendations } : {}),
       decisions: input.decisions ?? (current.state?.task === input.task ? current.state.decisions : '') ?? '',
@@ -1106,13 +1125,18 @@ export async function main(args = process.argv.slice(2)) {
         .map(({ usage, changes, stops, aliases = [] }) => ({ command: usage, changes, stops, aliases })) })),
     invocation: { codex: '$neef <command>', claude: '/neef <command>' },
     aliases: { codex: subskillNames.map(command => `$neef-${command}`), claude: subskillNames.map(command => `/neef-${command}`) },
-    helperCommands: ['style [simple|guided|technical|kid] [--here] (read the effective style or save the global default; --here saves a project override, style clear --here removes it)', 'prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'docs (read-only: Git-tracked and untracked-but-not-ignored .md files split into agent instructions, other docs and skipped changelogs/licenses, with known commands)', 'review [ref] (read-only: the last task\'s commits since its first begin or first save, whichever is earlier, or ref..HEAD, with saved decisions, plan, outcomes and all known commands, each with a kind; run only kind test)', 'merge-candidates (read-only: local branches ahead of main with worktree, dirty and taskComplete flags)', 'merge <branch...> [--keep] (user-chosen branches into main in order; stops at the first conflict; deletes merged branches and their worktrees unless --keep)', 'merge (from a linked worktree whose task is complete: merges its branch into main in the main folder; fast-forward else one merge commit; refuses conflicts, staged or in-progress work and never deletes branches)', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?,outcomes?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', outcomes: 'Development completion requires [{id,description,required,status,evidence}], with unique ids and at least one required outcome. Status is pending/passed/failed/blocked; passed outcomes need nonempty evidence. Required outcomes must pass, blockers must be explicitly cleared, and plan phases must finish before completion. Same-task writes preserve omitted outcomes; new tasks do not inherit them. Legacy saved states remain readable. Evidence is agent-reported, not independently proven.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?,userInput?}]}. userInput names the decision, credential, approval or manual step only the user can supply for that phase. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. The plan is stored beside the state as <id>.plan.json under 32 KiB, under the same lock and revision; the rest of the state stays under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests' };
+    helperCommands: ['style [simple|guided|technical|kid] [--here] (read the effective style or save the global default; --here saves a project override, style clear --here removes it)', 'importance [explore|normal|important] [--here] (read the effective default or save the global one; --here saves a project override, importance clear --here removes it; a task may carry its own importance in state-write)', 'prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'docs (read-only: Git-tracked and untracked-but-not-ignored .md files split into agent instructions, other docs and skipped changelogs/licenses, with known commands)', 'review [ref] (read-only: the last task\'s commits since its first begin or first save, whichever is earlier, or ref..HEAD, with saved decisions, plan, outcomes and all known commands, each with a kind; run only kind test)', 'merge-candidates (read-only: local branches ahead of main with worktree, dirty and taskComplete flags)', 'merge <branch...> [--keep] (user-chosen branches into main in order; stops at the first conflict; deletes merged branches and their worktrees unless --keep)', 'merge (from a linked worktree whose task is complete: merges its branch into main in the main folder; fast-forward else one merge commit; refuses conflicts, staged or in-progress work and never deletes branches)', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?,outcomes?,importance?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', outcomes: 'Development completion requires [{id,description,required,status,evidence}], with unique ids and at least one required outcome. Status is pending/passed/failed/blocked; passed outcomes need nonempty evidence. Required outcomes must pass, blockers must be explicitly cleared, and plan phases must finish before completion. Same-task writes preserve omitted outcomes; new tasks do not inherit them. Legacy saved states remain readable. Evidence is agent-reported, not independently proven.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?,userInput?}]}. userInput names the decision, credential, approval or manual step only the user can supply for that phase. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. The plan is stored beside the state as <id>.plan.json under 32 KiB, under the same lock and revision; the rest of the state stays under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests' };
   if (command === 'doctor') return doctor();
   const p = project(cwd);
   if (command === 'style') {
     const here = args.includes('--here'), rest = args.filter(arg => arg !== '--here');
     if (rest.length > 2 || (here && rest.length < 2)) fail('Usage: style [simple|guided|technical|kid] [--here], or style clear --here');
     return explanationStyle(p, rest[1], here);
+  }
+  if (command === 'importance') {
+    const here = args.includes('--here'), rest = args.filter(arg => arg !== '--here');
+    if (rest.length > 2 || (here && rest.length < 2)) fail('Usage: importance [explore|normal|important] [--here], or importance clear --here');
+    return preference(p, preferenceKinds.importance, rest[1], here);
   }
   if (['setup', 'bootstrap', 'context-write', 'begin', 'prepare', 'commit', 'state-write', 'recommendations-write', 'state-recover'].includes(command)) requireExternalStorage(p);
   const input = () => JSON.parse(fs.readFileSync(0, 'utf8'));
