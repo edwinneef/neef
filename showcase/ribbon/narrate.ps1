@@ -16,4 +16,4 @@ try {
         $speaker.SetOutputToNull()
     }
 } finally { $speaker.Dispose() }
-Write-Output 'Generated eight local narration clips with Microsoft Hazel Desktop.'
+Write-Output ('Generated {0} local narration clips with Microsoft Hazel Desktop.' -f $story.segments.Count)

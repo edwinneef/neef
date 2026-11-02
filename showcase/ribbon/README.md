@@ -4,6 +4,9 @@ Status: delivered under the user's autonomous completion request. The standalone
 
 ## Delivery
 
+- Highlight reel revision: `D:\projects\ribbon-showcase-delivery\NEEF-Ribbon-Reel-60s.mp4`. A separate 17-shot, 60-second edit matching the website's tobacco light/dark colors and Georgia headings. The logo tiles follow Navigate → Execute → Evaluate → Follow-up clockwise, with persistent phase labels, short prompt summaries, the late typography prototype and independent CSS proof. The original walkthrough remains available. Audio uses local synthesized narration and a quiet original synthesized pulse.
+- Reel sources: `reel.json` and `render-reel.mjs`. Generate narration with `narrate.ps1 -Storyboard showcase/ribbon/reel.json -OutputDirectory <new-render-folder>/voice`, then run `node showcase/ribbon/render-reel.mjs <original-clips-folder> <new-render-folder>`. Reproduction expects the original `*Clip.mp4` recordings, not the earlier composed video. Evidence: `.test-artifacts/ribbon-showcase/reel-20261102`.
+
 - Ready-to-open delivery folder: `D:\projects\ribbon-showcase-delivery` with the final MP4, subtitles, poster, downloaded CSS, source recordings and START-HERE.md. The delivered MP4 hash matches the render output.
 - Video: `D:\projects\neef\.test-artifacts\ribbon-showcase\final-20261102\NEEF-Ribbon-60s.mp4` (1920×1080 H.264, 30fps, AAC narration, optional English subtitles).
 - App: `D:\projects\hueprint`, running at http://127.0.0.1:4391. Run `npm run dev` there; stop that terminal with Ctrl+C. Commits `1e710fe` (color app) and `97d694f` (typography).
