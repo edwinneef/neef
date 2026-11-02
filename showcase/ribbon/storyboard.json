@@ -1,0 +1,15 @@
+{
+  "title": "NEEF: a screenshot becomes a theme",
+  "durationSeconds": 60,
+  "output": { "width": 1920, "height": 1080, "fps": 30, "format": "mp4", "videoCodec": "h264", "audioCodec": "aac" },
+  "segments": [
+    { "start": 0, "end": 5, "shot": "Open on the finished Ribbon map reveal; drag across both themed regions.", "caption": "One screenshot. A complete theme.", "narration": "One screenshot. A complete theme. This is what we're building." },
+    { "start": 5, "end": 11, "shot": "Brief NEEF introduction over the real app, then the actual first prototype prompt as a labeled transcript insert.", "caption": "Navigate → Execute → Evaluate → Follow-up", "narration": "NEEF scopes the work, builds it, checks the result, and saves what comes next." },
+    { "start": 11, "end": 20, "shot": "Show the original prototype request and a clearly labeled earlier-prototype clip or screenshot. Cut to a real screenshot upload and palette application.", "caption": "Start with a prototype", "narration": "Start with a prototype: pull colors from an image, apply them to an interface, and export the CSS." },
+    { "start": 20, "end": 28, "shot": "Actual feedback text from this thread; compare the static-photo version with selected Ribbon's themeable map and stronger palette.", "caption": "Give feedback. See the change.", "narration": "Then refine it. Make the colors stronger. Replace the static photo so the whole preview responds." },
+    { "start": 28, "end": 37, "shot": "Exact upcoming implementation prompt, genuine build activity if captured, and the independently running app. Label accelerated footage and keep actual timing receipt.", "caption": "Implement the chosen design", "narration": "Choose the design. NEEF builds the working app, preserving the approved behavior." },
+    { "start": 37, "end": 49, "shot": "Record the second, isolated export-section prototype prompt and comparison. Show explicit request to apply it, then the implemented section.", "caption": "Prototype again. Improve one section.", "narration": "Prototypes help later, too. Try a live CSS panel here. Compare it with the current section, then apply the chosen version." },
+    { "start": 49, "end": 56, "shot": "Real Copy CSS and Download actions, exported variables applied in a separate fixture, and concise actual check results.", "caption": "Export it. Verify it.", "narration": "Copy the theme, download it, and prove those variables work in another interface." },
+    { "start": 56, "end": 60, "shot": "Final reveal and measured elapsed build time, with any acceleration clearly stated. No invented benchmark.", "caption": "An idea. A working, verified result.", "narration": "Navigate. Execute. Evaluate. Follow up. An idea becomes a verified result." }
+  ]
+}
