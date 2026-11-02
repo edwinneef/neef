@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { gitMergeReady } from '../scripts/neef.mjs';
+import { gitMergeReady, modeTable } from '../scripts/neef.mjs';
 
 const passedOutcomes = [{ id: 'fixture', description: 'Complete the fixture task', required: true, status: 'passed', evidence: 'Fixture assertions passed.' }];
 
@@ -517,7 +517,18 @@ test('every script parses and help lists every catalog mode', () => {
     assert.equal(result.status, 0, `${name}: ${result.stderr}`);
   }
   const help = JSON.parse(spawnSync(process.execPath, [helper, 'help'], { encoding: 'utf8' }).stdout);
-  for (const usage of ['<task>', 'style [simple|guided|technical|kid] [--here]', 'doctor', 'prototype <description> (proto alias)']) assert.ok(help.modes.includes(usage), usage);
+  for (const usage of ['<task>', 'style [simple|guided|technical|kid] [--here]', 'doctor', 'proto <description> (alias of prototype)']) assert.ok(help.commands.includes(usage), usage);
+  assert.equal(help.modes, undefined);
+});
+
+test('the README mode table is generated from the catalog and lists the same modes as help', () => {
+  const readme = fs.readFileSync(fileURLToPath(new URL('../README.md', import.meta.url)), 'utf8');
+  const table = readme.match(/<!-- modes:start -->\n([\s\S]*?)\n<!-- modes:end -->/)?.[1];
+  assert.equal(table, modeTable(), 'README mode table is stale; run node scripts/readme-modes.mjs');
+  const help = JSON.parse(spawnSync(process.execPath, [helper, 'help'], { encoding: 'utf8' }).stdout);
+  const listed = table.split('\n').slice(2).map(row => row.match(/^\| `(.+?)`/)[1].replaceAll('\\|', '|'));
+  assert.deepEqual([...listed].sort(), help.groups.flatMap(group => group.commands.map(({ command }) => command)).sort());
+  for (const guide of table.matchAll(/\]\((references\/[a-z-]+\.md)\)/g)) assert.ok(fs.existsSync(fileURLToPath(new URL(`../${guide[1]}`, import.meta.url))), guide[1]);
 });
 
 test('non-empty non-Git project supports state without creating Git or scaffolding', t => {
