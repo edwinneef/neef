@@ -1,6 +1,38 @@
 # Ribbon showcase: script and recording setup
 
-Status: preparation only. The selected Ribbon prototype exists; the standalone app and final video have not been built. No claim that this app takes 60 seconds to build: the edit is 60 seconds.
+Status: delivered under the user's autonomous completion request. The standalone app, isolated typography prototype, implemented font section and narrated 60-second video are complete. The edit is 60 seconds; measured development time is displayed separately.
+
+## Delivery
+
+- Ready-to-open delivery folder: `D:\projects\ribbon-showcase-delivery` with the final MP4, subtitles, poster, downloaded CSS, source recordings and START-HERE.md. The delivered MP4 hash matches the render output.
+- Video: `D:\projects\neef\.test-artifacts\ribbon-showcase\final-20261102\NEEF-Ribbon-60s.mp4` (1920×1080 H.264, 30fps, AAC narration, optional English subtitles).
+- App: `D:\projects\hueprint`, running at http://127.0.0.1:4391. Run `npm run dev` there; stop that terminal with Ctrl+C. Commits `1e710fe` (color app) and `97d694f` (typography).
+- Typography prototype: `C:\Users\edwin\.neef\prototypes\a598c2ad35530fc91c7008988992d252\typography-hyMmat`, http://127.0.0.1:4392. Selection made under delegated authority: keep the compact three-pair section, default Clear.
+- Actual downloaded color/font CSS and independent proof page: final evidence folder `theme.css` and `proof.html`, served at http://127.0.0.1:4393.
+- Source recordings, intermediate scenes, narration WAVs, subtitle SRT, poster and timing receipts are retained in the ignored evidence directories. Nothing was published or pushed to a remote.
+
+### Reproduce the edit
+
+`narrate.ps1` generates local Microsoft Hazel Desktop narration from the storyboard, using installed Windows speech synthesis. No third-party voice or external account is used. `render.mjs` combines actual recordings, prompt-summary captions, matched narration, loudness normalization and optional subtitles. Run with a fresh audio output directory (the script refuses existing narration files), or retain the already generated audio-final-v2 files:
+
+```powershell
+powershell.exe -NoProfile -File showcase/ribbon/narrate.ps1 -Storyboard D:\projects\neef\showcase\ribbon\storyboard.json -OutputDirectory D:\projects\neef\.test-artifacts\ribbon-showcase\final-20261102\audio-final-v2
+node showcase/ribbon/render.mjs .test-artifacts/ribbon-showcase/final-20261102
+```
+
+Rendering overwrites only the documented managed intermediate/final names inside the supplied render directory. Source clips and actual downloaded CSS are preserved. The audio-folder command above is for a fresh reproduction; it intentionally refuses when these delivered files already exist.
+
+### What the video establishes
+
+All app footage is a real local browser capture. Earlier prototypes are labeled as later-recorded demonstrations. Prompt captions summarize real earlier requests and the autonomous implementation/prototype brief; they are not fabricated composer recordings or verbatim new user turns. Build-result notes report actual measurements, not a fake accelerated terminal.
+
+The color build plus desktop/unit validation took 287.382 seconds; mobile layout validation and recording followed separately. The typography prototype, implementation and checks took 321.587 seconds. Recording, speech synthesis, encoding and editing are outside those measurements. Timing receipts are retained unchanged in `production-20261102` and `typography-20261102` evidence folders. No general speed benchmark is claimed.
+
+App verification: TypeScript/Vite production build and three focused theme/font tests pass; real PNG/JPEG/WebP uploads, hue/role edits, strengths, comparison endpoints, native drag/release, copy/download, font switching, matching layers and independent exported-CSS application checked. All three pairings stay aligned and avoid overflow at 390px. Actual touch gestures and cross-browser coverage were not performed.
+
+Final media verification: exactly 60.000 seconds, 1800 video frames, H.264 1920×1080 at 30fps, AAC audio and English subtitle track. Eight phase frames plus the separate CSS proof at 54 seconds inspected. Narration normalized without clipping (measured peak -1.9 dB). The final prototype upload take uses a real local screenshot via the browser file input; a rejected 404 take was replaced before delivery. The final narration is 100 words; source timings remain unchanged.
+
+The script/recording preparation below is retained as the production brief; its future-tense prompts were carried out under the user's later instruction to finish autonomously.
 
 ## Selected direction
 
