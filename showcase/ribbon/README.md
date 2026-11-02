@@ -4,6 +4,8 @@ Status: delivered under the user's autonomous completion request. The standalone
 
 ## Delivery
 
+- Corrected four-direction cut: `D:\projects\ribbon-showcase-delivery\NEEF-Four-Corrected-60s.mp4`. Ribbon is explicitly introduced as a later prototype iteration after the four-design comparison; it is no longer selected from a grid that does not contain it. Updated narration and typed transition; inspected the rendered transition and verified 60.000 seconds. Evidence: `.test-artifacts/ribbon-showcase/four-corrected-20261102`. The earlier render remains in `four-20261102`.
+
 - Four-direction revision: `D:\projects\ribbon-showcase-delivery\NEEF-Four-60s.mp4`. The opening now types one prototype brief and reveals four existing UI directions together: Contact sheet, Projection, Atlas and Proof pair. A seven-second comparison grid makes the alternatives visible before refinement; the rest retains the terminal-led NEEF loop, implementation, CSS proof and typography iteration. This is a shortened reconstruction of an existing four-design batch, with no measured generation-time claim. Earlier cuts remain intact.
 - Sources: `terminal-four.json`, `render-reel.mjs` (mode `four`) and `capture-four.mjs`. Capture uses a single isolated headless Chrome profile against the existing localhost prototypes after shared-preview screenshots timed out twice; it never attaches to personal browser data. Captures and provenance: `.test-artifacts/ribbon-showcase/four-20261102`. Generate this storyboard's narration into that directory's `voice`, then render with the original-clips directory, that output directory and `four` as arguments. Inspected all four directions in the rendered grid; verified 60.000-second output.
 

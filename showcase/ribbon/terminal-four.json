@@ -8,7 +8,7 @@
     {
       "start": 13,
       "end": 19,
-      "narration": "Choose a direction. Refine it with feedback."
+      "narration": "Explore further. Develop the Ribbon reveal."
     },
     {
       "start": 19,
@@ -53,17 +53,17 @@
       "d": 3,
       "terminal": true,
       "p": 0,
-      "title": "Refine the direction",
-      "prompt": "Choose Ribbon. Stronger colors. A fully themeable preview.",
+      "title": "Explore the next iteration",
+      "prompt": "$neef-prototype develop a fully themeable Ribbon reveal",
       "log": [
-        "Explore options, then refine the chosen direction."
+        "A later iteration, informed by these directions."
       ]
     },
     {
       "d": 3,
       "clip": "refinedPrototypeClip.mp4",
       "p": 0,
-      "title": "The feedback becomes visible.",
+      "title": "The next iteration: Ribbon.",
       "close": true
     },
     {
