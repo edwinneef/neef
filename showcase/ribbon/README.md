@@ -10,7 +10,19 @@ Use the approved Ribbon handoff at `C:\Users\edwin\.neef\prototypes\d7c0586df05c
 
 `storyboard.json` is the timing and narration source of truth. Segments cover 0–5 hook, 5–11 NEEF introduction, 11–20 prototype, 20–28 feedback, 28–37 implementation, 37–49 second prototype, 49–56 export/proof, 56–60 closing reveal. Read each narration line into its matching segment; allow short pauses. Record narration after the picture edit, and adjust delivery or copy if it overruns. Do not squeeze speech to preserve every draft word.
 
-The second prototype is central: demonstrate that NEEF can reconsider one section after the app works. Keep the first build's export simple so there is an honest before/after improvement to show.
+The second prototype is central: demonstrate that NEEF can add a useful section after the app works. Build the approved color tool first, then prototype a typography section with three heading/body pairings. This replaces the earlier export-panel redesign idea.
+
+### Closing typography prototype
+
+Show three distinct choices on the same interface and palette:
+
+- Clear: Segoe UI headings + Segoe UI body.
+- Editorial: Georgia headings + Segoe UI body.
+- Compact: Bahnschrift headings + Segoe UI body.
+
+These fonts are installed on the recording machine. Use explicit system fallback stacks; do not fetch fonts or bundle proprietary font files. Typography is chosen by the user, not inferred from the screenshot. Keep the app controls in their established UI font. Apply each selected pair to both comparison layers so text wraps consistently and the color reveal remains aligned. Show pairing samples and the full preview changing live, while preserving the palette and reveal position.
+
+After explicit approval, implement the chosen section with all three options and export the selected heading/body font-family variables alongside colors. Verify them in the independent CSS fixture. Test default, switching, reset and narrow layouts; font changes must not create clipped controls or break the comparison layers. The section design is what gets approved; do not assume the demo-selected pairing is a permanent user preference.
 
 ### Short prompt captions
 
@@ -30,23 +42,23 @@ The existing prototypes were not recorded while they were built. Any new capture
 
 Upcoming implementation prompt (not executed by this preparation task):
 
-> $neef implement the approved Ribbon app in D:\projects\hueprint using the prototype README handoff and showcase/ribbon recording brief in D:\projects\neef; begin timing before the first build action, capture genuine app interactions, verify local image extraction and CSS export, and keep the initial export section simple for the later prototype comparison
+> $neef implement the approved Ribbon app in D:\projects\hueprint using the prototype README handoff and showcase/ribbon recording brief in D:\projects\neef; begin timing before the first build action, capture genuine app interactions, verify local image extraction and CSS export, and leave the typography section for the later isolated prototype
 
 Upcoming second prototype prompt (run only once the app exists; use that app as the source project):
 
-> $neef-prototype prototype a replacement for Ribbon's export section: a live CSS panel that updates with the palette and includes copy and download controls; keep the working app unchanged and show the current section beside the proposal
+> $neef-prototype add an isolated typography-section prototype for Ribbon with three live heading/body pairings: Segoe UI with Segoe UI, Georgia with Segoe UI, and Bahnschrift with Segoe UI; preserve the palette and reveal position, update both comparison layers together, and keep the working app unchanged
 
 Then request implementation explicitly, selecting the demonstrated section. Example after selection:
 
-> $neef apply the approved live CSS export section to Ribbon, preserve the selected canvas and color behavior, and verify the downloaded CSS in an independent fixture
+> $neef implement the approved typography section in Ribbon with all three pairings, preserve the selected canvas and color behavior, export the selected heading/body font-family variables with the palette, and verify the downloaded CSS in an independent fixture
 
 ## Capture setup
 
 - Capture only the intended app tab with T3's `preview_recording_start` and `preview_recording_stop`, using its exact tab ID from `preview_status`. If the user is driving a tab, open a separate owned recording tab. Stop and save each take; do not leave recordings running between tasks.
 - The browser recorder captures tab content, not T3's composer, agent terminal, desktop, microphone or narration. Pair real app footage with plainly labeled prompt inserts from actual transcript text. Build logs must be actual retained output if shown; do not synthesize terminal progress or present prompt cards as screen recordings of typing. Full-host recording is optional and has not been configured here.
 - Target a landscape 16:9 capture if the preview exposes a supported viewport setting; otherwise preserve its measured dimensions and fit/pad to 1920×1080. Never stretch the UI. The capture smoke records its actual dimensions. Set UI scale deliberately for readable controls, then keep it constant through takes.
-- Make short takes: 6–12 seconds for upload/reveal, 6–12 seconds for presets, 8–15 seconds for export-section comparison, 6–12 seconds for export/fixture. Leave roughly one second at either end for editing. Long build waits belong in logs/timing, not an hours-long tab recording.
-- Separate three time measurements: preparation/setup wall time; actual app-build wall time (first build action through required verification); individual command/test runtimes. Measure the export-section iteration separately. Editing, narration and video encoding are not app-build time. Preserve failures and delays in the timing record; never use a faster isolated check as a build-speed claim.
+- Make short takes: 6–12 seconds for upload/reveal, 6–12 seconds for presets, 8–15 seconds for the three typography pairings, 6–12 seconds for export/fixture. Leave roughly one second at either end for editing. Long build waits belong in logs/timing, not an hours-long tab recording.
+- Separate three time measurements: preparation/setup wall time; actual app-build wall time (first build action through required verification); individual command/test runtimes. Measure the typography-section iteration separately. Editing, narration and video encoding are not app-build time. Preserve failures and delays in the timing record; never use a faster isolated check as a build-speed claim.
 - Use synthetic samples or a screenshot already approved for the demo. No account logins or unrelated desktop windows are needed. Keep generated footage and timing receipts under `.test-artifacts/ribbon-showcase/<session>/` (Git ignored).
 
 ## Local commands
