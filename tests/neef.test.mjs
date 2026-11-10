@@ -2285,3 +2285,13 @@ test('reply layout is defined once in follow-up and referenced by plan, challeng
   assert.match(followUp, /Size is a guideline/);
   for (const n of ['plan', 'challenge', 'explanation-styles']) assert.match(read(n), /follow-up\.md` \(Report layout\)/, n);
 });
+
+test('approval prompts offer a read-only check with the other agent', () => {
+  const read = n => fs.readFileSync(new URL(`../references/${n}.md`, import.meta.url), 'utf8');
+  const peer = read('peer-check');
+  assert.match(peer, /Claude Code checks with Codex; Codex checks with Claude/);
+  assert.match(peer, /Choosing it is not approval/);
+  assert.match(peer, /codex exec --sandbox read-only/);
+  assert.match(peer, /claude -p --permission-mode plan/);
+  for (const n of ['plan', 'prototype']) assert.match(read(n), /`references\/peer-check\.md`/, n);
+});
