@@ -15,7 +15,7 @@ node scripts/install.mjs
 node scripts/install.mjs --apply
 ```
 
-The first command previews the installation. The second installs for both hosts, backs up managed files and preserves unrelated configuration. Restart your agent session to discover NEEF. You do not need to learn the command menu or run project setup.
+The first command previews the installation (add `--dry-run` for a readable list of `create`, `update`, `unchanged` or `remove` per path). The second installs for both hosts, backs up managed files and preserves unrelated configuration. Restart your agent session to discover NEEF. You do not need to learn the command menu or run project setup.
 
 Open a new empty folder in your agent and describe a useful first version:
 

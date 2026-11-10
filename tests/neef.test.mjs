@@ -2295,3 +2295,23 @@ test('approval prompts offer a read-only check with the other agent', () => {
   assert.match(peer, /claude -p --permission-mode plan/);
   for (const n of ['plan', 'prototype']) assert.match(read(n), /`references\/peer-check\.md`/, n);
 });
+
+test('installer --dry-run lists each target with its action and writes nothing', t => {
+  const f = installation(t);
+  const run = (...args) => spawnSync(process.execPath, [installer, ...args], {
+    encoding: 'utf8', env: { ...process.env, NEEF_USER_HOME: f.user, NEEF_HOME: f.home },
+  });
+  const first = run('--dry-run');
+  assert.equal(first.status, 0, first.stderr);
+  const lines = first.stdout.trim().split('\n');
+  assert.equal(lines.length, f.install().files.length);
+  assert.ok(lines.every(line => /^create .+/.test(line)), first.stdout);
+  assert.equal(fs.existsSync(f.home), false);
+  assert.equal(fs.existsSync(f.user), false);
+  f.install(true);
+  const again = run('--dry-run');
+  assert.ok(again.stdout.trim().split('\n').every(line => line.startsWith('unchanged ')), again.stdout);
+  const both = run('--dry-run', '--apply');
+  assert.equal(both.status, 1);
+  assert.match(both.stderr, /Usage: node scripts\/install\.mjs \[--apply \| --dry-run\]/);
+});

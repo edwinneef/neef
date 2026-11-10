@@ -88,7 +88,8 @@ export function install(apply = false) {
   }
   noLinks(path.join(shared, 'state'));
   noLinks(path.join(shared, 'backups'));
-  const result = { apply, source, shared, files: entries.map(({ target, hash, old }) => ({ target, hash, existed: !!old })) };
+  const action = ({ bytes, old, hash }) => bytes === null ? 'remove' : !old ? 'create' : digest(old) === hash ? 'unchanged' : 'update';
+  const result = { apply, source, shared, files: entries.map(entry => ({ target: entry.target, hash: entry.hash, existed: !!entry.old, action: action(entry) })) };
   if (!apply) return result;
   fs.mkdirSync(shared, { recursive: true });
   const lock = path.join(shared, 'install.lock');
@@ -135,7 +136,9 @@ export function install(apply = false) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    if (process.argv.slice(2).some(arg => arg !== '--apply')) throw new Error('Usage: node scripts/install.mjs [--apply]; default is dry run');
-    console.log(JSON.stringify(install(process.argv.includes('--apply')), null, 2));
+    const args = process.argv.slice(2);
+    if (args.length > 1 || args.some(arg => arg !== '--apply' && arg !== '--dry-run')) throw new Error('Usage: node scripts/install.mjs [--apply | --dry-run]; default is a JSON dry run, --dry-run lists targets');
+    if (args[0] === '--dry-run') console.log(install(false).files.map(file => `${file.action} ${file.target}`).join('\n'));
+    else console.log(JSON.stringify(install(args[0] === '--apply'), null, 2));
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }
