@@ -10,9 +10,11 @@ At normal checkpoints, save current decisions and their reasons, outcome evidenc
 
 Same-task saves retain omitted `decisions`, `verification`, `outcomes` and `blockers`; active saves also retain an omitted `next`. Supply an empty string to clear a resolved blocker or obsolete note. Omission does not establish that a blocker was resolved or that old evidence remains valid. For a different task, omitted task-note fields start empty and outcomes are not inherited; project context remains available. Save at actual milestones and before stopping, without extra saves merely to narrate progress.
 
-Before implementing, identify the requested outcomes from the prompt, relevant source and agreed decisions; use existing plan acceptance criteria when present. Record them in `outcomes` at the next normal state save. One clear outcome is enough for a small change. Keep agreed constraints in `decisions`. Ask only when essential ambiguity remains, not to approve a checklist.
+Before implementing, identify the requested outcomes from the prompt, relevant source and agreed decisions; use existing plan acceptance criteria when present. Keep agreed constraints in `decisions`. Ask only when essential ambiguity remains, not to approve a checklist.
 
-`outcomes` is a nonempty array of records:
+Records stay light. An ordinary task keeps what is needed to resume it: the task, a `verification` note saying what was done and how it was checked, and the next step. It completes on a nonempty `verification`; write no `outcomes` for it. Full `outcomes` records are for work with a saved plan and tasks at `important`, where the helper requires them.
+
+For those, `outcomes` is a nonempty array of records, saved at the next normal state save:
 
 ```json
 [{"id":"behavior","description":"The requested observable result","required":true,"status":"pending","evidence":""}]
@@ -26,9 +28,9 @@ Before requesting a native test, inspect relevant recordings and accepted observ
 
 When test pace is questioned or a test run is slow, separate test execution time from investigation, setup, installation and workflow overhead. State which part consumed the time; never present instruction changes or faster individual checks as a measured improvement to the whole task.
 
-At the normal final state save, update each outcome's result and evidence and summarize the checks in the `verification` string. Include evaluated `recommendations` in that same save, including after verification-only task work; required missing acceptance remains REQUIRED and active. Identify remaining uncertainty and distinguish executed behavior checks from source inspection, simulation, installation or human acceptance. Evidence is agent-reported: the helper checks record consistency, not whether the behavior really works.
+At the normal final state save, summarize what was done and checked in the `verification` string; where outcomes are kept, update each one's result and evidence. Include evaluated `recommendations` in that same save, including after verification-only task work; required missing acceptance remains REQUIRED and active. Identify remaining uncertainty and distinguish executed behavior checks from source inspection, simulation, installation or human acceptance. Evidence is agent-reported: the helper checks record consistency, not whether the behavior really works.
 
-The helper rejects `progress:"complete"` unless outcomes are valid, all required outcomes are passed with evidence, blockers are empty and existing plan phases are complete. Explicitly clear resolved blockers; completion does not clear them implicitly. Legacy states without outcomes remain readable, but their next completion write needs outcome records. Active shaping and planning may omit outcomes until development; read-only and isolated prototype modes do not acquire task writes or execution permission from this contract.
+The helper rejects `progress:"complete"` unless `verification` is nonempty, blockers are empty and existing plan phases are complete; with a plan or at `important` it also requires valid outcomes with every required one passed with evidence. Supplied outcomes are always validated. Explicitly clear resolved blockers; completion does not clear them implicitly. Legacy states without outcomes remain readable. Active shaping and planning may omit outcomes until development; read-only and isolated prototype modes do not acquire task writes or execution permission from this contract.
 
 If a required check cannot be performed, finish independent safe work, keep progress active, and record the exact missing check or result in `next` and its reason in `blockers`. Completed code or commits do not close that gap. An optional check outside the agreed scope does not keep a completed task open. Follow the existing host-denial boundary when applicable.
 

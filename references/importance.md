@@ -8,6 +8,10 @@ Importance sets how much testing and independent checking a task gets: `explore`
 
 A task level comes from, in order: `--importance <level>` on the invocation (any task route), the level saved in task state, then helper `status` `importance` (project override, else global default). Pass the chosen level as `importance` in `state-write` when starting a task so `next` resumes at it. Same-task saves keep it; a new task saved without a level records the effective default at that moment, so later default changes do not shift it.
 
+A new project starts light. When `begin` reports `greenfield` with `importance: "explore"`, the user has chosen no level: run the first task at `explore` and save it in `state-write`. No new test files until a first working version is committed; prove it by running it and trying the main flow.
+
+Offer more checking at two natural moments, in one line each, and let the user decide: once the first working version is committed (offer `normal`), and when the user asks to publish or share the project (offer `important` for that step). Offer once per moment; an unanswered offer changes nothing.
+
 Raise, never lower, on your own: when work touches authentication, permissions, secrets, data deletion or migration, a shared or public API, money or irreversible operations, say so in one line and ask whether to run at `important`. Do not change the level until the user agrees. Lowering is the user's call.
 
 ## What each level does
@@ -18,7 +22,7 @@ Raise, never lower, on your own: when work touches authentication, permissions, 
 | `normal` | Focused tests only for behaviour already settled in `decisions` | None | Smallest meaningful affected check |
 | `important` | Tests for each required outcome, covering its failure case | Fresh native delegate re-verifies the required outcomes before completion | Check results plus the delegate's findings |
 
-A level never skips the workflow: run `begin` before the first edit, save state with `importance`, and commit as usual at every level, including `explore`. Only new tests and the second-agent check scale. A level never skips a required outcome's evidence; `explore` meets it by running the thing. Under `explore`, keep behaviour you are still discovering untested and say which outcomes rest on observation only.
+A level never skips the workflow: run `begin` before the first edit, save state with `importance`, and commit as usual at every level, including `explore`. Only new tests and the second-agent check scale. A level never skips the evidence that the request works; `explore` meets it by running the thing. Under `explore`, keep behaviour you are still discovering untested and say which outcomes rest on observation only.
 
 ## Second-agent check (`important`)
 

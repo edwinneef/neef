@@ -596,6 +596,7 @@ test('begin starts an empty folder on main and commits its first working version
   assert.equal(begin.head, null);
   assert.equal(begin.gitInitialized, true);
   assert.equal(begin.greenfield, true);
+  assert.equal(begin.importance, 'explore', 'a new project starts without new tests unless a level was chosen');
   assert.deepEqual(fs.readdirSync(f.root), ['.git']);
   f.git('config', 'user.name', 'Neef isolated test');
   f.git('config', 'user.email', 'neef-test@example.invalid');
@@ -1397,7 +1398,8 @@ test('four-zone completion rejects missing or malformed outcome records without 
   const saved = f.state('missing', 'Check requested behavior');
   const raw = fs.readFileSync(f.statePath(), 'utf8');
   const complete = { progress: 'complete', recommendations: noRecommendation };
-  f.state(saved.revision, saved.state.task, complete, /Completed tasks require outcomes/);
+  f.state(saved.revision, saved.state.task, complete, /Completed tasks require a verification note/);
+  f.state(saved.revision, saved.state.task, { ...complete, importance: 'important', verification: 'Ran it.' }, /Completed tasks require outcomes/);
   for (const outcomes of [null, [], {}, [null], [{ ...passedOutcomes[0], required: 'yes' }],
     [{ ...passedOutcomes[0], status: 'complete' }], [{ ...passedOutcomes[0], id: ' ' }],
     [{ ...passedOutcomes[0], description: '' }], [{ ...passedOutcomes[0], evidence: [] }],
@@ -1439,7 +1441,10 @@ test('four-zone records survive checkpoints and prevent implicit clearing of unr
   const next = f.state(complete.revision, 'Another task');
   assert.equal(next.state.outcomes, undefined);
   assert.equal(next.state.blockers, '');
-  f.state(next.revision, next.state.task, { progress: 'complete', recommendations: noRecommendation }, /Completed tasks require outcomes/);
+  f.state(next.revision, next.state.task, { progress: 'complete', recommendations: noRecommendation }, /Completed tasks require a verification note/);
+  const light = f.state(next.revision, next.state.task, { progress: 'complete', verification: 'Started it and tried the main flow.', recommendations: noRecommendation });
+  assert.equal(light.state.progress, 'complete');
+  assert.equal(light.state.outcomes, undefined);
 });
 
 test('legacy completed states remain readable and require outcome records on their next completion write', t => {
@@ -1452,7 +1457,7 @@ test('legacy completed states remain readable and require outcome records on the
   assert.equal(current.error, undefined);
   assert.equal(f.run(['next']).state.progress, 'complete');
   assert.equal(fs.readFileSync(f.statePath(), 'utf8'), raw);
-  f.state(current.revision, legacy.task, { progress: 'complete', recommendations: noRecommendation }, /Completed tasks require outcomes/);
+  f.state(current.revision, legacy.task, { progress: 'complete', importance: 'important', recommendations: noRecommendation }, /Completed tasks require outcomes/);
   const upgraded = f.state(current.revision, legacy.task, { progress: 'complete', outcomes: passedOutcomes, recommendations: noRecommendation });
   assert.deepEqual(upgraded.state.outcomes, passedOutcomes);
   assert.equal(upgraded.state.verification, legacy.verification);
