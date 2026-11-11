@@ -59,4 +59,4 @@ Run `prepare <baseline-id>` with stdin JSON `{"files":["relative/path"],"message
 
 ## Follow-up
 
-After task work, including verification-only work, read `references/follow-up.md` to save progress, evaluate recommendations and report the result with one concrete next command. When blocked or pausing, name the exact input or user step needed and what to report back; never diagnose, retry or bypass a permission or policy denial, or repeat an unchanged blocker.
+After task work, including verification-only work, read `references/follow-up.md` to save progress, evaluate recommendations and report the result with one concrete next command. When blocked or pausing, name the exact input or user step needed and what to report back; never diagnose, retry or bypass a permission or policy denial, or repeat an unchanged blocker. While a plan is open, end every reply with helper `ribbon` as inline code.

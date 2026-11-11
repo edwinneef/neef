@@ -278,7 +278,38 @@ export function status(p) {
     if (saved.state.branch !== actual.branch) discrepancies.push('Saved branch differs; inspect before continuing');
     if (saved.state.head !== actual.head) discrepancies.push('HEAD changed; reconcile saved progress with history and files');
   }
-  return { project: p.root, ...saved, importance: effectiveImportance(p, saved.state?.importance), actual, discrepancies, board: board(saved.state) };
+  return { project: p.root, ...saved, importance: effectiveImportance(p, saved.state?.importance), actual, discrepancies, board: board(saved.state), ribbon: ribbon(saved.state) };
+}
+
+// Shared by the scope board and the progress ribbon; both are read-only views of saved state.
+const clipWords = (text, max) => {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max - 1);
+  const space = cut.lastIndexOf(' ');
+  return `${space > max / 2 ? cut.slice(0, space) : cut}…`;
+};
+// The part of a sentence before its first clause break.
+const firstClause = text => text.split(/[:;,.]\s| [—–-] /)[0];
+const phaseName = phase => phase.title || clipWords(firstClause(phase.task), 32);
+// Blocked phases are named by id in the task blockers (plan.md), e.g. "p5: owner verdict".
+const phaseFlag = (phase, blockers) => {
+  if (phase.status === 'pending' && new Set((blockers || '').split(/[^\w-]+/)).has(phase.id)) return '⚑ blocked';
+  return phase.userInput && phase.status !== 'complete' ? '⚑ needs you' : '';
+};
+// One dot per phase in plan order: ● done, ◉ now, ○ to do. Very long plans show the count alone.
+const phaseTrack = phases => phases.length > 24 ? '' : phases.map(phase => ({ complete: '●', active: '◉', pending: '○' })[phase.status]).join('');
+const progress = phases => [phaseTrack(phases), `${phases.filter(phase => phase.status === 'complete').length} of ${phases.length} done`].filter(Boolean).join('  ');
+
+// A one-line plan summary for the foot of every reply while a plan is open.
+export function ribbon(state) {
+  const phases = state?.task && state.plan?.phases;
+  if (!phases) return null;
+  if (phases.every(phase => phase.status === 'complete')) return `${progress(phases)}  ✓ plan complete`;
+  const tag = phase => [phase.id, phaseName(phase), phaseFlag(phase, state.blockers)].filter(Boolean).join(' ');
+  const active = phases.find(phase => phase.status === 'active');
+  const next = phases.find(phase => phase.status === 'pending');
+  const now = active ? `▸ ${tag(active)}` : `▸ next ${tag(next)}`;
+  return [`${progress(phases)}  ${now}`, active && next && `next ${tag(next)}`].filter(Boolean).join('  ·  ');
 }
 
 // A read-only text board of the saved scope: a progress line, Now / Next / Done lanes, then parked ideas.
@@ -286,12 +317,6 @@ export function board(state) {
   if (!state?.task && !state?.parked?.length) return null;
   const width = 64;
   const label = 8;
-  const short = (text, max) => {
-    if (text.length <= max) return text;
-    const cut = text.slice(0, max - 1);
-    const space = cut.lastIndexOf(' ');
-    return `${space > max / 2 ? cut.slice(0, space) : cut}…`;
-  };
   // Packs items into lines of at most max characters, never splitting an item.
   const pack = (items, max, join = ' ') => items.reduce((lines, item) => {
     const last = lines.at(-1);
@@ -300,35 +325,27 @@ export function board(state) {
     return lines;
   }, []);
   const wrap = (text, max) => pack(text.split(/\s+/), max);
-  // The part of a sentence before its first clause break.
-  const lead = text => text.split(/[:;,.]\s| [—–-] /)[0];
   // Puts the label on the first line and indents the rest under it.
   const lane = (name, lines) => lines.map((line, index) => `${(index ? '' : name).padEnd(label)}${line}`);
   const sections = [];
   if (state.task && state.plan) {
     const phases = state.plan.phases;
     const done = phases.filter(phase => phase.status === 'complete');
-    const scale = Math.min(1, 20 / phases.length);
-    const filled = Math.round(done.length * scale);
-    const bar = `${'■'.repeat(filled)}${'□'.repeat(Math.round(phases.length * scale) - filled)}`;
-    sections.push([`${short(lead(state.task), 36)}  ${bar}  ${done.length} of ${phases.length} done`]);
-    // Blocked phases are named by id in the task blockers (plan.md), e.g. "p5: owner verdict".
-    const named = new Set((state.blockers || '').split(/[^\w-]+/));
-    const name = phase => phase.title || short(lead(phase.task), 32);
+    sections.push([`${clipWords(firstClause(state.task), 36)}  ${progress(phases)}`]);
     const card = phase => {
-      const flag = named.has(phase.id) && phase.status === 'pending' ? '   ⚑ blocked' : phase.userInput && phase.status !== 'complete' ? '   ⚑ needs you' : '';
-      return `${phase.id.padEnd(4)}${name(phase)}${flag}`;
+      const flag = phaseFlag(phase, state.blockers);
+      return `${phase.id.padEnd(4)}${phaseName(phase)}${flag ? `   ${flag}` : ''}`;
     };
     const lanes = [];
     const active = phases.filter(phase => phase.status === 'active');
     const pending = phases.filter(phase => phase.status === 'pending');
     if (done.length < phases.length) lanes.push(...lane('Now', active.length ? active.map(card) : ['–']));
     if (pending.length) lanes.push(...lane('Next', pending.map(card)));
-    if (done.length) lanes.push(...lane('Done', pack(done.map(phase => `${phase.id} ${name(phase)}`), width - label, ' · ')));
+    if (done.length) lanes.push(...lane('Done', pack(done.map(phase => `${phase.id} ${phaseName(phase)}`), width - label, ' · ')));
     sections.push(lanes);
   } else if (state.task) {
     const where = state.progress === 'complete' ? '✓ done' : state.blockers?.trim() ? '⚑ blocked' : 'in progress';
-    sections.push([`${short(state.task, width - where.length - 2)}  ${where}`]);
+    sections.push([`${clipWords(state.task, width - where.length - 2)}  ${where}`]);
   }
   if (state.parked?.length) {
     sections.push(lane('Parked', state.parked.flatMap((idea, index) =>
@@ -466,7 +483,7 @@ function stateWrite(p, expected, input) {
     }
     if (!validState(value, p)) fail('Invalid state fields');
     const saved = saveState(p, current, value);
-    return { ...saved, board: board(saved.state) };
+    return { ...saved, board: board(saved.state), ribbon: ribbon(saved.state) };
   });
 }
 
