@@ -24,6 +24,7 @@ Keep the feature title in `task`, agreed constraints in `decisions`, and `progre
   "phases": [
     {
       "id": "p1",
+      "title": "Upload retry",
       "task": "Implement the bounded change and verify its behavior",
       "dependsOn": [],
       "acceptance": ["An observable result with a focused verification method"],
@@ -34,7 +35,7 @@ Keep the feature title in `task`, agreed constraints in `decisions`, and `progre
 }
 ```
 
-Use `scale:"large"` for a roadmap. Phase ids are unique; `dependsOn` contains other phase ids and forms an acyclic graph. Status is `pending`, `active` or `complete`, with at most one active phase. Active and complete phases require completed dependencies. Complete phases also require a `verification` string containing their acceptance evidence. Set `userInput` only on a phase that cannot finish without something only the user can give, such as a product decision, credential, account access, host approval or a manual step on their machine; name exactly what is needed. Omit it when inspection or a reasonable default settles the work. The helper stores the plan beside the task state in its own file, under 32 KiB, written under the same lock and revision; keep it concise. Same-task writes preserve an omitted plan; a different task starts without it. Setup and recommendation refreshes preserve the plan.
+Use `scale:"large"` for a roadmap. Give each phase a `title` of about three words for the scope board. Phase ids are unique; `dependsOn` contains other phase ids and forms an acyclic graph. Status is `pending`, `active` or `complete`, with at most one active phase. Active and complete phases require completed dependencies. Complete phases also require a `verification` string containing their acceptance evidence. Set `userInput` only on a phase that cannot finish without something only the user can give, such as a product decision, credential, account access, host approval or a manual step on their machine; name exactly what is needed. Omit it when inspection or a reasonable default settles the work. The helper stores the plan beside the task state in its own file, under 32 KiB, written under the same lock and revision; keep it concise. Same-task writes preserve an omitted plan; a different task starts without it. Setup and recommendation refreshes preserve the plan.
 
 Planning needs no `begin` baseline. Use `baseline:null` and record inspection as verification.
 
