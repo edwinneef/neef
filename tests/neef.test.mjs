@@ -1447,6 +1447,27 @@ test('four-zone records survive checkpoints and prevent implicit clearing of unr
   assert.equal(light.state.outcomes, undefined);
 });
 
+test('parked ideas are saved, listed and survive task, recommendation and setup writes', t => {
+  const f = fixture(t, false);
+  const first = f.run(['park', 'missing'], { add: 'Try a dark theme' });
+  assert.deepEqual(first.state.parked, ['Try a dark theme']);
+  assert.equal(f.run(['park', first.revision], { add: 'Try a dark theme' }).revision, first.revision, 'a repeated idea changes nothing');
+  const second = f.run(['park', first.revision], { add: 'Export bookings as a file' });
+  const task = f.state(second.revision, 'Unrelated task');
+  assert.deepEqual(task.state.parked, ['Try a dark theme', 'Export bookings as a file']);
+  const advice = f.run(['recommendations-write', task.revision], noRecommendation);
+  const other = f.state(advice.revision, 'A different task');
+  assert.deepEqual(f.run(['status']).state.parked, ['Try a dark theme', 'Export bookings as a file']);
+  f.run(['park', other.revision], {}, /exactly one of add/);
+  f.run(['park', other.revision], { add: 'x'.repeat(201) }, /at most 200 characters/);
+  f.run(['park', other.revision], { remove: 'Not there' }, /No such parked idea/);
+  f.run(['park', 'stale'], { add: 'Later' }, /Stale state revision/);
+  const removed = f.run(['park', other.revision], { remove: 1 });
+  assert.deepEqual(removed.state.parked, ['Export bookings as a file']);
+  const empty = f.run(['park', removed.revision], { remove: 'Export bookings as a file' });
+  assert.equal(empty.state.parked, undefined);
+});
+
 test('legacy completed states remain readable and require outcome records on their next completion write', t => {
   const f = fixture(t, false);
   const first = f.state('missing', 'Legacy task');

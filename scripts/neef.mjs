@@ -256,6 +256,7 @@ function validState(value, p) {
       && ['minimal', 'full'].includes(value.context.depth) && typeof value.context.fingerprint === 'string'))
     && (value.importance === undefined || importanceLevels.includes(value.importance))
     && (value.recommendations === undefined || validRecommendations(value.recommendations))
+    && (value.parked === undefined || validParked(value.parked))
     && (value.outcomes === undefined || (validOutcomes(value.outcomes)
       && (value.progress !== 'complete' || !completionError(value))))
     && (value.plan === undefined || (validPlan(value.plan) && (value.progress !== 'complete' || value.plan.phases.every(phase => phase.status === 'complete'))))
@@ -310,13 +311,13 @@ function saveState(p, current, value) {
   const file = stateFile(p);
   // Keep project context readable as one field without expanding a small state
   // file into a permanent discovery report.
-  const { context, recommendations, plan, outcomes, planHash: _, ...task } = value;
+  const { context, recommendations, plan, outcomes, parked, planHash: _, ...task } = value;
   const planContents = plan ? `${JSON.stringify(plan)}
 ` : null;
   if (planContents && Buffer.byteLength(planContents) > planLimit) fail(`Plan must stay under 32 KiB (this write: ${Buffer.byteLength(planContents)} bytes); shorten phases or acceptance criteria`);
   if (planContents) task.planHash = hash(planContents);
   let contents = JSON.stringify(task, null, 2);
-  for (const [key, field] of Object.entries({ context, recommendations, outcomes })) {
+  for (const [key, field] of Object.entries({ context, recommendations, outcomes, parked: parked?.length ? parked : undefined })) {
     if (field) contents = `${contents.slice(0, -2)},\n  "${key}": ${JSON.stringify(field)}\n}`;
   }
   contents += '\n';
@@ -386,6 +387,7 @@ function stateWrite(p, expected, input) {
       importance: input.importance ?? (current.state?.task === input.task ? current.state.importance : undefined) ?? effectiveImportance(p).level,
       ...(current.state?.context ? { context: current.state.context } : {}),
       ...(current.state?.recommendations ? { recommendations: current.state.recommendations } : {}),
+      ...(current.state?.parked?.length ? { parked: current.state.parked } : {}),
       decisions: input.decisions ?? (current.state?.task === input.task ? current.state.decisions : '') ?? '',
       verification: input.verification ?? (current.state?.task === input.task ? current.state.verification : '') ?? '',
       next: input.next ?? (input.progress === 'active' && current.state?.task === input.task ? current.state.next : '') ?? '',
@@ -497,6 +499,38 @@ function recommendationsWrite(p, expected, input) {
     const value = recommendations(input, state.progress, { task: state.task, branch: actual.branch, head: actual.head });
     if (JSON.stringify(value) === JSON.stringify(state.recommendations)) return current;
     return saveState(p, current, { ...state, recommendations: value });
+  });
+}
+
+// Ideas set aside while other work is open. The list belongs to the project, not to one task, so every task write keeps it.
+function validParked(value) {
+  return Array.isArray(value) && value.length <= 20 && value.every(item => shortText(item, 200)) && new Set(value).size === value.length;
+}
+function park(p, expected, input) {
+  return lock(stateFile(p), () => {
+    const current = stateRead(p);
+    if (current.error) fail(current.error);
+    if (current.revision !== expected) fail('Stale state revision; reread and reconcile');
+    const hasAdd = Object.hasOwn(input ?? {}, 'add'), hasRemove = Object.hasOwn(input ?? {}, 'remove');
+    if (hasAdd === hasRemove) fail('Provide exactly one of add (the idea in one line) or remove (its text or 1-based position)');
+    const actual = snapshot(p);
+    const state = current.state || { version: 1, project: p.root, revision: crypto.randomUUID(), updated: new Date().toISOString(),
+      task: '', progress: 'complete', branch: actual.branch, head: actual.head, baseline: null, decisions: '', verification: '', next: '', blockers: '' };
+    const list = state.parked ?? [];
+    let parked;
+    if (hasAdd) {
+      if (!shortText(input.add, 200)) fail('A parked idea is one nonempty line of at most 200 characters');
+      const idea = input.add.trim();
+      if (list.includes(idea)) return current;
+      if (list.length >= 20) fail('The parking list holds at most 20 ideas; remove one first');
+      parked = [...list, idea];
+    } else {
+      const index = Number.isInteger(input.remove) ? input.remove - 1 : list.indexOf(String(input.remove).trim());
+      if (index < 0 || index >= list.length) fail('No such parked idea');
+      parked = list.filter((_, i) => i !== index);
+    }
+    const { parked: _, ...rest } = state;
+    return saveState(p, current, parked.length ? { ...rest, parked } : rest);
   });
 }
 
@@ -1132,7 +1166,7 @@ export async function main(args = process.argv.slice(2)) {
         .map(({ usage, changes, stops, aliases = [] }) => ({ command: usage, changes, stops, aliases })) })),
     invocation: { codex: '$neef <command>', claude: '/neef <command>' },
     aliases: { codex: subskillNames.map(command => `$neef-${command}`), claude: subskillNames.map(command => `/neef-${command}`) },
-    helperCommands: ['style [simple|guided|technical|kid] [--here] (read the effective style or save the global default; --here saves a project override, style clear --here removes it)', 'importance [explore|normal|important] [--here] (read the effective default or save the global one; --here saves a project override, importance clear --here removes it; a task may carry its own importance in state-write)', 'prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'docs (read-only: Git-tracked and untracked-but-not-ignored .md files split into agent instructions, other docs and skipped changelogs/licenses, with known commands)', 'review [ref] (read-only: the last task\'s commits since its first begin or first save, whichever is earlier, or ref..HEAD, with saved decisions, plan, outcomes and all known commands, each with a kind; run only kind test)', 'merge-candidates (read-only: local branches ahead of main with worktree, dirty and taskComplete flags)', 'merge <branch...> [--keep] (user-chosen branches into main in order; stops at the first conflict; deletes merged branches and their worktrees unless --keep)', 'merge (from a linked worktree whose task is complete: merges its branch into main in the main folder; fast-forward else one merge commit; refuses conflicts, staged or in-progress work and never deletes branches)', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?,outcomes?,importance?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', outcomes: 'Ordinary tasks complete on a nonempty verification note. With a plan or importance important, completion requires [{id,description,required,status,evidence}], with unique ids and at least one required outcome; supplied outcomes are always validated. Status is pending/passed/failed/blocked; passed outcomes need nonempty evidence. Required outcomes must pass, blockers must be explicitly cleared, and plan phases must finish before completion. Same-task writes preserve omitted outcomes; new tasks do not inherit them. Legacy saved states remain readable. Evidence is agent-reported, not independently proven.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?,userInput?}]}. userInput names the decision, credential, approval or manual step only the user can supply for that phase. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. The plan is stored beside the state as <id>.plan.json under 32 KiB, under the same lock and revision; the rest of the state stays under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests' };
+    helperCommands: ['style [simple|guided|technical|kid] [--here] (read the effective style or save the global default; --here saves a project override, style clear --here removes it)', 'importance [explore|normal|important] [--here] (read the effective default or save the global one; --here saves a project override, importance clear --here removes it; a task may carry its own importance in state-write)', 'prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'docs (read-only: Git-tracked and untracked-but-not-ignored .md files split into agent instructions, other docs and skipped changelogs/licenses, with known commands)', 'review [ref] (read-only: the last task\'s commits since its first begin or first save, whichever is earlier, or ref..HEAD, with saved decisions, plan, outcomes and all known commands, each with a kind; run only kind test)', 'merge-candidates (read-only: local branches ahead of main with worktree, dirty and taskComplete flags)', 'merge <branch...> [--keep] (user-chosen branches into main in order; stops at the first conflict; deletes merged branches and their worktrees unless --keep)', 'merge (from a linked worktree whose task is complete: merges its branch into main in the main folder; fast-forward else one merge commit; refuses conflicts, staged or in-progress work and never deletes branches)', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?,outcomes?,importance?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'park <expected-revision> (stdin: {add:"one-line idea"} or {remove:"its text"|position}; the parked list shows in status and survives task changes)', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', outcomes: 'Ordinary tasks complete on a nonempty verification note. With a plan or importance important, completion requires [{id,description,required,status,evidence}], with unique ids and at least one required outcome; supplied outcomes are always validated. Status is pending/passed/failed/blocked; passed outcomes need nonempty evidence. Required outcomes must pass, blockers must be explicitly cleared, and plan phases must finish before completion. Same-task writes preserve omitted outcomes; new tasks do not inherit them. Legacy saved states remain readable. Evidence is agent-reported, not independently proven.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?,userInput?}]}. userInput names the decision, credential, approval or manual step only the user can supply for that phase. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. The plan is stored beside the state as <id>.plan.json under 32 KiB, under the same lock and revision; the rest of the state stays under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests' };
   if (command === 'doctor') return doctor();
   const p = project(cwd);
   if (command === 'style') {
@@ -1145,7 +1179,7 @@ export async function main(args = process.argv.slice(2)) {
     if (rest.length > 2 || (here && rest.length < 2)) fail('Usage: importance [explore|normal|important] [--here], or importance clear --here');
     return preference(p, preferenceKinds.importance, rest[1], here);
   }
-  if (['setup', 'bootstrap', 'context-write', 'begin', 'prepare', 'commit', 'state-write', 'recommendations-write', 'state-recover'].includes(command)) requireExternalStorage(p);
+  if (['setup', 'bootstrap', 'context-write', 'begin', 'prepare', 'commit', 'state-write', 'recommendations-write', 'park', 'state-recover'].includes(command)) requireExternalStorage(p);
   const input = () => JSON.parse(fs.readFileSync(0, 'utf8'));
   if (command === 'setup') return setup(p);
   if (command === 'bootstrap') return bootstrap(p);
@@ -1156,6 +1190,7 @@ export async function main(args = process.argv.slice(2)) {
   if (command === 'begin') return begin(p, argument);
   if (command === 'state-write') return stateWrite(p, argument, input());
   if (command === 'recommendations-write') return recommendationsWrite(p, argument, input());
+  if (command === 'park') return park(p, argument, input());
   if (command === 'state-recover') return stateRecover(p, argument);
   if (command === 'prepare') return prepare(p, argument, input());
   if (command === 'commit') return commit(p, argument);

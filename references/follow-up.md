@@ -1,6 +1,6 @@
 # Evaluate what follows development
 
-After task work, including verification-only runs, evaluate actual project state and established goals without being asked. Rank unfinished requirements, functional gaps and adjacent improvements by user value, relevance, effort and dependencies. Prefer functional progress over housekeeping. Choose one primary action and at most two useful alternatives; never invent filler. Preserve the read-only stop boundaries of status, help and advice modes.
+After task work, including verification-only runs, evaluate actual project state and established goals without being asked. Rank unfinished requirements, functional gaps and adjacent improvements by user value, relevance, effort and dependencies. Prefer functional progress over housekeeping. Choose one primary action and at most two useful alternatives; never invent filler. Separately, look for one bold idea: a more ambitious step the user may not have thought of, grounded in what the project is for. It is a suggestion only, never built unasked and never a substitute for the next step; leave it out when nothing real comes to mind. Preserve the read-only stop boundaries of status, help and advice modes.
 
 Label original unfinished scope REQUIRED, keep progress active and finish it when possible; use `next` if blocked. Do not recast it as a completed task's follow-up. Use RECOMMENDED for the most valuable logical improvement and OPTIONAL for nonessential enhancements. Recommendations are advisory: generating them does not authorize implementing them in this invocation.
 
@@ -15,6 +15,6 @@ Task and mode reports (development, plan, challenge, review, docs, options, next
 - **N · Narrative:** one line saying what happened.
 - **E · Edits:** changed files, one per line, or "none".
 - **E · Evaluation:** passed, failed, skipped and remaining gaps; REQUIRED gaps first.
-- **F · Follow-up:** one next command and its intended result.
+- **F · Follow-up:** one next command and its intended result; then, when there is one, a single line starting `Bold idea:`.
 
 Size is a guideline: about five lines per section, summarizing the rest. Omit nothing required; blocked reports keep the exact user step and resume command in Follow-up. `help`, `status` and `style` keep their own formats, and one-line answers stay short. Progress updates appear at milestones only. Explanation styles change tone, never these headings.

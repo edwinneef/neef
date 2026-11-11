@@ -48,13 +48,11 @@ Route leading mode commands first; match bare modes exactly. Ask for missing sub
 
 ## Navigate and Execute
 
-Read applicable AGENTS.md, CLAUDE.md, relevant code and helper `status`; `next` already includes status. `begin` bootstraps missing `context`. Cached facts never override current instructions. On persistence failure, preserve state, report it and continue independent work. Reconcile stale state; retain unfinished work unless the user replaces it. Before edits that may be committed, run `begin <short-task-slug>` for a baseline. Commits require the returned baseline ID.
+Read applicable AGENTS.md, CLAUDE.md, relevant code and helper `status`; `next` already includes status. `begin` bootstraps missing `context`. Cached facts never override current instructions. On persistence failure, preserve state, report it and continue independent work. Reconcile stale state; retain unfinished work unless the user replaces it. During an unfinished plan, an outside request first gets park-or-switch (`references/plan.md`). Before edits that may be committed, run `begin <short-task-slug>` for a baseline. Commits require the returned baseline ID.
 
 For development and before task-state writes, read `references/completion.md`. Make the smallest change with focused checks; fix introduced regressions. Keep existing stacks, patterns and tooling. If `begin` reports `greenfield`, read `references/start.md`. Runnable work ends verified to start, with run command or URL. Ordinary work needs no extra plan, suite, review or interview. Execute authorized plan phases until complete or no safe work remains. Inspect and use reasonable defaults; ask only for essential missing input or authority. Continue independent work around blockers. Batch independent calls.
 
 Use native delegates only for independent investigation or disjoint edits. Bound their scope; own integration, verification, Git and state.
-
-Save at useful milestones and before stopping.
 
 ## Evaluate and commit
 
