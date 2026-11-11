@@ -287,8 +287,11 @@ export function board(state) {
   const clip = (text, max = 60) => text.length > max ? `${text.slice(0, max - 1)}…` : text;
   const columns = { Done: [], Doing: [], 'To do': [], Parked: (state.parked || []).map(idea => clip(idea)) };
   if (state.plan) {
+    // Blocked phases are named by id in the task blockers (plan.md), e.g. "p5: owner verdict".
+    const named = new Set((state.blockers || '').split(/[^\w-]+/));
     for (const phase of state.plan.phases) {
-      const card = `${phase.id} ${clip(phase.task, 50)}${phase.userInput ? ' ⚑ needs you' : ''}`;
+      const blocked = phase.status === 'pending' && named.has(phase.id);
+      const card = `${phase.id} ${clip(phase.task, 50)}${blocked ? ' ⚑ blocked' : phase.userInput ? ' ⚑ needs you' : ''}`;
       columns[{ complete: 'Done', active: 'Doing', pending: 'To do' }[phase.status]].push(card);
     }
   } else if (state.task) {
@@ -426,7 +429,8 @@ function stateWrite(p, expected, input) {
       if (baseline.project !== p.root) fail('Baseline belongs to another project');
     }
     if (!validState(value, p)) fail('Invalid state fields');
-    return saveState(p, current, value);
+    const saved = saveState(p, current, value);
+    return { ...saved, board: board(saved.state) };
   });
 }
 

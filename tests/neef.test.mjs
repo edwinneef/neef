@@ -1479,6 +1479,9 @@ test('status shows a read-only board of the task or plan phases and parked ideas
     { id: 'p2', task: 'Email', dependsOn: ['p1'], acceptance: ['Email sent'], status: 'pending', userInput: 'Mail account' },
     { id: 'p3', task: 'List', dependsOn: ['p1'], acceptance: ['List shows'], status: 'pending' }] } });
   assert.equal(f.run(['status']).board, 'Done    p1 Form\nDoing   –\nTo do   p2 Email ⚑ needs you\n        p3 List\nParked  Try a dark theme');
+  const blocked = f.state(f.run(['status']).revision, 'Add bookings', { blockers: 'p3: waiting on the design.' });
+  assert.equal(blocked.board, 'Done    p1 Form\nDoing   –\nTo do   p2 Email ⚑ needs you\n        p3 List ⚑ blocked\nParked  Try a dark theme');
+  assert.equal(blocked.board, f.run(['status']).board, 'state-write returns the same board as status');
 });
 
 test('legacy completed states remain readable and require outcome records on their next completion write', t => {
