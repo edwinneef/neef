@@ -278,7 +278,24 @@ export function status(p) {
     if (saved.state.branch !== actual.branch) discrepancies.push('Saved branch differs; inspect before continuing');
     if (saved.state.head !== actual.head) discrepancies.push('HEAD changed; reconcile saved progress with history and files');
   }
-  return { project: p.root, ...saved, importance: effectiveImportance(p, saved.state?.importance), actual, discrepancies };
+  return { project: p.root, ...saved, importance: effectiveImportance(p, saved.state?.importance), actual, discrepancies, board: board(saved.state) };
+}
+
+// A read-only text board of the saved scope: plan phases (or the task) by column, then parked ideas.
+export function board(state) {
+  if (!state?.task && !state?.parked?.length) return null;
+  const clip = (text, max = 60) => text.length > max ? `${text.slice(0, max - 1)}…` : text;
+  const columns = { Done: [], Doing: [], 'To do': [], Parked: (state.parked || []).map(idea => clip(idea)) };
+  if (state.plan) {
+    for (const phase of state.plan.phases) {
+      const card = `${phase.id} ${clip(phase.task, 50)}${phase.userInput ? ' ⚑ needs you' : ''}`;
+      columns[{ complete: 'Done', active: 'Doing', pending: 'To do' }[phase.status]].push(card);
+    }
+  } else if (state.task) {
+    columns[state.progress === 'complete' ? 'Done' : 'Doing'].push(`${clip(state.task)}${state.blockers?.trim() ? ' ⚑ blocked' : ''}`);
+  }
+  return Object.entries(columns).flatMap(([name, cards]) =>
+    (cards.length ? cards : ['–']).map((card, index) => `${(index ? '' : name).padEnd(7)} ${card}`)).join('\n');
 }
 
 function prototypeWorkspace(p, slug) {

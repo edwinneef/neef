@@ -1468,6 +1468,19 @@ test('parked ideas are saved, listed and survive task, recommendation and setup 
   assert.equal(empty.state.parked, undefined);
 });
 
+test('status shows a read-only board of the task or plan phases and parked ideas', t => {
+  const f = fixture(t, false);
+  assert.equal(f.run(['status']).board, null);
+  const parked = f.run(['park', 'missing'], { add: 'Try a dark theme' });
+  const task = f.state(parked.revision, 'Add bookings', { blockers: 'Needs an API key' });
+  assert.equal(f.run(['status']).board, 'Done    –\nDoing   Add bookings ⚑ blocked\nTo do   –\nParked  Try a dark theme');
+  f.state(task.revision, 'Add bookings', { blockers: '', plan: { goal: 'Bookings', scale: 'large', rationale: 'Three steps', phases: [
+    { id: 'p1', task: 'Form', dependsOn: [], acceptance: ['Form saves'], status: 'complete', verification: 'Saved one' },
+    { id: 'p2', task: 'Email', dependsOn: ['p1'], acceptance: ['Email sent'], status: 'pending', userInput: 'Mail account' },
+    { id: 'p3', task: 'List', dependsOn: ['p1'], acceptance: ['List shows'], status: 'pending' }] } });
+  assert.equal(f.run(['status']).board, 'Done    p1 Form\nDoing   –\nTo do   p2 Email ⚑ needs you\n        p3 List\nParked  Try a dark theme');
+});
+
 test('legacy completed states remain readable and require outcome records on their next completion write', t => {
   const f = fixture(t, false);
   const first = f.state('missing', 'Legacy task');
