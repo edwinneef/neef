@@ -152,7 +152,7 @@ test('all six live runners use safe bounded launch and current command/fixture c
     const source = fs.readFileSync(new URL(`../scripts/${name}.mjs`, import.meta.url), 'utf8');
     assert.match(source, /await runHost\(/, name);
     assert.doesNotMatch(source, /dangerously-bypass|--approve-for-me|cmd\.exe/, name);
-    assert.doesNotMatch(source, /\$\{prefix\}-(ask|proto)\b/, name);
+    assert.doesNotMatch(source, /\$\{prefix\}[- ](options|proto|prompt|auto|continue|review|docs|merge)\b/, name);
     assert.doesNotMatch(source, /['"]init['"], ['"]-q['"]\]/, name);
     assert.doesNotMatch(source, /new Promise.*child\.(?:on|once)\('exit'/, name);
   }

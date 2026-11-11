@@ -1,6 +1,6 @@
 # Review against the agreement
 
-Check whether committed work does what was agreed. This optional mode ends with findings and recommendations, never fixes or a mandatory gate.
+Check whether committed work does what was agreed. This is the `challenge` route applied to the last task's commits or a commit range; it ends with findings and recommendations, never fixes or a mandatory gate.
 
 Run helper `review` for the last NEEF task, or `review <ref>` to review `ref..HEAD` instead. It returns the commit range, commits, diffstat, the saved task's decisions, plan, outcomes and verification, and the project's known commands, each with a `kind` (test, build, lint or deployment). Without a ref it covers the commits since the task's first `begin` or first save, whichever is earlier, ending at its last save when complete. When the helper refuses because no task start was recorded, ask for a ref. An empty range means there is nothing to review: say so and stop.
 

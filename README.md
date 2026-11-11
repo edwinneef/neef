@@ -4,7 +4,7 @@
 
 Navigate → Execute → Evaluate → Follow-up
 
-**From idea to a running project, fast.** Open an empty folder and describe what you want: `/neef build a booking page for my salon`. NEEF creates Git on `main`, picks a sensible stack without asking, builds and verifies the first working version, commits it, and hands it over running with its local URL or run command. In existing projects it moves just as fast while keeping their stack, patterns and tooling: smallest working change, focused checks, frequent safe commits and one concrete next step. No per-project setup is required. The goal NEEF is measured against is in [the vision](docs/vision.md).
+**Build as fast as you can think of it. NEEF keeps every step safe to undo.** Open an empty folder and describe what you want: `/neef build a booking page for my salon`. NEEF creates Git on `main`, picks a sensible stack without asking, builds and verifies the first working version, commits it, and hands it over running with its local URL or run command. In existing projects it moves just as fast while keeping their stack, patterns and tooling: smallest working change, focused checks, frequent safe commits and one concrete next step. No per-project setup is required. The goal NEEF is measured against is in [the vision](docs/vision.md).
 
 ## Get your first app running
 
@@ -57,22 +57,21 @@ The four zones form the default prompt contract. Their rules apply throughout th
 
 One explicit skill for autonomous development in Claude Code (`/neef`) and Codex (`$neef`). The modes are listed below. Node 20+ and Git are required. No dependencies, daemon, or mandatory project setup.
 
-Invoke a mode as `/neef <mode>` in Claude Code or `$neef <mode>` in Codex. `help` shows the same list grouped by intent. Each guide holds the full rules for its mode.
+Three commands are enough to start: `neef <what you want>` builds or changes something, `neef next` continues or does the most useful next thing, and `neef ask <goal>` writes the right command when you are not sure how to ask. Four more are there when you need them: `shape` for a rough idea, `plan` for bigger work, `prototype` to try something in a scratch folder, and `challenge` for an honest review that changes nothing, including of the last finished work or the documentation. The rest are settings and diagnostics.
+
+Invoke a mode as `/neef <mode>` in Claude Code or `$neef <mode>` in Codex. `help` shows the three starting commands first, then the same list grouped by intent. Each guide holds the full rules for its mode.
 
 <!-- modes:start -->
 | Mode | Changes | Stops at | Guide |
 | --- | --- | --- | --- |
 | `<task>` | Project files and task state; safe local commits; Git for an empty folder | Scoped work verified and runnable, or a concrete blocker recorded | [completion](references/completion.md) |
 | `shape [--deep] [--discuss] [idea]` | Without an idea: read-only starters; --discuss: external decisions only; otherwise task decisions then project files | Three starter ideas and a choice, or clarified and implemented, unless discussion-only (--discuss) | [shape](references/shape.md) |
-| `plan <feature>` (alias `auto`) | Task decisions and plan first (project/Git unchanged); project files and safe local commits only after one explicit sign-off | Questions asked, challenged plan saved and shown for sign-off; approval runs every phase until complete or blocked | [plan](references/plan.md) |
-| `challenge [--deep] <topic>` | May save external recommendations; project/Git unchanged | Evidence-based critique and improvements; no implementation | [challenge](references/challenge.md) |
-| `review [ref]` | May save external recommendations and run known tests; project/Git unchanged | Last task's commits (or ref..HEAD) graded against saved decisions; findings and one recommendation, no fixes | [review](references/review.md) |
-| `docs` | May save external recommendations; project/Git unchanged | Stale .md claims listed with file, line, actual code behavior and a suggested fix; no edits | [docs](references/docs.md) |
-| `prototype <description>` (alias `proto`) | External scratch demo and README; source/Git/task state unchanged | Working demo and handoff; no automatic production promotion | [prototype](references/prototype.md) |
-| `options [goal]` (alias `ask`) (alias `prompt`) | Nothing during advice (read-only) | Ranked choices, or the best-fit command for a goal with the full request written inside it; never invokes it. A later explicit selection can execute its action | [advisor](references/advisor.md) |
+| `plan <feature>` | Task decisions and plan first (project/Git unchanged); project files and safe local commits only after one explicit sign-off | Questions asked, challenged plan saved and shown for sign-off; approval runs every phase until complete or blocked | [plan](references/plan.md) |
+| `challenge [--deep] <topic>` | May save external recommendations and run known tests; project/Git unchanged | Evidence-based critique and improvements, also for the last task's commits or the project's .md files; no implementation | [challenge](references/challenge.md) |
+| `prototype <description>` | External scratch demo and README; source/Git/task state unchanged | Working demo and handoff; no automatic production promotion | [prototype](references/prototype.md) |
+| `ask [goal]` | Nothing during advice (read-only) | Ranked choices, or the best-fit command for a goal with the full request written inside it; never invokes it. A later explicit selection can execute its action | [advisor](references/advisor.md) |
 | `setup` | External context and managed AGENTS.md/CLAUDE.md directions | Context and next-prompt rule saved; no project commands run | — |
-| `merge [branch...] [--keep]` | main gains the chosen branches; merged branches and their worktrees are deleted unless --keep | Chosen branches merged into main, or stopped at the first conflict with main untouched | [merge](references/merge.md) |
-| `next` (alias `continue`) | Project files and task state; frequent safe local commits | Unfinished task resumed until complete or blocked; otherwise one useful follow-up done | [next](references/next.md) |
+| `next` | Project files and task state; frequent safe local commits | Unfinished task resumed until complete or blocked; otherwise one useful follow-up done | [next](references/next.md) |
 | `status` | Nothing (read-only) | Progress, Git, verification and blockers reported | [status](references/status.md) |
 | `help` | Nothing (read-only) | Grouped command guide and aliases displayed | — |
 | `style [simple\|guided\|technical\|kid] [--here]` | With a name: global explanation preference, or this project only with --here; without: read-only | Current style shown or default saved; no project task started | [explanation-styles](references/explanation-styles.md) |
@@ -80,7 +79,7 @@ Invoke a mode as `/neef <mode>` in Claude Code or `$neef <mode>` in Codex. `help
 | `doctor` | Nothing; no implicit repairs | Installation health checks and concrete fixes reported | — |
 <!-- modes:end -->
 
-Each main mode also has a directly invokable subskill with its description shown in the skill picker: `$neef-task`, `$neef-shape`, `$neef-plan`, `$neef-challenge`, `$neef-review`, `$neef-docs`, `$neef-prototype`, `$neef-options`, `$neef-setup`, `$neef-merge`, `$neef-next`, `$neef-status` and `$neef-help`. Claude uses the matching `/neef-…` commands. Aliases (`auto`, `proto`, `ask`, `prompt`, `continue`) and the rare `style` and `doctor` work only through `$neef`/`/neef`; reinstalling retires their old subskill folders when unedited. Arguments and flags work as before, for example `$neef-shape --deep <idea>`. These explicit-only aliases read the same canonical Neef instructions and share its state and safety checks. Hyphenated names work on both hosts; no colon-named skill directories are required on Windows.
+Each main mode also has a directly invokable subskill with its description shown in the skill picker: `$neef-task`, `$neef-shape`, `$neef-plan`, `$neef-challenge`, `$neef-prototype`, `$neef-ask`, `$neef-setup`, `$neef-next`, `$neef-status` and `$neef-help`. Claude uses the matching `/neef-…` commands. The rare `style`, `importance` and `doctor` work only through `$neef`/`/neef`. Former commands and aliases (`review`, `docs`, `merge`, `options`, `auto`, `proto`, `prompt`, `continue`) are gone; reinstalling retires their old subskill folders when unedited. Arguments and flags work as before, for example `$neef-shape --deep <idea>`. These explicit-only aliases read the same canonical Neef instructions and share its state and safety checks. Hyphenated names work on both hosts; no colon-named skill directories are required on Windows.
 
 Maintain this source here and rerun the quick-start installer after source changes. Existing managed files are hash checked and backed up before replacement; edited or unmanaged files stop installation. Unrelated agent configuration is untouched. Restart an agent session to refresh discovery.
 

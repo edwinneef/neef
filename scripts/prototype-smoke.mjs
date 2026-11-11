@@ -83,7 +83,7 @@ async function run(host) {
     assert.match(approved.final, new RegExp(`${host === 'claude' ? '/' : '\\$'}neef(?:-task|\\s)`));
     assert.match(fs.readFileSync(demo.readme, 'utf8'), /acceptance|handoff/i);
 
-    const algorithm = await turn('algorithm', `${prefix} proto Compare linear search and binary search in a runnable Node demo.mjs using built-ins. Search the sorted synthetic array [2,4,6,8,10] for 6; print JSON with numeric linear and binary fields containing each resulting zero-based index. This is a new question, separate from the task-picker.`);
+    const algorithm = await turn('algorithm', `${prefix} prototype Compare linear search and binary search in a runnable Node demo.mjs using built-ins. Search the sorted synthetic array [2,4,6,8,10] for 6; print JSON with numeric linear and binary fields containing each resulting zero-based index. This is a new question, separate from the task-picker.`);
     const second = workspaces();
     assert.equal(second.length, 2, algorithm.final);
     algorithmDemo = second.find(item => item.workspace !== demo.workspace);

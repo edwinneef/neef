@@ -10,7 +10,7 @@ Mark complete only when done. Report actual work, verification, relevant Git and
 
 ## Report layout
 
-Task and mode reports (development, plan, challenge, review, docs, options, next) use four bold headings, in this order, spelling NEEF:
+Task and mode reports (development, plan, challenge, ask, next) use four bold headings, in this order, spelling NEEF:
 
 - **N · Narrative:** one line saying what happened.
 - **E · Edits:** changed files, one per line, or "none".

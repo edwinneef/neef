@@ -72,7 +72,7 @@ async function run(host) {
   }
 
   if (selection) {
-    await turn('options', `${prefix}-options`);
+    await turn('options', `${prefix}-ask`);
     assert.ok(session, 'Missing resumable advisor session');
     await turn('selected', '1', true);
     const saved = JSON.parse(status()).state;
@@ -86,7 +86,7 @@ async function run(host) {
   } else {
     if (!exhaustedOnly) {
       if (!prototypeOnly) {
-        const options = await turn('options', `${prefix}-options`);
+        const options = await turn('options', `${prefix}-ask`);
         assert.match(options, /(?:1[.)]|\|\s*1\s*\|)/);
         assert.match(options, /(?:3[.)]|\|\s*3\s*\|)/);
         assert.match(options, /neef(?:-task|\s)/);
@@ -117,7 +117,7 @@ async function run(host) {
         verification: 'Source confirms the sole required output.', next: '', blockers: '',
         recommendations: { primary: null, alternatives: [], reason: 'README.md defines only the existing base greeting.' },
       }));
-      const exhausted = await turn('options-exhausted', `${prefix} options`);
+      const exhausted = await turn('options-exhausted', `${prefix} ask`);
       assert.doesNotMatch(exhausted, /(?:^|\n)\s*(?:1[.)]|\|\s*1\s*\|)/);
     }
   }

@@ -558,7 +558,9 @@ test('every script parses and help lists every catalog mode', () => {
     assert.equal(result.status, 0, `${name}: ${result.stderr}`);
   }
   const help = JSON.parse(spawnSync(process.execPath, [helper, 'help'], { encoding: 'utf8' }).stdout);
-  for (const usage of ['<task>', 'style [simple|guided|technical|kid] [--here]', 'doctor', 'proto <description> (alias of prototype)']) assert.ok(help.commands.includes(usage), usage);
+  for (const usage of ['<task>', 'style [simple|guided|technical|kid] [--here]', 'doctor', 'ask [goal]', 'shape [--deep] [--discuss] [idea]']) assert.ok(help.commands.includes(usage), usage);
+  for (const gone of ['review', 'docs', 'merge', 'options', 'auto', 'proto', 'prompt', 'continue']) assert.ok(!help.commands.some(usage => usage.split(' ')[0] === gone), `${gone} is no longer a command`);
+  assert.deepEqual(help.start, ['<task>', 'ask [goal]', 'next'], 'three commands are shown up front');
   assert.equal(help.modes, undefined);
 });
 
@@ -804,17 +806,16 @@ test('help groups every command and alias by intent without bootstrapping a proj
   assert.match(row('shape').stops, /implemented.*unless discussion-only/);
   assert.match(row('plan').stops, /sign-off.*until complete or blocked/);
   assert.match(row('prototype').changes, /scratch.*task state unchanged/);
-  assert.deepEqual(row('prototype').aliases, ['proto']);
-  assert.match(row('options').changes, /read-only/);
-  assert.match(row('options').stops, /later explicit selection/);
-  assert.match(row('options').stops, /never invokes/);
-  assert.deepEqual(row('options').aliases, ['ask', 'prompt']);
-  assert.equal(row('prompt'), undefined);
-  assert.match(row('options').stops, /full request/);
+  assert.deepEqual(row('prototype').aliases, []);
+  assert.match(row('ask').changes, /read-only/);
+  assert.match(row('ask').stops, /later explicit selection/);
+  assert.match(row('ask').stops, /never invokes/);
+  assert.deepEqual(row('ask').aliases, []);
+  assert.match(row('ask').stops, /full request/);
   assert.match(row('next').stops, /resumed until complete or blocked/);
-  assert.deepEqual(row('next').aliases, ['continue']);
-  assert.equal(row('ask'), undefined);
-  assert.equal(row('continue'), undefined);
+  assert.deepEqual(row('next').aliases, []);
+  assert.match(row('challenge').stops, /last task's commits or the project's \.md files/);
+  for (const gone of ['options', 'prompt', 'continue', 'review', 'docs', 'merge']) assert.equal(row(gone), undefined);
   assert.equal(fs.existsSync(f.home), false);
   assert.deepEqual(fs.readdirSync(f.root), []);
 });
@@ -833,8 +834,8 @@ test('every main command installs a described subskill that routes through canon
   const plan = f.install();
   assert.equal(fs.existsSync(f.user), false);
   f.install(true);
-  const commands = ['task', 'shape', 'plan', 'challenge', 'review', 'docs', 'prototype', 'options', 'setup', 'merge', 'next', 'status', 'help'];
-  for (const command of ['proto', 'ask', 'continue', 'doctor']) for (const agent of ['.agents', '.claude']) assert.equal(fs.existsSync(path.join(f.user, agent, 'skills', `neef-${command}`)), false);
+  const commands = ['task', 'shape', 'plan', 'challenge', 'prototype', 'ask', 'setup', 'next', 'status', 'help'];
+  for (const command of ['proto', 'options', 'continue', 'doctor', 'review', 'docs', 'merge']) for (const agent of ['.agents', '.claude']) assert.equal(fs.existsSync(path.join(f.user, agent, 'skills', `neef-${command}`)), false);
   assert.match(fs.readFileSync(path.join(f.user, '.claude/skills/neef-next/SKILL.md'), 'utf8'), /description: "Resume unfinished work, or do the next useful thing. Use only when explicitly invoked."/);
   assert.doesNotMatch(fs.readFileSync(path.join(f.user, '.claude/skills/neef-plan/SKILL.md'), 'utf8'), /Run Neef's/);
   for (const command of commands) {
@@ -936,7 +937,7 @@ test('both prototype aliases share installed guidance, backups and preserve demo
   assert.equal(fs.readFileSync(reference, 'utf8'), 'Personal prototype rules');
 });
 
-test('advisor aliases install shared read-only guidance without replacing unfinished work', t => {
+test('ask installs shared read-only guidance without replacing unfinished work', t => {
   const f = installation(t);
   const saved = f.state('missing', 'Unfinished feature', { decisions: 'Preserve this task', next: 'Finish the feature' });
   const before = f.run(['status']);
@@ -948,7 +949,7 @@ test('advisor aliases install shared read-only guidance without replacing unfini
     const skill = fs.readFileSync(path.join(root, 'SKILL.md'), 'utf8');
     assert.equal(fs.readFileSync(path.join(root, 'references/advisor.md'), 'utf8'), guidance);
     assert.equal(fs.readFileSync(path.join(root, 'references/follow-up.md'), 'utf8'), followUp);
-    assert.match(skill, /`options \[goal\]`, `ask <goal>` or `prompt <idea>`: read `references\/advisor.md`/);
+    assert.match(skill, /`ask \[goal\]`: read `references\/advisor.md`/);
     assert.match(skill, /Advice is read-only, including external state/);
     assert.equal(fs.existsSync(path.join(root, 'references/prompt.md')), false);
     assert.match(guidance, /write the full request inside the exact command/);
@@ -956,10 +957,9 @@ test('advisor aliases install shared read-only guidance without replacing unfini
     assert.match(skill, /read `references\/follow-up.md` to save progress/);
   }
   const help = f.run(['help']);
-  assert.ok(help.commands.includes('options [goal]'));
-  assert.ok(help.commands.includes('ask [goal] (alias of options)'));
+  assert.ok(help.commands.includes('ask [goal]'));
   assert.ok(help.commands.includes('prototype <description>'));
-  assert.ok(help.commands.includes('prompt [goal] (alias of options)'));
+  assert.ok(!help.commands.some(usage => /^(options|prompt)\b/.test(usage)));
   assert.deepEqual(f.run(['status']), before);
   assert.equal(f.run(['next']).state.task, saved.state.task);
   assert.match(guidance, /Advice ends before work begins/);
@@ -1805,7 +1805,7 @@ test('both agent installations receive self-contained shaping guidance and prese
   assert.match(guidance, /Carry supplied flags into the selected idea/);
   assert.match(guidance, /`--discuss` makes shaping discussion-only/);
   assert.match(guidance, /`--deep` in either order/);
-  assert.match(guidance, /including `next` or `continue`, until the user explicitly requests implementation/);
+  assert.match(guidance, /including `next`, until the user explicitly requests implementation/);
   assert.match(guidance, /Every discussion-only task save.*`decisions` and `next`/);
   assert.ok(fs.statSync(path.join(path.dirname(installer), '../SKILL.md')).size < 8100);
   const extra = path.join(f.user, '.agents/skills/neef/references/personal.md');
@@ -2058,14 +2058,16 @@ test('review starts at the task\'s first begin when it commits before its first 
   assert.equal(f.state(saved.revision, 'Brand new task').state.start, f.git('rev-parse', 'HEAD'));
 });
 
-test('review routing keeps the challenge boundary in both installed copies', t => {
+test('challenge covers the last task\'s work with the review guide in both installed copies', t => {
   const f = installation(t);
   f.install(true);
   for (const agent of ['.claude', '.agents']) {
     const root = path.join(f.user, agent, 'skills/neef');
     const skill = fs.readFileSync(path.join(root, 'SKILL.md'), 'utf8');
     const guidance = fs.readFileSync(path.join(root, 'references/review.md'), 'utf8');
-    assert.match(skill, /`review \[ref\]`: read `references\/review\.md`; challenge boundary/);
+    assert.match(skill, /last task's work or a commit range, also read `references\/review\.md`/);
+    assert.doesNotMatch(skill, /^- `review/m);
+    assert.match(guidance, /`challenge` route applied to the last task's commits/);
     assert.match(guidance, /External recommendation state is the only permitted write/);
     assert.match(guidance, /project source and Git must stay unchanged/);
     assert.match(guidance, /fresh native delegate/);
@@ -2088,41 +2090,45 @@ test('docs lists agent instruction files first, skips history and ignored files,
   assert.equal(fs.existsSync(stateDir) && fs.readdirSync(stateDir).length > 0, false);
 });
 
-test('docs routing keeps the challenge boundary in both installed copies', t => {
+test('challenge covers the documentation with the docs guide in both installed copies', t => {
   const f = installation(t);
   f.install(true);
   for (const agent of ['.claude', '.agents']) {
     const root = path.join(f.user, agent, 'skills/neef');
     const skill = fs.readFileSync(path.join(root, 'SKILL.md'), 'utf8');
     const guidance = fs.readFileSync(path.join(root, 'references/docs.md'), 'utf8');
-    assert.match(skill, /`docs`: read `references\/docs\.md`; challenge boundary/);
+    assert.match(skill, /project's documentation, `references\/docs\.md`/);
+    assert.doesNotMatch(skill, /^- `docs`/m);
+    assert.doesNotMatch(skill, /merge\.md/);
+    assert.equal(fs.existsSync(path.join(root, 'references/merge.md')), false);
+    assert.match(guidance, /`challenge` route applied to the project's documentation/);
     assert.match(guidance, /External recommendation state is the only permitted write/);
     assert.match(guidance, /leave project files and Git unchanged/);
   }
 });
 
-test('plan routing (alias auto) gates execution on one explicit sign-off in both installed copies', t => {
+test('plan routing gates execution on one explicit sign-off in both installed copies', t => {
   const f = installation(t);
   f.install(true);
   for (const agent of ['.claude', '.agents']) {
     const root = path.join(f.user, agent, 'skills/neef');
     const skill = fs.readFileSync(path.join(root, 'SKILL.md'), 'utf8');
     const guidance = fs.readFileSync(path.join(root, 'references/plan.md'), 'utf8');
-    assert.match(skill, /`plan <feature>` or `auto <feature>`: read `references\/plan\.md`/);
+    assert.match(skill, /`plan <feature>`: read `references\/plan\.md`/);
     assert.equal(fs.existsSync(path.join(root, 'references/auto.md')), false);
     assert.doesNotMatch(skill, /auto.md/);
     assert.match(guidance, /Only an explicit approval signs off/);
     assert.match(guidance, /never executes phases/);
     assert.match(guidance, /no pushing, new branches or destructive actions/);
     assert.match(guidance, /Do not ask the user to confirm phases/);
-    assert.match(guidance, /A bare `next` or `continue`.*is not approval/);
+    assert.match(guidance, /A bare `next`.*is not approval/);
     assert.match(guidance, /sign-off are mandatory, however clear or small the request/);
     assert.match(guidance, /each phase's `userInput`/);
     assert.match(guidance, /A saved `auto:` marker/);
   }
   const help = f.run(['help']);
   assert.ok(help.commands.includes('plan <feature>'));
-  assert.ok(help.commands.includes('auto <feature> (alias of plan)'));
+  assert.ok(!help.commands.some(usage => usage.startsWith('auto ')));
   assert.ok(!help.aliases.claude.includes('/neef-auto'));
   for (const agent of ['.claude', '.agents']) assert.equal(fs.existsSync(path.join(f.user, agent, 'skills/neef-auto')), false);
 });

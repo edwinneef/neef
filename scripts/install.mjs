@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { commandNames, commandDescriptions, subskillNames } from './neef.mjs';
+import { commandNames, commandDescriptions, subskillNames, retiredCommands } from './neef.mjs';
 
 const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const user = path.resolve(process.env.NEEF_USER_HOME || os.homedir());
@@ -60,9 +60,9 @@ export function install(apply = false) {
   });
   // Retire only receipt-owned references from the previous mode, with backup/rollback.
   const retired = [shared, path.join(user, '.claude/skills/neef'), path.join(user, '.agents/skills/neef')]
-    .flatMap(root => ['grill.md', 'auto.md', 'prompt.md'].map(name => path.join(root, 'references', name)));
+    .flatMap(root => ['grill.md', 'auto.md', 'prompt.md', 'merge.md'].map(name => path.join(root, 'references', name)));
   // Aliases and rare commands no longer get their own subskill folders.
-  for (const command of commandNames.filter(name => !subskillNames.includes(name))) for (const agent of ['.claude', '.agents']) {
+  for (const command of [...commandNames.filter(name => !subskillNames.includes(name)), ...retiredCommands]) for (const agent of ['.claude', '.agents']) {
     const root = path.join(user, agent, 'skills', `neef-${command}`);
     retired.push(path.join(root, 'SKILL.md'), ...(agent === '.agents' ? [path.join(root, 'agents/openai.yaml')] : []));
   }
@@ -74,7 +74,7 @@ export function install(apply = false) {
     entries.push({ target, old, bytes: null, hash: null });
   }
   // Never silently activate files left in an existing Neef skill folder.
-  for (const agent of ['.claude', '.agents']) for (const name of ['neef', ...commandNames.map(command => `neef-${command}`)]) {
+  for (const agent of ['.claude', '.agents']) for (const name of ['neef', ...[...commandNames, ...retiredCommands].map(command => `neef-${command}`)]) {
     const root = path.join(user, agent, 'skills', name);
     if (!fs.existsSync(root)) continue;
     const allowed = ['SKILL.md', ...(agent === '.agents' ? ['agents'] : []), ...(name === 'neef' ? ['references'] : [])];

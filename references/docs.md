@@ -1,6 +1,6 @@
 # Check docs against the code
 
-Find statements in the project's Markdown that no longer match the code, so agents start each session with true instructions. This optional mode ends with findings and recommendations, never edits.
+Find statements in the project's Markdown that no longer match the code, so agents start each session with true instructions. This is the `challenge` route applied to the project's documentation; it ends with findings and recommendations, never edits.
 
 Run helper `docs`. It returns `agent` (AGENTS.md, CLAUDE.md and SKILL.md at any depth, and files under `.claude/`, `.agents/`, `.codex/` or `skills/`), then `docs` (README and other Markdown), `skipped` (changelogs and licenses, which are meant to record the past) and the project's known commands. Git-ignored files are excluded. Check every `agent` file, then the `docs` files. With many `docs` files, check the ones agents are likely to read first and say which were not checked.
 

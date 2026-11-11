@@ -1,6 +1,6 @@
 # Discover what works
 
-Done means a runnable demonstration answers a bounded design question, the user can inspect or try it, and its location, findings and limits are recorded. Shape resolves what to build; prototype discovers what works; NEEF implements the production solution. `proto` is the same route as `prototype`.
+Done means a runnable demonstration answers a bounded design question, the user can inspect or try it, and its location, findings and limits are recorded. Shape resolves what to build; prototype discovers what works; NEEF implements the production solution.
 
 ## Demo-first routing
 
