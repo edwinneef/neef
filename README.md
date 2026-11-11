@@ -4,7 +4,7 @@
 
 Navigate → Execute → Evaluate → Follow-up
 
-**From idea to a running project, fast.** Open an empty folder and describe what you want: `/neef build a booking page for my salon`. NEEF creates Git on `main`, picks a sensible stack without asking, builds and verifies the first working version, commits it, and hands it over running with its local URL or run command. In existing projects it moves just as fast while keeping their stack, patterns and tooling: smallest working change, focused checks, frequent safe commits and one concrete next step. No per-project setup is required.
+**From idea to a running project, fast.** Open an empty folder and describe what you want: `/neef build a booking page for my salon`. NEEF creates Git on `main`, picks a sensible stack without asking, builds and verifies the first working version, commits it, and hands it over running with its local URL or run command. In existing projects it moves just as fast while keeping their stack, patterns and tooling: smallest working change, focused checks, frequent safe commits and one concrete next step. No per-project setup is required. The goal NEEF is measured against is in [the vision](docs/vision.md).
 
 ## Get your first app running
 
