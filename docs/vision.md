@@ -48,7 +48,7 @@ When a plan is open and a request falls outside it, NEEF asks once: park it or s
 
 ## Commands
 
-About six great commands rather than ten good ones. Three are shown up front: describe what you want, continue, and "not sure, help me ask". The rest are there when needed and never required.
+Seven great commands rather than sixteen good ones. Three are shown up front: describe what you want (`neef`), continue (`neef next`), and "not sure, help me ask" (`neef ask`). Four more are there when needed and never required: `shape`, `plan`, `prototype` and `challenge`.
 
 ## Out of scope
 

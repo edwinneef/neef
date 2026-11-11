@@ -24,30 +24,31 @@ Compared on 2026-11-11 against [the vision](vision.md). No rule was changed for 
 | 3 | Records stay light | Every task must carry outcome records with evidence; the helper refuses completion without them | `scripts/neef.mjs` lines 255, 396–399 and the completion check; `references/completion.md` (outcomes contract, about a third of the file); README "Development records requested outcomes" | Require outcome records only when a plan exists or the level is `important`. Ordinary tasks complete with task, verification and next. Shorten `completion.md` accordingly | M |
 | 4 | One bold idea in every report | Follow-up says "never invent filler" and ranks only grounded next steps. No slot for a more ambitious idea | `references/follow-up.md` lines 3–5 and Report layout | Add one clearly separate "bold idea" line to Follow-up: optional to act on, never built unasked, omitted when nothing real comes to mind | S |
 | 5 | Park or switch when a request is off the plan | An open plan is protected only inside `next` ("never start unrelated work"). A fresh `/neef <task>` during a plan is not checked, and there is no parking list | `references/plan.md` (Continue until complete or blocked); `SKILL.md` line 51 ("retain unfinished work unless the user replaces it") | Add a `parked` list to the state file and a rule in `SKILL.md`: with an open plan, an unrelated request gets one question, park or switch. Offer parked ideas when the plan completes | M |
-| 6 | About six great commands, three up front | Sixteen commands in `help`, fourteen installed skills, all shown at the same level | `scripts/neef.mjs` catalog (lines 10–30); `SKILL.md` routing list; README mode table; installer | See the proposal below | L |
+| 6 | Seven great commands, three up front | Sixteen commands in `help`, fourteen installed skills, all shown at the same level | `scripts/neef.mjs` catalog (lines 10–30); `SKILL.md` routing list; README mode table; installer | See the confirmed set below | L |
 | 7 | Written for builders, not coders | README and rules explain Git internals, tokens and hashes at length. The promise in README is the old one | `README.md` (maintenance paragraphs near the end); line 7 | Lead README with the new promise and the three commands; move maintainer detail to a separate file | S |
 | 8 | Rules a fast tool can carry | About 12,700 words in 19 files; `plan.md` and `completion.md` are the longest | `references/` | Falls out of gaps 3 and 6. No separate work unless the total stays above roughly 9,000 words afterwards | – |
 
-## Proposed commands
+## Confirmed commands
 
-Six workflow commands. The first three are the whole story for a newcomer.
+Confirmed by the owner on 2026-11-11: seven workflow commands. The first three are the whole story for a newcomer.
 
 | Command | For | Shown |
 | --- | --- | --- |
 | `neef <what you want>` | Build or change something. Asks only when it must | Up front |
 | `neef next` | Continue, or do the most useful next thing | Up front |
 | `neef ask <goal>` | Not sure how to ask: it writes the command for you | Up front |
+| `neef shape <idea>` | A rough idea: a few sharp questions, then it builds | When needed |
 | `neef plan <feature>` | Bigger work: questions first, one sign-off, then it runs | When needed |
 | `neef prototype <idea>` | Try an idea in a scratch folder | When needed |
 | `neef challenge <topic>` | An honest review that changes nothing | When needed |
 
 What happens to the others:
 
-- `shape` folds into the two commands that already ask questions: a plain task (short) and `plan` (deep). Its discussion-only mode becomes `plan --discuss`.
+- `shape` stays: the owner uses it often, and folding it into `plan` would add a sign-off to a quick flow.
 - `review` and `docs` fold into `challenge` (challenge the last work, challenge the documentation).
-- `options` keeps one name, `ask`. `prompt`, `auto`, `proto` and `continue` aliases go.
+- `options` keeps one name, `ask`. The `prompt`, `auto`, `proto` and `continue` aliases go.
 - `merge` goes as a command. Finishing a linked worktree still merges through the helper.
-- Settings and diagnostics stay but are not part of the story: `help`, `status`, `doctor`, `style`, `setup`. `importance` stays as a setting until gap 1 and 2 make it mostly automatic.
+- Settings and diagnostics stay in the background: `help`, `status`, `doctor`, `style`, `setup`, `importance`.
 
 Constraint from the plan: `plan`, `next` and `prototype` must keep working until phase 5 is finished.
 
