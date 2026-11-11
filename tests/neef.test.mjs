@@ -1479,11 +1479,12 @@ test('status shows a read-only board of the task or plan phases and parked ideas
     { id: 'p1', title: 'Form', task: 'Build the form', dependsOn: [], acceptance: ['Form saves'], status: 'complete', verification: 'Saved one' },
     { id: 'p2', task: 'Send the email: confirm each booking', dependsOn: ['p1'], acceptance: ['Email sent'], status: 'active', userInput: 'Mail account' },
     { id: 'p3', title: 'List', task: 'Show the list', dependsOn: ['p1'], acceptance: ['List shows'], status: 'pending' }] } });
-  assert.equal(f.run(['status']).board, ['Add bookings  ●◉○  1 of 3 done', '',
+  assert.equal(f.run(['status']).board, ['Add bookings  🟩🟨⬜   1 of 3 done', '',
     'Now     p2  Send the email   ⚑ needs you', 'Next    p3  List', 'Done    p1 Form', '', 'Parked  1  Try a dark theme'].join('\n'));
   const blocked = f.state(f.run(['status']).revision, 'Add bookings', { blockers: 'p3: waiting on the design.' });
   assert.match(blocked.board, /Next    p3  List   ⚑ blocked/);
-  assert.equal(blocked.ribbon, '●◉○  1 of 3 done  ▸ p2 Send the email ⚑ needs you  ·  next p3 List ⚑ blocked');
+  assert.equal(blocked.ribbon, ['╭─ NEEF plan ──────────────────────────────────╮', '  🟩🟨🟥   1 of 3 done',
+    '  ▸ NOW    p2  Send the email   ⚑ needs you', '    NEXT   p3  List   ⚑ blocked', `╰${'─'.repeat(46)}╯`].join('\n'));
   assert.equal(blocked.board, f.run(['status']).board, 'state-write returns the same board as status');
   f.run(['park', blocked.revision], { add: 'Export every booking as a spreadsheet file that the salon owner can open in Excel' });
   assert.ok(f.run(['status']).board.endsWith(['Parked  1  Try a dark theme',

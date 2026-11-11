@@ -296,20 +296,30 @@ const phaseFlag = (phase, blockers) => {
   if (phase.status === 'pending' && new Set((blockers || '').split(/[^\w-]+/)).has(phase.id)) return '⚑ blocked';
   return phase.userInput && phase.status !== 'complete' ? '⚑ needs you' : '';
 };
-// One dot per phase in plan order: ● done, ◉ now, ○ to do. Very long plans show the count alone.
-const phaseTrack = phases => phases.length > 24 ? '' : phases.map(phase => ({ complete: '●', active: '◉', pending: '○' })[phase.status]).join('');
-const progress = phases => [phaseTrack(phases), `${phases.filter(phase => phase.status === 'complete').length} of ${phases.length} done`].filter(Boolean).join('  ');
+// One colored square per phase in plan order, since replies cannot color text: 🟩 done, 🟨 now,
+// 🟥 blocked, ⬜ to do. Very long plans show the count alone.
+const phaseTrack = (phases, blockers) => phases.length > 20 ? '' : phases.map(phase =>
+  phase.status === 'pending' && phaseFlag(phase, blockers) === '⚑ blocked' ? '🟥' : { complete: '🟩', active: '🟨', pending: '⬜' }[phase.status]).join('');
+const progress = (phases, blockers) => [phaseTrack(phases, blockers), `${phases.filter(phase => phase.status === 'complete').length} of ${phases.length} done`].filter(Boolean).join('   ');
 
-// A one-line plan summary for the foot of every reply while a plan is open.
+// A framed plan panel for the foot of every reply while a plan is open. It has no side borders
+// because emoji widths differ between terminals and would misalign them.
 export function ribbon(state) {
   const phases = state?.task && state.plan?.phases;
   if (!phases) return null;
-  if (phases.every(phase => phase.status === 'complete')) return `${progress(phases)}  ✓ plan complete`;
-  const tag = phase => [phase.id, phaseName(phase), phaseFlag(phase, state.blockers)].filter(Boolean).join(' ');
+  const width = 48;
+  const title = '╭─ NEEF plan ';
+  const lines = [`  ${progress(phases, state.blockers)}`];
+  const tag = phase => {
+    const flag = phaseFlag(phase, state.blockers);
+    return `${phase.id.padEnd(4)}${phaseName(phase)}${flag ? `   ${flag}` : ''}`;
+  };
   const active = phases.find(phase => phase.status === 'active');
   const next = phases.find(phase => phase.status === 'pending');
-  const now = active ? `▸ ${tag(active)}` : `▸ next ${tag(next)}`;
-  return [`${progress(phases)}  ${now}`, active && next && `next ${tag(next)}`].filter(Boolean).join('  ·  ');
+  if (!active && !next) lines.push('  ✓ plan complete');
+  if (active) lines.push(`  ▸ NOW    ${tag(active)}`);
+  if (next) lines.push(`${active ? '    ' : '  ▸ '}NEXT   ${tag(next)}`);
+  return [`${title}${'─'.repeat(width - title.length - 1)}╮`, ...lines, `╰${'─'.repeat(width - 2)}╯`].join('\n');
 }
 
 // A read-only text board of the saved scope: a progress line, Now / Next / Done lanes, then parked ideas.
@@ -331,7 +341,7 @@ export function board(state) {
   if (state.task && state.plan) {
     const phases = state.plan.phases;
     const done = phases.filter(phase => phase.status === 'complete');
-    sections.push([`${clipWords(firstClause(state.task), 36)}  ${progress(phases)}`]);
+    sections.push([`${clipWords(firstClause(state.task), 36)}  ${progress(phases, state.blockers)}`]);
     const card = phase => {
       const flag = phaseFlag(phase, state.blockers);
       return `${phase.id.padEnd(4)}${phaseName(phase)}${flag ? `   ${flag}` : ''}`;
