@@ -368,7 +368,7 @@ export function board(state) {
   return sections.map(lines => lines.join('\n')).join('\n\n');
 }
 
-function prototypeWorkspace(p, slug) {
+function prototypeRoot(p) {
   const parent = path.join(home(), 'prototypes');
   const root = path.join(parent, p.id);
   requireExternalStorage(p, [root]);
@@ -376,6 +376,20 @@ function prototypeWorkspace(p, slug) {
     try { if (fs.lstatSync(directory).isSymbolicLink()) fail(`Linked prototype storage refused: ${directory}`); }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
+  return root;
+}
+
+// Status comes from the demo's own README; a missing, linked or unreadable one
+// reads as null so one bad demo never hides the rest of the list.
+function prototypeStatus(readme) {
+  try {
+    if (!fs.lstatSync(readme).isFile()) return null;
+    return /^Status:\s*(open|chosen|rejected)\b/im.exec(fs.readFileSync(readme, 'utf8').slice(0, 16384))?.[1].toLowerCase() ?? null;
+  } catch { return null; }
+}
+
+function prototypeWorkspace(p, slug, all = false) {
+  const root = prototypeRoot(p);
   if (slug !== undefined) {
     if (!/^[a-z0-9][a-z0-9-]{0,47}$/.test(slug)) fail('Provide a prototype slug of 1-48 lowercase letters, digits or hyphens');
     fs.mkdirSync(root, { recursive: true });
@@ -384,10 +398,35 @@ function prototypeWorkspace(p, slug) {
   }
   const workspaces = exists(root) ? fs.readdirSync(root, { withFileTypes: true })
     .filter(entry => entry.isDirectory() && !entry.isSymbolicLink())
-    .map(entry => ({ workspace: path.join(root, entry.name), created: fs.statSync(path.join(root, entry.name)).birthtimeMs }))
+    .map(entry => ({ name: entry.name, workspace: path.join(root, entry.name), created: fs.statSync(path.join(root, entry.name)).birthtimeMs }))
     .sort((a, b) => b.created - a.created || a.workspace.localeCompare(b.workspace))
-    .slice(0, 20).map(({ workspace }) => ({ workspace, readme: path.join(workspace, 'README.md') })) : [];
+    .slice(0, all ? undefined : 20).map(({ name, workspace }) => {
+      const readme = path.join(workspace, 'README.md');
+      return { name, workspace, readme, status: prototypeStatus(readme) };
+    }) : [];
   return { project: p.root, root, workspaces };
+}
+
+// Deletes only demos the user named after confirming them; every name is
+// checked before anything is removed.
+function prototypeDelete(p, names) {
+  if (!names.length) fail('Usage: prototype-delete <name> [name...] (folder names from prototype-workspace)');
+  if (new Set(names).size !== names.length) fail('Duplicate prototype names refused');
+  const root = prototypeRoot(p);
+  const targets = names.map(name => {
+    if (!/^[a-z0-9][a-zA-Z0-9-]{0,63}$/.test(name)) fail(`Not a prototype folder name: ${name}`);
+    const target = path.join(root, name);
+    let stat;
+    try { stat = fs.lstatSync(target); } catch { fail(`No such prototype: ${name}`); }
+    if (stat.isSymbolicLink() || !stat.isDirectory()) fail(`Not a prototype folder: ${name}`);
+    return target;
+  });
+  const deleted = [];
+  for (const target of targets) {
+    try { fs.rmSync(target, { recursive: true }); deleted.push(target); }
+    catch (error) { return { project: p.root, root, deleted, failed: { workspace: target, error: error.message }, remaining: targets.slice(deleted.length + 1) }; }
+  }
+  return { project: p.root, root, deleted };
 }
 
 function saveState(p, current, value) {
@@ -1196,7 +1235,7 @@ export async function main(args = process.argv.slice(2)) {
         .map(({ usage, changes, stops, aliases = [] }) => ({ command: usage, changes, stops, aliases })) })),
     invocation: { codex: '$neef <command>', claude: '/neef <command>' },
     aliases: { codex: subskillNames.map(command => `$neef-${command}`), claude: subskillNames.map(command => `/neef-${command}`) },
-    helperCommands: ['style [simple|guided|technical|kid] [--here] (read the effective style or save the global default; --here saves a project override, style clear --here removes it)', 'importance [explore|normal|important] [--here] (read the effective default or save the global one; --here saves a project override, importance clear --here removes it; a task may carry its own importance in state-write)', 'prototype-workspace [slug] (omit slug: read-only listing; provide slug: allocate isolated scratch directory without task/Git changes)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'docs (read-only: Git-tracked and untracked-but-not-ignored .md files split into agent instructions, other docs and skipped changelogs/licenses, with known commands)', 'review [ref] (read-only: the last task\'s commits since its first begin or first save, whichever is earlier, or ref..HEAD, with saved decisions, plan, outcomes and all known commands, each with a kind; run only kind test)', 'merge (from a linked worktree whose task is complete: merges its branch into main in the main folder; fast-forward else one merge commit; refuses conflicts, staged or in-progress work and never deletes branches)', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?,outcomes?,importance?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'park <expected-revision> (stdin: {add:"one-line idea"} or {remove:"its text"|position}; the parked list shows in status and survives task changes)', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', outcomes: 'Ordinary tasks complete on a nonempty verification note. With a plan or importance important, completion requires [{id,description,required,status,evidence}], with unique ids and at least one required outcome; supplied outcomes are always validated. Status is pending/passed/failed/blocked; passed outcomes need nonempty evidence. Required outcomes must pass, blockers must be explicitly cleared, and plan phases must finish before completion. Same-task writes preserve omitted outcomes; new tasks do not inherit them. Legacy saved states remain readable. Evidence is agent-reported, not independently proven.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,title?,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?,userInput?}]}. title is a short board name (at most 40 characters). userInput names the decision, credential, approval or manual step only the user can supply for that phase. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. The plan is stored beside the state as <id>.plan.json under 32 KiB, under the same lock and revision; the rest of the state stays under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests' };
+    helperCommands: ['style [simple|guided|technical|kid] [--here] (read the effective style or save the global default; --here saves a project override, style clear --here removes it)', 'importance [explore|normal|important] [--here] (read the effective default or save the global one; --here saves a project override, importance clear --here removes it; a task may carry its own importance in state-write)', 'prototype-workspace [slug | --all] (omit slug: read-only listing of the newest 20 with name and README Status open|chosen|rejected or null; --all lists every demo; provide slug: allocate isolated scratch directory without task/Git changes)', 'prototype-delete <name...> (deletes the named demo folders of this project only after the user confirmed those exact names; validates every name first and refuses links, duplicates and unknown names)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'docs (read-only: Git-tracked and untracked-but-not-ignored .md files split into agent instructions, other docs and skipped changelogs/licenses, with known commands)', 'review [ref] (read-only: the last task\'s commits since its first begin or first save, whichever is earlier, or ref..HEAD, with saved decisions, plan, outcomes and all known commands, each with a kind; run only kind test)', 'merge (from a linked worktree whose task is complete: merges its branch into main in the main folder; fast-forward else one merge commit; refuses conflicts, staged or in-progress work and never deletes branches)', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?,outcomes?,importance?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason})', 'park <expected-revision> (stdin: {add:"one-line idea"} or {remove:"its text"|position}; the parked list shows in status and survives task changes)', 'state-recover <corrupt-revision>', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', outcomes: 'Ordinary tasks complete on a nonempty verification note. With a plan or importance important, completion requires [{id,description,required,status,evidence}], with unique ids and at least one required outcome; supplied outcomes are always validated. Status is pending/passed/failed/blocked; passed outcomes need nonempty evidence. Required outcomes must pass, blockers must be explicitly cleared, and plan phases must finish before completion. Same-task writes preserve omitted outcomes; new tasks do not inherit them. Legacy saved states remain readable. Evidence is agent-reported, not independently proven.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,title?,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?,userInput?}]}. title is a short board name (at most 40 characters). userInput names the decision, credential, approval or manual step only the user can supply for that phase. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. The plan is stored beside the state as <id>.plan.json under 32 KiB, under the same lock and revision; the rest of the state stays under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests' };
   if (command === 'doctor') return doctor();
   const p = project(cwd);
   if (command === 'style') {
@@ -1215,7 +1254,12 @@ export async function main(args = process.argv.slice(2)) {
   if (command === 'bootstrap') return bootstrap(p);
   if (command === 'context-write') return contextWrite(p, argument, input());
   if (command === 'status') return status(p);
-  if (command === 'prototype-workspace') return prototypeWorkspace(p, argument);
+  if (command === 'prototype-workspace') {
+    const all = args.includes('--all'), rest = args.slice(1).filter(arg => arg !== '--all');
+    if (rest.length > 1 || (all && rest.length)) fail('Usage: prototype-workspace [slug], or prototype-workspace --all');
+    return prototypeWorkspace(p, rest[0], all);
+  }
+  if (command === 'prototype-delete') return prototypeDelete(p, args.slice(1));
   if (command === 'next') return next(p);
   if (command === 'begin') return begin(p, argument);
   if (command === 'state-write') return stateWrite(p, argument, input());

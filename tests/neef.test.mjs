@@ -885,6 +885,76 @@ test('prototype allocation is isolated, unique and preserves active work and Git
   assert.deepEqual(JSON.parse(result.stdout).workspaces, []);
 });
 
+test('prototype listing reports README status and --all lifts the newest-20 cap', t => {
+  const f = fixture(t, false);
+  const chosen = f.run(['prototype-workspace', 'chosen']);
+  fs.writeFileSync(chosen.readme, '# Demo\nStatus: chosen (variant B)\nStatus: rejected\n');
+  const plain = f.run(['prototype-workspace', 'plain']);
+  fs.writeFileSync(plain.readme, '# No status line\n');
+  const missing = f.run(['prototype-workspace', 'missing']);
+  const odd = f.run(['prototype-workspace', 'odd']);
+  fs.mkdirSync(odd.readme);
+  const statuses = Object.fromEntries(f.run(['prototype-workspace']).workspaces.map(item => [item.workspace, [item.name, item.status]]));
+  assert.deepEqual(statuses[chosen.workspace], [path.basename(chosen.workspace), 'chosen']);
+  assert.equal(statuses[plain.workspace][1], null);
+  assert.equal(statuses[missing.workspace][1], null);
+  assert.equal(statuses[odd.workspace][1], null);
+  for (let index = 0; index < 18; index++) f.run(['prototype-workspace', `extra-${index}`]);
+  assert.equal(f.run(['prototype-workspace']).workspaces.length, 20);
+  assert.equal(f.run(['prototype-workspace', '--all']).workspaces.length, 22);
+  f.run(['prototype-workspace', '--all', 'slug'], undefined, /Usage: prototype-workspace/);
+});
+
+test('prototype-delete removes only confirmed demo folders and checks every name first', t => {
+  const f = fixture(t);
+  const keep = f.run(['prototype-workspace', 'keep']);
+  const first = f.run(['prototype-workspace', 'old-one']);
+  const second = f.run(['prototype-workspace', 'old-two']);
+  fs.writeFileSync(path.join(first.workspace, 'index.html'), '<p>old</p>');
+  const root = path.dirname(first.workspace);
+  const name = item => path.basename(item.workspace);
+  f.run(['prototype-delete'], undefined, /Usage: prototype-delete/);
+  fs.writeFileSync(path.join(root, 'README.md'), 'not a demo');
+  for (const bad of [name(first), '..', '../x', 'a\\b', 'unknown-demo', '.', 'README.md']) {
+    f.run(['prototype-delete', name(first), bad], undefined, /Duplicate|Not a prototype|No such prototype/);
+  }
+  const linkType = process.platform === 'win32' ? 'junction' : 'dir';
+  const outside = path.join(path.dirname(f.root), 'outside-demo');
+  fs.mkdirSync(outside);
+  fs.writeFileSync(path.join(outside, 'keep.txt'), 'outside');
+  fs.symlinkSync(outside, path.join(root, 'linked-demo'), linkType);
+  f.run(['prototype-delete', name(first), 'linked-demo'], undefined, /Not a prototype folder/);
+  assert.ok(fs.existsSync(path.join(first.workspace, 'index.html')));
+  assert.ok(fs.existsSync(path.join(outside, 'keep.txt')));
+  const result = f.run(['prototype-delete', name(first), name(second)]);
+  assert.deepEqual(result.deleted, [first.workspace, second.workspace]);
+  assert.ok(!fs.existsSync(first.workspace) && !fs.existsSync(second.workspace));
+  assert.deepEqual(f.run(['prototype-workspace']).workspaces.map(item => item.workspace), [keep.workspace]);
+  fs.unlinkSync(path.join(root, 'linked-demo'));
+  assert.equal(f.git('status', '--porcelain'), '');
+});
+
+test('prototype-delete refuses project-local or linked prototype storage', t => {
+  const f = fixture(t);
+  const { root } = f.run(['prototype-workspace']);
+  const parent = path.dirname(root);
+  const linkType = process.platform === 'win32' ? 'junction' : 'dir';
+  fs.mkdirSync(parent, { recursive: true });
+  fs.mkdirSync(path.join(f.root, 'demo-a'));
+  fs.symlinkSync(f.root, root, linkType);
+  f.run(['prototype-delete', 'demo-a'], undefined, /storage must be outside the project/);
+  assert.ok(fs.existsSync(path.join(f.root, 'demo-a')));
+  fs.unlinkSync(root);
+  fs.rmdirSync(parent);
+  const external = path.join(path.dirname(f.root), 'foreign-prototypes');
+  fs.mkdirSync(path.join(external, path.basename(root), 'demo-a'), { recursive: true });
+  fs.symlinkSync(external, parent, linkType);
+  f.run(['prototype-delete', 'demo-a'], undefined, /Linked prototype storage refused/);
+  assert.ok(fs.existsSync(path.join(external, path.basename(root), 'demo-a')));
+  fs.unlinkSync(parent);
+  fs.rmdirSync(path.join(f.root, 'demo-a'));
+});
+
 test('prototype slugs cannot escape scratch storage or overwrite files', t => {
   const f = fixture(t, false);
   for (const slug of ['../project', 'C:\\escape', 'with space', '', 'x'.repeat(49)]) {
