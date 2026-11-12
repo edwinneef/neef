@@ -437,6 +437,7 @@ test('a linked worktree develops and commits on its own branch while the main fo
 test('merge brings a completed worktree branch into main: fast-forward, then one merge commit', t => {
   const f = worktreeFixture(t);
   f.run(['merge'], undefined, /Merge runs from a linked worktree/);
+  f.run(['merge', 'feature'], undefined, /Usage: merge \(no arguments/);
   const begin = f.wrun(['begin', 'unfinished']);
   fs.writeFileSync(path.join(f.worktree, 'owned.txt'), 'first\n');
   f.wrun(['merge'], undefined, /uncommitted changes/);
@@ -2280,72 +2281,6 @@ test('a linked external home outside the project still supports continuity', t =
   assert.equal(saved.state.recommendations.primary, null);
   assert.ok(fs.existsSync(path.join(target, 'state')));
   assert.equal(f.git('status', '--porcelain'), '');
-});
-
-test('merge with chosen branches lists candidates, fast-forwards or merges, and deletes branches and worktrees', t => {
-  const f = fixture(t);
-  const tree = name => path.join(path.dirname(f.root), name);
-  const commitIn = (dir, file, value) => {
-    fs.writeFileSync(path.join(dir, file), value);
-    f.git('-C', dir, 'add', '--', file);
-    f.git('-C', dir, 'commit', '-m', `Change ${file}`);
-  };
-  f.git('worktree', 'add', '-b', 'diverged', tree('diverged'));
-  commitIn(tree('diverged'), 'diverged.txt', 'diverged\n');
-  f.git('branch', 'merged-already');
-  commitIn(f.root, 'main.txt', 'main\n');
-  f.git('worktree', 'add', '-b', 'linear', tree('linear'));
-  commitIn(tree('linear'), 'linear.txt', 'linear\n');
-  f.git('worktree', 'add', '-b', 'kept', tree('kept'));
-  commitIn(tree('kept'), 'kept.txt', 'kept\n');
-  fs.writeFileSync(path.join(tree('kept'), 'scratch.txt'), 'untracked\n');
-  const listed = f.run(['merge-candidates']).candidates;
-  const row = name => listed.find(item => item.branch === name);
-  assert.deepEqual(listed.map(item => item.branch).sort(), ['diverged', 'kept', 'linear']);
-  assert.equal(row('diverged').fastForward, false);
-  assert.equal(row('linear').fastForward, true);
-  assert.equal(row('kept').dirty, true);
-  assert.equal(row('linear').taskComplete, null);
-  f.run(['merge', 'linear', 'kept'], undefined, /kept has uncommitted changes/);
-  assert.equal(f.git('show', 'HEAD:main.txt'), 'main');
-  assert.equal(fs.existsSync(path.join(f.root, 'linear.txt')), false);
-  const result = f.run(['merge', 'linear', 'diverged']);
-  assert.deepEqual(result.merged.map(({ branch, fastForward, deleted }) => [branch, fastForward, deleted]), [['linear', true, true], ['diverged', false, true]]);
-  assert.equal(fs.existsSync(tree('linear')), false);
-  assert.equal(fs.existsSync(tree('diverged')), false);
-  assert.equal(f.git('show', 'HEAD:diverged.txt'), 'diverged');
-  assert.equal(f.git('show', 'HEAD:linear.txt'), 'linear');
-  assert.equal(f.git('branch', '--list', 'linear', 'diverged'), '');
-  fs.rmSync(path.join(tree('kept'), 'scratch.txt'));
-  assert.equal(f.run(['merge', 'kept', '--keep']).merged[0].deleted, false);
-  assert.match(f.git('branch', '--list', 'kept'), /kept/);
-  assert.equal(fs.existsSync(tree('kept')), true);
-});
-
-test('merge with chosen branches stops at a conflict with main untouched and refuses bad names', t => {
-  const f = fixture(t);
-  f.git('branch', 'conflict');
-  f.git('branch', 'later');
-  f.write('owned.txt', 'main side\n');
-  f.git('commit', '-am', 'Main side');
-  f.git('checkout', '-q', 'conflict');
-  f.write('owned.txt', 'branch side\n');
-  f.git('commit', '-am', 'Branch side');
-  f.git('checkout', '-q', 'later');
-  f.write('later.txt', 'later\n');
-  f.git('add', 'later.txt');
-  f.git('commit', '-m', 'Later');
-  f.git('checkout', '-q', 'main');
-  const head = f.git('rev-parse', 'HEAD');
-  const result = f.run(['merge', 'conflict', 'later']);
-  assert.equal(result.failed.branch, 'conflict');
-  assert.match(result.failed.error, /conflicts with main/);
-  assert.deepEqual(result.notAttempted, ['later']);
-  assert.equal(f.git('rev-parse', 'HEAD'), head);
-  assert.equal(f.git('status', '--porcelain'), '');
-  f.run(['merge', 'nope', 'later'], undefined, /No such branch: nope/);
-  f.run(['merge', 'main', 'later'], undefined, /Invalid branch/);
-  assert.equal(f.git('rev-parse', 'HEAD'), head);
 });
 
 test('reply layout is defined once in follow-up and referenced by plan, challenge and styles', () => {

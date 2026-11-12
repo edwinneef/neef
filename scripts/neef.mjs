@@ -1119,62 +1119,6 @@ function merge(p) {
   return { branch: source.branch, mainFolder: target.root, ...mergeInto(target, source.branch, source.head) };
 }
 
-function branchWorktree(trees, branch) {
-  const tree = trees.find(item => item.branch === branch);
-  if (!tree) return null;
-  try { return project(tree.path); } catch { return { root: tree.path, missing: true }; }
-}
-
-// User path: branches ahead of main, each with its worktree, uncommitted changes and NEEF completion.
-function mergeCandidates(p) {
-  if (!p.isGit) fail('Not a Git project');
-  const trees = worktreeList(p.root);
-  const candidates = [];
-  for (const line of git(p.root, ['for-each-ref', '--format=%(refname:short)%00%(objectname)%00%(subject)', 'refs/heads']).split('\n').filter(Boolean)) {
-    const [branch, head, subject] = line.split('\0');
-    if (branch === 'main') continue;
-    const [behind, ahead] = git(p.root, ['rev-list', '--left-right', '--count', `main...${head}`]).trim().split(/\s+/).map(Number);
-    if (!ahead) continue;
-    const tree = branchWorktree(trees, branch);
-    const saved = tree && !tree.missing ? stateRead(tree).state : null;
-    candidates.push({ branch, ahead, behind, fastForward: behind === 0, subject, worktree: tree?.root || null,
-      dirty: !!tree && !tree.missing && snapshot(tree).changes.length > 0,
-      taskComplete: saved?.task ? saved.progress === 'complete' && saved.head === head : null });
-  }
-  return { mainFolder: trees[0]?.path || null, candidates };
-}
-
-// Merges the user's chosen branches in order, stopping at the first refusal. Unless keep, each
-// merged branch and its worktree are deleted; Git refuses dirty worktrees and unmerged branches.
-function mergeBranches(p, branches, keep) {
-  if (!branches.length) fail('Usage: merge [branch...] [--keep]');
-  const { target, trees } = mainFolder(p);
-  const sources = branches.map(branch => {
-    if (branch === 'main' || branch.startsWith('-')) fail(`Invalid branch: ${branch}`);
-    let head;
-    try { head = git(p.root, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]).trim(); } catch { fail(`No such branch: ${branch}`); }
-    const tree = branchWorktree(trees, branch);
-    if (tree && !tree.missing && snapshot(tree).changes.length) fail(`${branch} has uncommitted changes in ${tree.root}; commit or preserve them first`);
-    return { branch, head, tree };
-  });
-  const here = [canonical(process.cwd()), p.root];
-  const merged = [];
-  for (const [index, { branch, head, tree }] of sources.entries()) {
-    let result;
-    try { result = { branch, ...mergeInto(target, branch, head), deleted: false }; }
-    catch (error) { return { mainFolder: target.root, head: snapshot(target).head, merged, failed: { branch, error: error.message }, notAttempted: branches.slice(index + 1) }; }
-    merged.push(result);
-    if (keep) continue;
-    if (tree && here.some(dir => dir === tree.root || dir.startsWith(`${tree.root}${path.sep}`))) { result.kept = 'Current worktree; remove it after leaving'; continue; }
-    try {
-      if (tree) git(target.root, ['worktree', 'remove', tree.root]);
-      git(target.root, ['branch', '-d', branch]);
-      result.deleted = true;
-    } catch (error) { result.kept = error.message; }
-  }
-  return { mainFolder: target.root, head: snapshot(target).head, merged };
-}
-
 function commandVersion(command) {
   // Windows npm shims need cmd; command names here are fixed, never user input.
   const result = spawnSync(process.platform === 'win32' ? 'cmd.exe' : command,
@@ -1280,8 +1224,7 @@ export async function main(args = process.argv.slice(2)) {
   if (command === 'state-recover') return stateRecover(p, argument);
   if (command === 'prepare') return prepare(p, argument, input());
   if (command === 'commit') return commit(p, argument);
-  if (command === 'merge-candidates') return mergeCandidates(p);
-  if (command === 'merge') return args.length > 1 ? mergeBranches(p, args.slice(1).filter(arg => arg !== '--keep'), args.includes('--keep')) : merge(p);
+  if (command === 'merge') return args.length > 1 ? fail('Usage: merge (no arguments; run it from a linked worktree whose task is complete)') : merge(p);
   if (command === 'review') return review(p, argument);
   if (command === 'docs') return docs(p);
   fail(`Unknown helper command: ${command}; run help`);
