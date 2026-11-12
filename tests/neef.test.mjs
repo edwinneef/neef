@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { gitMergeReady, modeTable } from '../scripts/neef.mjs';
+import { gitMergeReady, modeTable, ribbon } from '../scripts/neef.mjs';
 
 const passedOutcomes = [{ id: 'fixture', description: 'Complete the fixture task', required: true, status: 'passed', evidence: 'Fixture assertions passed.' }];
 
@@ -1483,8 +1483,7 @@ test('status shows a read-only board of the task or plan phases and parked ideas
     'Now     p2  Send the email   ⚑ needs you', 'Next    p3  List', 'Done    p1 Form', '', 'Parked  1  Try a dark theme'].join('\n'));
   const blocked = f.state(f.run(['status']).revision, 'Add bookings', { blockers: 'p3: waiting on the design.' });
   assert.match(blocked.board, /Next    p3  List   ⚑ blocked/);
-  assert.equal(blocked.ribbon, ['╭─ NEEF plan ──────────────────────────────────╮', '  🟩🟨🟥   1 of 3 done',
-    '  ▸ NOW    p2  Send the email   ⚑ needs you', '    NEXT   p3  List   ⚑ blocked', `╰${'─'.repeat(46)}╯`].join('\n'));
+  assert.equal(blocked.ribbon, `🚀 Working on p2 Send the email  ⚑ needs you   then p3 List  ⚑ blocked\n▕${'█'.repeat(15)}${'░'.repeat(15)}▏ 50%`);
   assert.equal(blocked.board, f.run(['status']).board, 'state-write returns the same board as status');
   f.run(['park', blocked.revision], { add: 'Export every booking as a spreadsheet file that the salon owner can open in Excel' });
   assert.ok(f.run(['status']).board.endsWith(['Parked  1  Try a dark theme',
@@ -1492,6 +1491,19 @@ test('status shows a read-only board of the task or plan phases and parked ideas
   f.state(f.run(['status']).revision, 'Add bookings', { plan: { goal: 'Bookings', scale: 'large', rationale: 'Two', phases: [
     { id: 'p1', title: 'x'.repeat(41), task: 'Form', dependsOn: [], acceptance: ['Form saves'], status: 'pending' },
     { id: 'p2', task: 'List', dependsOn: [], acceptance: ['List shows'], status: 'pending' }] } }, /Invalid plan/);
+});
+
+test('the plan ribbon names working, stuck, waiting and complete states over a percent bar', () => {
+  const plan = (...statuses) => ({ task: 'Bookings', plan: { phases: statuses.map((status, index) => ({
+    id: `p${index + 1}`, title: ['Form', 'Email', 'List'][index], task: 'Build it', status })) } });
+  const bar = (full, part = '') => `▕${`${'█'.repeat(full)}${part}`.padEnd(30, '░')}▏`;
+  assert.equal(ribbon({ task: 'No plan' }), null);
+  assert.equal(ribbon(plan('active', 'pending', 'pending')), `🚀 Working on p1 Form   then p2 Email\n${bar(5)} 17%`);
+  assert.equal(ribbon({ ...plan('complete', 'pending', 'pending'), blockers: 'p2: no mail key' }), `🛑 Stuck on p2 Email\n${bar(10)} 33%`);
+  assert.equal(ribbon(plan('complete', 'complete', 'pending')), `⏸️ Waiting to start p3 List\n${bar(20)} 67%`);
+  assert.equal(ribbon(plan('complete', 'complete', 'complete')), `✅ Plan complete\n${bar(30)} 100%`);
+  const four = { task: 'x', plan: { phases: ['complete', 'active', 'pending', 'pending'].map((status, index) => ({ id: `p${index + 1}`, task: 'Step', status })) } };
+  assert.equal(ribbon(four).split('\n')[1], `${bar(11, '▎')} 38%`, 'partial cells use eighth blocks');
 });
 
 test('legacy completed states remain readable and require outcome records on their next completion write', t => {

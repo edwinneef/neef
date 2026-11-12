@@ -302,24 +302,28 @@ const phaseTrack = (phases, blockers) => phases.length > 20 ? '' : phases.map(ph
   phase.status === 'pending' && phaseFlag(phase, blockers) === '⚑ blocked' ? '🟥' : { complete: '🟩', active: '🟨', pending: '⬜' }[phase.status]).join('');
 const progress = (phases, blockers) => [phaseTrack(phases, blockers), `${phases.filter(phase => phase.status === 'complete').length} of ${phases.length} done`].filter(Boolean).join('   ');
 
-// A framed plan panel for the foot of every reply while a plan is open. It has no side borders
-// because emoji widths differ between terminals and would misalign them.
+// A two-line percent meter for the foot of every reply while a plan is open: a plain-language
+// headline, then a smooth bar. An active phase counts as half done.
 export function ribbon(state) {
   const phases = state?.task && state.plan?.phases;
   if (!phases) return null;
-  const width = 48;
-  const title = '╭─ NEEF plan ';
-  const lines = [`  ${progress(phases, state.blockers)}`];
-  const tag = phase => {
+  const cells = 30;
+  const tag = phase => `${phase.id} ${phaseName(phase)}`;
+  const flagged = phase => {
     const flag = phaseFlag(phase, state.blockers);
-    return `${phase.id.padEnd(4)}${phaseName(phase)}${flag ? `   ${flag}` : ''}`;
+    return `${tag(phase)}${flag ? `  ${flag}` : ''}`;
   };
   const active = phases.find(phase => phase.status === 'active');
   const next = phases.find(phase => phase.status === 'pending');
-  if (!active && !next) lines.push('  ✓ plan complete');
-  if (active) lines.push(`  ▸ NOW    ${tag(active)}`);
-  if (next) lines.push(`${active ? '    ' : '  ▸ '}NEXT   ${tag(next)}`);
-  return [`${title}${'─'.repeat(width - title.length - 1)}╮`, ...lines, `╰${'─'.repeat(width - 2)}╯`].join('\n');
+  const done = phases.filter(phase => phase.status === 'complete').length;
+  const share = (done + (active ? 0.5 : 0)) / phases.length;
+  let headline = '✅ Plan complete';
+  if (active) headline = `🚀 Working on ${flagged(active)}${next ? `   then ${flagged(next)}` : ''}`;
+  else if (next && phaseFlag(next, state.blockers) === '⚑ blocked') headline = `🛑 Stuck on ${tag(next)}`;
+  else if (next) headline = `⏸️ Waiting to start ${flagged(next)}`;
+  const eighths = Math.round(share * cells * 8);
+  const bar = `${'█'.repeat(Math.floor(eighths / 8))}${eighths % 8 ? ' ▏▎▍▌▋▊▉'[eighths % 8] : ''}`.padEnd(cells, '░');
+  return `${headline}\n▕${bar}▏ ${Math.round(share * 100)}%`;
 }
 
 // A read-only text board of the saved scope: a progress line, Now / Next / Done lanes, then parked ideas.
