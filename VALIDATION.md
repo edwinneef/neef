@@ -38,6 +38,15 @@ Codex keeps its workspace sandbox and on-request approval review; Git-writing he
 - Fix and rerun: `references/importance.md` now says no level skips `begin`, the state save or the commit. A second `explore` run (`node scripts/importance-smoke.mjs explore`) passed: no tests, no delegate, committed, `importance:"explore"` saved.
 - One run per level on one host; no Codex run. Both outcomes are agent behavior, so a repeat may differ.
 
+## Prototype smoke (2026-11-12, Claude Code 2.1.322, one run)
+
+`node scripts/prototype-smoke.mjs --claude` passed all four turns (UI demo, refinement, handoff, algorithm demo); source files, Git and task state stayed unchanged. Checks of the new prototype rules:
+
+- One switcher page: passed. Both concepts sit in one `index.html` with tabs (`role="tab"`), keys 1 and 2, and the design question pinned in the heading.
+- README Status line: passed. The UI demo started open and the handoff set `Status: chosen (Chips and tray)`; the algorithm demo has `Status: open`.
+- Inline result: not exercised. The headless session had no preview, rendering or browser tool, so no reply showed the demo or a screenshot; every reply used the last fallback, the file path and how to open or run it. Inline display needs a run in a host with a preview tool.
+- Not covered by this runner: demo cleanup with `prototype-delete` and its confirmation question.
+
 ## Known gaps
 
 - Codex end-to-end commits are unverified: earlier Codex runs were denied `.git/objects` writes in disposable projects. These runs were not retried.
