@@ -169,5 +169,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     if (args.length > 1 || args.some(arg => arg !== '--apply' && arg !== '--dry-run')) throw new Error('Usage: node scripts/install.mjs [--apply | --dry-run]; default is a JSON dry run, --dry-run lists targets');
     if (args[0] === '--dry-run') console.log(install(false).files.map(file => `${file.action} ${file.target}`).join('\n'));
     else console.log(JSON.stringify(install(args[0] === '--apply'), null, 2));
+    // The closing line goes to stderr so stdout stays parseable and a dry run cannot be mistaken for an install.
+    console.error(args[0] === '--apply' ? 'INSTALLED: the files above were written.' : 'DRY RUN: nothing was installed. Run `node scripts/install.mjs --apply` to install.');
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }

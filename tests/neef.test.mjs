@@ -2619,12 +2619,15 @@ test('installer --dry-run lists each target with its action and writes nothing',
   });
   const first = run('--dry-run');
   assert.equal(first.status, 0, first.stderr);
+  const dryNotice = 'DRY RUN: nothing was installed. Run `node scripts/install.mjs --apply` to install.';
+  assert.equal(first.stderr.trim(), dryNotice);
+  assert.equal(run().stderr.trim(), dryNotice);
   const lines = first.stdout.trim().split('\n');
   assert.equal(lines.length, f.install().files.length);
   assert.ok(lines.every(line => /^create .+/.test(line)), first.stdout);
   assert.equal(fs.existsSync(f.home), false);
   assert.equal(fs.existsSync(f.user), false);
-  f.install(true);
+  assert.equal(run('--apply').stderr.trim(), 'INSTALLED: the files above were written.');
   const again = run('--dry-run');
   assert.ok(again.stdout.trim().split('\n').every(line => line.startsWith('unchanged ')), again.stdout);
   const both = run('--dry-run', '--apply');
