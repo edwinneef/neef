@@ -76,7 +76,7 @@ Invoke a mode as `/neef <mode>` in Claude Code or `$neef <mode>` in Codex. `help
 | `help` | Nothing (read-only) | Grouped command guide and aliases displayed | — |
 | `style [simple\|guided\|technical\|kid] [--here]` | With a name: global explanation preference, or this project only with --here; without: read-only | Current style shown or default saved; no project task started | [explanation-styles](references/explanation-styles.md) |
 | `importance [explore\|normal\|important] [--here]` | With a level: global default for how much testing and cross-checking tasks get, or this project only with --here; without: read-only | Current level shown or default saved; no project task started | [importance](references/importance.md) |
-| `projects [--update]` | Nothing; --update upgrades outdated, unedited AGENTS.md/CLAUDE.md directions in every listed project, with backups | Every project NEEF has used, its last use and instruction version reported | — |
+| `projects [--update \| --forget <path>]` | Nothing; --update upgrades outdated, unedited AGENTS.md/CLAUDE.md directions in every listed project, with backups; --forget moves the saved state of a project whose folder is gone into a backup | Every project NEEF has used, its last use and instruction version reported | — |
 | `doctor` | Nothing; no implicit repairs | Installation health checks and concrete fixes reported | — |
 <!-- modes:end -->
 

@@ -1371,7 +1371,16 @@ test('projects lists every saved project with its instruction version and --upda
   for (const name of ['AGENTS.md', 'CLAUDE.md']) assert.equal(fs.readFileSync(path.join(f.root, name), 'utf8'), current);
   f.write('CLAUDE.md', current.replace('Suggestions are advisory.', 'My own note. Suggestions are advisory.'));
   assert.equal(f.run(['projects', '--update']).projects.find(item => item.root === own.root).status, 'edited');
-  f.run(['projects', '--all'], undefined, /Usage: projects \[--update\]/);
+  f.run(['projects', '--all'], undefined, /Usage: projects \[--update \| --forget <path>\]/);
+  const removed = path.join(f.root, '..', 'removed-project');
+  f.run(['projects', '--forget', f.root], undefined, /folder still exists/);
+  f.run(['projects', '--forget', path.join(f.root, '..', 'never-saved')], undefined, /No saved project/);
+  const forgotten = f.run(['projects', '--forget', removed]);
+  assert.deepEqual(forgotten.moved, ['gone.json']);
+  assert.ok(fs.existsSync(path.join(forgotten.backup, 'gone.json')));
+  assert.equal(fs.existsSync(path.join(f.home, 'state', 'gone.json')), false);
+  assert.equal(f.run(['projects']).summary.gone, 0);
+  assert.equal(f.run(['status']).state.task, '');
 });
 
 test('setup refuses unsafe or edited instructions before changing either instruction file', t => {
