@@ -15,7 +15,7 @@ node scripts/install.mjs
 node scripts/install.mjs --apply
 ```
 
-The first command previews the installation (add `--dry-run` for a readable list of `create`, `update`, `unchanged` or `remove` per path). The second installs for both hosts, backs up managed files and preserves unrelated configuration. When an update leaves projects with older NEEF instructions, the result lists them under `outdatedProjects`; run `/neef projects --update` (or `$neef projects --update` in Codex) to upgrade them all at once, with backups. Restart your agent session to discover NEEF. You do not need to learn the command menu or run project setup.
+The first command previews the installation (add `--dry-run` for a readable list of `create`, `update`, `unchanged` or `remove` per path). The second installs for both hosts, backs up managed files and preserves unrelated configuration. Updates from a Git checkout list what changed since your last install under `changes`. When an update leaves projects with older NEEF instructions, the result lists them under `outdatedProjects`; run `/neef projects --update` (or `$neef projects --update` in Codex) to upgrade them all at once, with backups. Restart your agent session to discover NEEF. You do not need to learn the command menu or run project setup.
 
 Open a new empty folder in your agent and describe a useful first version:
 

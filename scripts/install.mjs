@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { commandNames, commandDescriptions, subskillNames, retiredCommands, projects } from './neef.mjs';
 
@@ -12,6 +13,23 @@ const shared = path.resolve(process.env.NEEF_HOME || path.join(user, '.neef'));
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 // Every installed reference; command-alias.md is a template rendered into subskills, not installed.
 const references = fs.readdirSync(path.join(source, 'references')).filter(name => name.endsWith('.md') && name !== 'command-alias.md').sort();
+
+// The source commit, when the source is a Git checkout; changelogs compare it with the last install's.
+function sourceCommit() {
+  const result = spawnSync('git', ['-C', source, 'rev-parse', 'HEAD'], { encoding: 'utf8' });
+  return result.status === 0 ? result.stdout.trim() : null;
+}
+// Commit summaries since the last installed commit, newest first; this repository writes them as plain sentences.
+function changelog(since, commit) {
+  if (!since || !commit || since === commit) return {};
+  const result = spawnSync('git', ['-C', source, 'log', '--no-merges', '--format=%s', `${since}..${commit}`], { encoding: 'utf8' });
+  if (result.status !== 0) return {};
+  const all = result.stdout.split('\n').filter(Boolean);
+  if (!all.length) return {};
+  const shown = 15;
+  return { changes: { count: all.length, items: all.slice(0, shown), ...(all.length > shown ? { more: all.length - shown } : {}),
+    note: 'Show these to the user as a short plain-language list of what this install changed' } };
+}
 
 function noLinks(target) {
   for (let cursor = target; cursor !== path.dirname(cursor); cursor = path.dirname(cursor)) {
@@ -120,9 +138,10 @@ export function install(apply = false) {
       for (let dir = path.dirname(entry.target); /[\\/]neef-[\w-]+([\\/]agents)?$/.test(dir) && fs.existsSync(dir) && !fs.readdirSync(dir).length; dir = path.dirname(dir)) fs.rmdirSync(dir);
     }
     fs.mkdirSync(path.join(shared, 'state'), { recursive: true });
-    replace(receiptPath, JSON.stringify({ version: 1, source, installed: new Date().toISOString(), backup,
+    const commit = sourceCommit();
+    replace(receiptPath, JSON.stringify({ version: 1, source, installed: new Date().toISOString(), backup, ...(commit ? { commit } : {}),
       files: Object.fromEntries(entries.filter(entry => entry.bytes !== null).map(entry => [entry.target, entry.hash])) }, null, 2));
-    return { ...result, backup, verified: true, ...outdatedProjects() };
+    return { ...result, backup, verified: true, ...changelog(previous?.commit, commit), ...outdatedProjects() };
   } catch (error) {
     for (const entry of changed.reverse()) {
       if (entry.old) replace(entry.target, entry.old);

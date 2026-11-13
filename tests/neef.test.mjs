@@ -743,6 +743,21 @@ function installation(t) {
   return { ...f, user, install: run };
 }
 
+test('install lists the commits since the last installed commit as a changelog', t => {
+  const f = installation(t);
+  const git = (...args) => spawnSync('git', ['-C', fileURLToPath(new URL('..', import.meta.url)), ...args], { encoding: 'utf8' }).stdout.trim();
+  const first = f.install(true);
+  assert.equal(Object.hasOwn(first, 'changes'), false);
+  const receipt = path.join(f.home, 'install.json');
+  const saved = JSON.parse(fs.readFileSync(receipt, 'utf8'));
+  assert.equal(saved.commit, git('rev-parse', 'HEAD'));
+  fs.writeFileSync(receipt, JSON.stringify({ ...saved, commit: git('rev-parse', 'HEAD~2') }));
+  const again = f.install(true);
+  assert.equal(again.changes.count, 2);
+  assert.deepEqual(again.changes.items, git('log', '--no-merges', '--format=%s', 'HEAD~2..HEAD').split('\n'));
+  assert.equal(Object.hasOwn(f.install(true), 'changes'), false);
+});
+
 test('install names projects with outdated instructions and offers one update', t => {
   const f = installation(t);
   assert.equal(Object.hasOwn(f.install(true), 'outdatedProjects'), false);
