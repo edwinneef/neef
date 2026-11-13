@@ -1,6 +1,8 @@
 # Discover what works
 
-Done means a runnable demonstration answers a bounded design question, the user can inspect or try it, and its location, findings and limits are recorded. Shape resolves what to build; prototype discovers what works; NEEF implements the production solution.
+Done means one of two results. For an open idea, the user gets distinct option cards and the rejected space. For a bounded design question, the user gets a runnable demonstration to inspect or try. Either way, its location, findings and limits are recorded. Shape resolves what to build; prototype discovers what works; NEEF implements the production solution.
+
+Card runs and demos share one workspace. Cards come first when the invocation gives a count or asks for alternatives, variants, names or other options. `visualise <n>` then builds the picked cards as a demo. A request naming one concrete thing to demonstrate, or refining an existing demo, skips cards and builds directly.
 
 ## Demo-first routing
 
@@ -15,6 +17,106 @@ Project files, Git, user data and existing NEEF task state remain unchanged. Per
 Run helper `prototype-workspace` with `--project <absolute-source-project>` to list recent workspaces without writing. For a new concept, run `prototype-workspace <short-slug>` with the same project to allocate a unique directory under NEEF_HOME (default `~/.neef/prototypes/<project-id>/`). Use the returned absolute path; never substitute the project as a fallback when allocation fails. These are internal helper commands, not user skill invocations. Keep build output, caches and any local dependencies inside that workspace, favoring built-ins or a self-contained HTML file over scaffolding.
 
 For a refinement, reuse the workspace established in this chat. In a fresh chat, inspect the listed demo READMEs and match the goal before choosing one; ask only when the intended prototype is ambiguous. Verify the workspace and edited paths stay outside the source project and do not follow links into production. Preserve other concepts and user edits. Natural follow-ups such as “make it more compact” or “combine concepts 1 and 3” continue the prototype scope; they do not authorize production changes. `neef next` retains its existing production-task behavior.
+
+## Option cards
+
+Produces `count` distinct cards for an idea, plus the rejected space. Judge this workflow after five runs against a new domain, not one. The first run is calibration and the taste file starts empty.
+
+- `prototype <count> <noun> for <idea>`: full run.
+- `--bare`: skip scope and axes; still reflect, then clichés and generate.
+- `prototype develop <n>`: push one card's mechanism into 3 variations plus a fuller sketch.
+- `prototype visualise <n>`: build the picked cards as a demo from their visual briefs, following the demo sections below in the card run's workspace.
+
+Allocate a workspace with `prototype-workspace <short-slug>` before step 3. Its README holds `Status: open`, the idea and the resolved scope. Write cards, the Cut list and clichés to `cards.md` there. `develop` and `visualise` take a card number from the last run only. That is the card workspace established in this chat or, in a fresh chat, the newest listed workspace that has a `cards.md`. The helper's returned `taste` path is the taste file, shared across projects. Create it with the lines `# Taste`, `Append-only. One line per decision. Loaded at the axis step.`, `## Kept` and `## Killed` when it is missing.
+
+### 1. Scope
+
+Skip entirely if the invocation names artifact, length/format and audience, or if `--bare` is set.
+
+Otherwise ask up to 2 rounds of 2–3 questions from the bank, as one native question batch per round; never drip. **Stop the moment you can write 4 axes without hedging.** Stop early if the user skips twice or says "just go."
+
+Every question carries a default. A skip applies the default; say which. Ask about the shell, never the vision. Ask for facts and taste exemplars, never adjectives. Never ask what the invocation already implies.
+
+Question bank, highest-yield first; pick by artifact type.
+
+- All: What would make you reject a card on sight? What's fixed that I shouldn't touch (platform, brand, length, stack)? What's explicitly out of scope? Name something in this space you like, and something you hate.
+- Prose: One paragraph or several? Whose voice? Where does it publish? Hard cap?
+- Design: Wireframe or full mock? Which breakpoint is real? What must stay? Existing brand tokens?
+- Features: What system does it plug into? Power budget? Solo or group? What already exists that this must not duplicate?
+
+Defaults when skipped: match the noun's most common form, 1 card ≈ 1 unit of the obvious length, general audience, nothing fixed, nothing banned.
+
+### 2. Reflect
+
+Write the resolved scope in ≤5 lines: artifact, count, format, audience, must-nots, fixed constraints, applied defaults. A wrong read is cheap to fix here and expensive after 14 cards.
+
+### 3. Clichés
+
+Write the 10 most obvious versions to the clichés section of `cards.md`. Don't show them yet. Nothing downstream may reproduce one.
+
+### 4. Axes
+
+Name 4 axes along which options differ. Assign each card an extreme position on two. No card may sit at the midpoint of all four.
+
+Load the taste file if present. Killed moves take a penalty; kept moves seed axis suggestions.
+
+### 5. Constraints
+
+User-stated constraints outrank the lottery and are used first. Fill remaining slots from the cycle: cost, material, banned tool, hostile user, time limit, inverted premise.
+
+### 6. Generate
+
+Generate `count × 1.4` cards, rounded up, minimum `count + 4`. Card template:
+
+    ### <name>
+    **Move:** <the verb + what it does that a default wouldn't>
+    **Constraint:** <the draw or stated constraint it honors>
+    **Sketch:** <2–3 sentences, or ASCII wireframe>
+    **Closest existing thing:** <name it, or "none">
+    **Fails if:** <the condition that kills it>
+    **Visual brief:** <one sentence: composition, palette, one focal element>
+
+No move, no card. The sketch is capped; bloat hides emptiness.
+
+Move verbs form a closed list, one card per verb:
+
+- open: lead with the concrete instance before any frame.
+- split: divide one thing into two that must be handled separately.
+- invert: reverse the expected direction, or who benefits.
+- stack: fuse two functions into one element.
+- withhold: remove something expected until later.
+- nest: put the payload inside an existing step.
+- swap: trade one dimension for another (cost↔speed, space↔time).
+- delay: make the effect arrive after a gap.
+
+### 7. Merge
+
+- No two cards share a move verb.
+- At most two cards per axis pair.
+- One card must violate a stated fixed constraint; flag it.
+- One card must be worse but more interesting; label it.
+- Above 8 cards, add one wildcard that ignores the brief.
+- Same move in two cards: merge, or cut the weaker.
+- Reject anything matching the clichés.
+
+### 8. Audit
+
+Name the two most obvious survivors. Defend each in one line or cut it. If both are cut, permute the axes, regenerate once, and say that it happened.
+
+### 9. Output
+
+Show the cards, numbered. Then a collapsed `Cut` section with one line per killed card (name + move). Then the collapsed clichés. Then one line offering visuals as a `visualise <n>` command.
+
+Append kept and killed to the taste file, one line each, with a short reason.
+
+Rules:
+
+- Never auto-render images or build a demo before `visualise`.
+- Never reproduce a cliché.
+- Never let a card lack a move.
+- Never exceed 2 scope rounds.
+- Never skip the reflect step.
+- Never hide a regeneration.
 
 ## Demonstrate and iterate
 

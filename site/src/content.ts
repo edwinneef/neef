@@ -138,6 +138,6 @@ export const modes: [command: string, what: string, effect: Effect][] = [
   ['{neef} ask <goal>', 'Not sure how to ask? It writes the command for you.', 'changes nothing'],
   ['{neef} shape <idea>', 'A few sharp questions, then it builds.', 'changes your project'],
   ['{neef} plan <feature>', 'All questions first, a saved phased plan, one sign-off, then it builds alone.', 'changes your project'],
-  ['{neef} prototype <idea>', 'A clickable demo in a scratch folder.', 'scratch folder only'],
+  ['{neef} prototype <idea>', 'Distinct options, then a clickable demo of your picks in a scratch folder.', 'scratch folder only'],
   ['{neef} challenge <topic>', 'An honest, ranked review.', 'changes nothing'],
 ];

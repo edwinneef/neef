@@ -964,6 +964,8 @@ test('prototype allocation is isolated, unique and preserves active work and Git
   assert.notEqual(first.workspace, second.workspace);
   assert.ok(first.workspace.startsWith(`${empty.root}${path.sep}`));
   assert.ok(!first.workspace.startsWith(`${f.root}${path.sep}`));
+  for (const result of [empty, first]) assert.equal(result.taste, path.join(f.home, 'taste.md'));
+  assert.equal(fs.existsSync(first.taste), false);
   const listed = f.run(['prototype-workspace']);
   assert.deepEqual(new Set(listed.workspaces.map(item => item.workspace)), new Set([first.workspace, second.workspace]));
   assert.equal(fs.readFileSync(first.readme, 'utf8'), '# Algorithm comparison\nRun: node demo.mjs\n');
@@ -1122,7 +1124,7 @@ test('ask installs shared read-only guidance without replacing unfinished work',
   }
   const help = f.run(['help']);
   assert.ok(help.commands.includes('ask [goal]'));
-  assert.ok(help.commands.includes('prototype <description>'));
+  assert.ok(help.commands.includes('prototype [--bare] [<count> <noun> for] <idea> | develop <n> | visualise <n>'));
   assert.ok(!help.commands.some(usage => /^(options|prompt)\b/.test(usage)));
   assert.deepEqual(f.run(['status']), before);
   assert.equal(f.run(['next']).state.task, saved.state.task);

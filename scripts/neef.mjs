@@ -12,7 +12,7 @@ const commandCatalog = [
   { name: 'shape', guide: 'references/shape.md', usage: 'shape [--deep] [--discuss] [idea]', intent: 'explore', changes: 'Without an idea: read-only starters; --discuss: external decisions only; otherwise task decisions then project files', stops: 'Three starter ideas and a choice, or clarified and implemented, unless discussion-only (--discuss)' },
   { name: 'plan', guide: 'references/plan.md', usage: 'plan <feature>', intent: 'build', changes: 'Task decisions and plan first (project/Git unchanged); project files and safe local commits only after one explicit sign-off', stops: 'Questions asked, challenged plan saved and shown for sign-off; approval runs every phase until complete or blocked' },
   { name: 'challenge', guide: 'references/challenge.md', usage: 'challenge [--deep] <topic>', intent: 'choose', changes: 'May save external recommendations and run known tests; project/Git unchanged', stops: 'Evidence-based critique and improvements, also for the last task\'s commits or the project\'s .md files; no implementation' },
-  { name: 'prototype', guide: 'references/prototype.md', usage: 'prototype <description>', intent: 'explore', changes: 'External scratch demo and README; source/Git/task state unchanged', stops: 'Working demo and handoff; no automatic production promotion' },
+  { name: 'prototype', guide: 'references/prototype.md', usage: 'prototype [--bare] [<count> <noun> for] <idea> | develop <n> | visualise <n>', intent: 'explore', changes: 'External scratch cards or demo, README and shared taste file; source/Git/task state unchanged', stops: 'Distinct option cards with the cut list, or a working demo and handoff; no automatic production promotion' },
   { name: 'ask', guide: 'references/advisor.md', usage: 'ask [goal]', front: true, intent: 'choose', changes: 'Nothing during advice (read-only)', stops: 'Ranked choices, or the best-fit command for a goal with the full request written inside it; never invokes it. A later explicit selection can execute its action' },
   { name: 'setup', usage: 'setup', intent: 'inspect', changes: 'External context and managed AGENTS.md/CLAUDE.md directions', stops: 'Context and next-prompt rule saved; no project commands run' },
   { name: 'next', guide: 'references/next.md', usage: 'next', front: true, intent: 'build', changes: 'Project files and task state; frequent safe local commits', stops: 'Unfinished task resumed until complete or blocked; otherwise one useful follow-up done' },
@@ -43,7 +43,7 @@ export const commandDescriptions = {
   shape: 'Choose or clarify an idea; --discuss explores without building',
   plan: 'Ask everything up front, sign off once, then build hands-off',
   challenge: 'Critique an approach and suggest improvements',
-  prototype: 'Build an isolated demo to test an idea',
+  prototype: 'Generate distinct options for an idea, then demo the picks in isolation',
   ask: 'Find the best command for a goal, or rank next actions',
   setup: 'Discover the project and save its context',
   next: 'Resume unfinished work, or do the next useful thing',
@@ -508,7 +508,7 @@ function prototypeWorkspace(p, slug, all = false) {
     if (!/^[a-z0-9][a-z0-9-]{0,47}$/.test(slug)) fail('Provide a prototype slug of 1-48 lowercase letters, digits or hyphens');
     fs.mkdirSync(root, { recursive: true });
     const workspace = fs.mkdtempSync(path.join(root, `${slug}-`));
-    return { project: p.root, workspace, readme: path.join(workspace, 'README.md') };
+    return { project: p.root, workspace, readme: path.join(workspace, 'README.md'), taste: path.join(home(), 'taste.md') };
   }
   const workspaces = exists(root) ? fs.readdirSync(root, { withFileTypes: true })
     .filter(entry => entry.isDirectory() && !entry.isSymbolicLink())
@@ -518,7 +518,7 @@ function prototypeWorkspace(p, slug, all = false) {
       const readme = path.join(workspace, 'README.md');
       return { name, workspace, readme, status: prototypeStatus(readme) };
     }) : [];
-  return { project: p.root, root, workspaces };
+  return { project: p.root, root, workspaces, taste: path.join(home(), 'taste.md') };
 }
 
 // Deletes only demos the user named after confirming them; every name is
