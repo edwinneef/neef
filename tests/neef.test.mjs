@@ -1073,7 +1073,7 @@ test('ask installs shared read-only guidance without replacing unfinished work',
   assert.match(guidance, /stop without a menu or selection prompt/);
   assert.match(guidance, /explicit selection.*authorizes only/);
   assert.match(guidance, /A question about a choice is still advice/);
-  assert.match(followUp, /alternatives: at most two|at most two useful alternatives|one or two alternatives/);
+  assert.match(followUp, /`needsYou` holds each step that cannot move without input from the user/);
 });
 
 test('advisor installation refuses local edits to its managed reference', t => {
@@ -1301,7 +1301,7 @@ test('setup directions preserve bytes, back up originals and remain idempotent',
   assert.ok(claude.toString().includes('settings.\r\n\r\n<!-- neef:'));
   assert.match(agent.toString(), /ordinary prompts without a NEEF invocation/);
   assert.match(agent.toString(), /Suggestions are advisory/);
-  assert.match(agent.toString(), /always a copyable NEEF skill command/);
+  assert.match(agent.toString(), /Every step is a copyable NEEF skill command/);
   assert.deepEqual(fs.readFileSync(path.join(first.directions.backup, '1.bak')), original);
   const second = f.run(['setup']);
   assert.deepEqual(second.directions, { files: [], backup: null });
@@ -1319,7 +1319,7 @@ test('setup upgrades an unedited earlier direction block in place', t => {
   const claude = fs.readFileSync(path.join(f.root, 'CLAUDE.md'), 'utf8');
   assert.ok(claude.startsWith('# Mine\r\n\r\n<!-- neef:next-prompt:start -->\r\n'));
   assert.ok(claude.endsWith('<!-- neef:next-prompt:end -->\r\nAfter.\r\n'));
-  assert.match(claude, /always a copyable NEEF skill command/);
+  assert.match(claude, /Every step is a copyable NEEF skill command/);
   assert.doesNotMatch(claude, /one useful next-prompt direction/);
   assert.equal(fs.readFileSync(path.join(first.directions.backup, '1.bak'), 'utf8'), original);
   assert.deepEqual(f.run(['setup']).directions, { files: [], backup: null });
@@ -1327,8 +1327,17 @@ test('setup upgrades an unedited earlier direction block in place', t => {
 
 // Reverts the direction block to the release that wrote modes as `/neef next` instead of `/neef-next`.
 // Earlier releases closed the rule with a single direction and no alternatives or bold idea.
+// Reverts the two-list rule to the release that led with one primary direction.
+const oneDirection = text => {
+  const single = text
+    .replace('with two lists of next steps, including replies to ordinary prompts without a NEEF invocation: `Needs you`, every step that cannot move without input from the user, such as a decision, verdict, approval or manual step, and `Can run on its own`, every step NEEF can do without the user. Show up to five per list, most valuable first, and write `Nothing right now` under an empty list. Every step is a copyable', 'with one next-prompt direction, including replies to ordinary prompts without a NEEF invocation. The direction is always a copyable')
+    .replace(' Mark the one step you recommend doing next. After the lists, task and mode replies may add one bold idea, a copyable NEEF command with its intended result; never repeat a step.', ' Lead with that one primary direction. After it, task and mode replies may add up to two alternatives and one bold idea, each a copyable NEEF command with its intended result; never repeat the primary direction.');
+  assert.notEqual(single, text);
+  assert.match(single, /one next-prompt direction.*never repeat the primary direction\./);
+  return single;
+};
 const singleClose = text => {
-  const closed = text.replace(/ Lead with that one primary direction\.[^\n]*?never repeat the primary direction\./,' Use one closing direction, without repeating it elsewhere.');
+  const closed = oneDirection(text).replace(/ Lead with that one primary direction\.[^\n]*?never repeat the primary direction\./,' Use one closing direction, without repeating it elsewhere.');
   assert.notEqual(closed, text);
   return closed;
 };
@@ -1364,8 +1373,17 @@ test('setup upgrades the spaced-mode direction block to hyphenated mode skills',
 test('setup upgrades the single-closing-direction block to allow alternatives and a bold idea', t => {
   const f = fixture(t);
   const current = fs.readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
-  assert.match(current, /up to two alternatives and one bold idea/);
+  assert.match(current, /two lists of next steps/);
   f.write('CLAUDE.md', singleClose(current));
+  f.run(['setup']);
+  assert.equal(fs.readFileSync(path.join(f.root, 'CLAUDE.md'), 'utf8'), current);
+});
+
+test('setup upgrades the one-primary-direction block to the two next-step lists', t => {
+  const f = fixture(t);
+  const current = fs.readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+  assert.match(current, /`Needs you`.*`Can run on its own`.*`Nothing right now`/);
+  f.write('CLAUDE.md', oneDirection(current));
   f.run(['setup']);
   assert.equal(fs.readFileSync(path.join(f.root, 'CLAUDE.md'), 'utf8'), current);
 });
@@ -1374,7 +1392,7 @@ test('projects lists every saved project with its instruction version and --upda
   const f = fixture(t);
   f.run(['setup']);
   const current = fs.readFileSync(path.join(f.root, 'AGENTS.md'), 'utf8');
-  for (const name of ['AGENTS.md', 'CLAUDE.md']) f.write(name, singleClose(current));
+  for (const name of ['AGENTS.md', 'CLAUDE.md']) f.write(name, oneDirection(current));
   fs.writeFileSync(path.join(f.home, 'state', 'gone.json'), JSON.stringify({ project: path.join(f.root, '..', 'removed-project'), updated: '2026-10-01T00:00:00.000Z' }));
   const listed = f.run(['projects']);
   const own = listed.projects.find(item => item.root === fs.realpathSync.native(f.root) || item.root.toLowerCase() === f.root.toLowerCase());
@@ -1382,7 +1400,7 @@ test('projects lists every saved project with its instruction version and --upda
   assert.equal(own.files['AGENTS.md'], listed.currentInstructions - 1);
   assert.equal(listed.projects.find(item => item.root.endsWith('removed-project')).status, 'gone');
   assert.deepEqual(listed.summary, { current: 0, outdated: 1, edited: 0, noBlock: 0, gone: 1 });
-  assert.equal(fs.readFileSync(path.join(f.root, 'AGENTS.md'), 'utf8'), singleClose(current));
+  assert.equal(fs.readFileSync(path.join(f.root, 'AGENTS.md'), 'utf8'), oneDirection(current));
   const updated = f.run(['projects', '--update']);
   const after = updated.projects.find(item => item.root === own.root);
   assert.equal(after.status, 'current');
@@ -2522,12 +2540,14 @@ test('a linked external home outside the project still supports continuity', t =
 test('reply layout is defined once in follow-up and referenced by plan, challenge and styles', () => {
   const read = n => fs.readFileSync(new URL(`../references/${n}.md`, import.meta.url), 'utf8');
   const followUp = read('follow-up');
-  for (const h of ['What changed', 'Checks', 'Next', 'Also possible']) assert.ok(followUp.includes(`**${h}:**`), h);
+  for (const h of ['What changed', 'Checks', 'Needs you', 'Can run on its own', 'Bold idea']) assert.ok(followUp.includes(`**${h}:**`), h);
   assert.match(followUp, /self-contained summary card/);
   assert.match(followUp, /never point back to earlier messages/);
   assert.match(followUp, /fenced code block/);
   assert.match(followUp, /Every report also carries one bold idea/);
-  assert.match(followUp, /one or two alternatives/);
+  assert.match(followUp, /`Nothing right now`.*`\+N more in status`/);
+  assert.match(followUp, /mark exactly one step `\(recommended\)`/);
+  assert.match(followUp, /`needsYou:\[\{kind,action,reason\}\]`, `onItsOwn:\[\.\.\.\]`/);
   assert.match(followUp, /`boldIdea:/);
   assert.match(followUp, /Size is a guideline/);
   for (const n of ['plan', 'challenge', 'explanation-styles']) assert.match(read(n), /follow-up\.md` \(Report layout\)/, n);

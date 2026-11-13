@@ -15,7 +15,7 @@ The zones organize every invocation. Show headings only when useful; small tasks
 - **Navigate:** Establish the goal, requested outcomes, scope, constraints and mode boundary.
 - **Execute:** Perform authorized scoped work while preserving unrelated changes and existing patterns.
 - **Evaluate:** Match every required outcome to its result and evidence. Missing required evidence keeps development unfinished.
-- **Follow-up:** Report results, changed files, checks and required gaps, then give one concrete advisory next command.
+- **Follow-up:** Report results, changed files, checks and required gaps, then give both advisory next-step lists.
 
 Implement and verify the request, commit only owned work when safe, and save continuity for either agent. Otherwise record the blocker and preserved work. NEEF authorizes scoped local edits, checks and commits on main, or on a linked worktree's branch; create no branches or worktrees. In the main folder off main, preserve the branch, report it and pause edits and commits. Pushing, destructive actions and scope expansion need separate user authorization; merge only per `references/completion.md`.
 
@@ -59,4 +59,4 @@ Run `prepare <baseline-id>` with stdin JSON `{"files":["relative/path"],"message
 
 ## Follow-up
 
-After task work, including verification-only work, read `references/follow-up.md` to save progress, evaluate recommendations and report the result with one concrete next command. When blocked or pausing, name the exact input or user step needed and what to report back; never diagnose, retry or bypass a permission or policy denial, or repeat an unchanged blocker. While a plan is open, end every reply with helper `ribbon` in a code block.
+After task work, including verification-only work, read `references/follow-up.md` to save progress, evaluate recommendations and report the result with both next-step lists. When blocked or pausing, name the exact input or user step needed and what to report back; never diagnose, retry or bypass a permission or policy denial, or repeat an unchanged blocker. While a plan is open, end every reply with helper `ribbon` in a code block.
