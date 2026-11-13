@@ -361,6 +361,14 @@ export function status(p) {
   return { project: p.root, ...saved, importance: effectiveImportance(p, saved.state?.importance), actual, discrepancies, ...(busy ? { busy } : {}), steps, board: board(saved.state, loadIdeas(p), steps), ribbon: ribbon(saved.state) };
 }
 
+// A finished plan is history: status names its phases and leaves their text and evidence in the plan file.
+// Board and ribbon were built from the full state, so an untitled phase keeps the name taken from its task.
+function finishedView(result) {
+  if (result.state?.progress !== 'complete' || !result.state.plan) return result;
+  const phases = result.state.plan.phases.map(({ id, title, status, dependsOn }) => ({ id, ...(title ? { title } : {}), status, dependsOn }));
+  return { ...result, state: { ...result.state, plan: { ...result.state.plan, phases } } };
+}
+
 // The few facts a task start or a closing line needs, without the board, context, notes or full lists.
 export function brief(p) {
   const { project, revision, state, error, backup, importance, actual, discrepancies, busy, steps } = status(p);
@@ -1489,7 +1497,7 @@ export async function main(args = process.argv.slice(2)) {
   }
   if (command === 'bootstrap') return bootstrap(p);
   if (command === 'context-write') return contextWrite(p, argument, input());
-  if (command === 'status') return argument === '--brief' ? brief(p) : status(p);
+  if (command === 'status') return argument === '--brief' ? brief(p) : finishedView(status(p));
   if (command === 'prototype-workspace') {
     const all = args.includes('--all'), rest = args.slice(1).filter(arg => arg !== '--all');
     if (rest.length > 1 || (all && rest.length)) fail('Usage: prototype-workspace [slug], or prototype-workspace --all');

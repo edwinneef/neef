@@ -2271,6 +2271,28 @@ function featurePlan() {
   ] };
 }
 
+test('status names the phases of a finished plan and leaves their text and evidence in the plan file', t => {
+  const f = fixture(t);
+  const plan = featurePlan();
+  const active = f.state('missing', 'Named greetings feature', { plan, baseline: null });
+  assert.deepEqual(f.run(['status']).state.plan, plan, 'an active plan is returned whole');
+  const evidence = 'Assertions passed on the named and default greeting. '.repeat(14);
+  const done = { ...plan, phases: plan.phases.map(phase => ({ ...phase, status: 'complete', verification: evidence })) };
+  const saved = f.state(active.revision, 'Named greetings feature', { progress: 'complete', plan: done, verification: 'Both phases accepted.', outcomes: passedOutcomes, recommendations: noRecommendation });
+  const status = f.run(['status']);
+  assert.deepEqual(status.state.plan.phases, [{ id: 'api', status: 'complete', dependsOn: [] }, { id: 'entry', status: 'complete', dependsOn: ['api'] }]);
+  assert.equal(status.state.plan.goal, plan.goal);
+  const planFile = f.statePath().replace(/.json$/, '.plan.json');
+  assert.deepEqual(JSON.parse(fs.readFileSync(planFile, 'utf8')), done);
+  // Untitled phases still get their board name from the task text, which only the full state has.
+  assert.equal(status.board, saved.board);
+  assert.equal(status.ribbon, saved.ribbon);
+  assert.match(status.board, /Add optional name support/);
+  const whole = JSON.stringify({ ...status, state: { ...status.state, plan: done } }, null, 2);
+  const shown = JSON.stringify(status, null, 2);
+  assert.ok(Buffer.byteLength(shown) <= 0.7 * Buffer.byteLength(whole), `${Buffer.byteLength(shown)} of ${Buffer.byteLength(whole)} bytes`);
+});
+
 test('a full feature plan survives separate phase commits and keeps the feature active until accepted', t => {
   const f = fixture(t);
   const original = f.run(['status']).actual;
