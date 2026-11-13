@@ -17,7 +17,7 @@ The zones organize every invocation. Show headings only when useful; small tasks
 - **Evaluate:** Match every required outcome to its result and evidence. Missing required evidence keeps development unfinished.
 - **Follow-up:** Report results, changed files, checks and required gaps, then give the advisory suggestions.
 
-Implement and verify the request, commit only owned work when safe, and save continuity for either agent. Otherwise record the blocker and preserved work. NEEF authorizes scoped local edits, checks and commits on main, or on a linked worktree's branch; create no branches or worktrees. In the main folder off main, preserve the branch, report it and pause edits and commits. Pushing, destructive actions and scope expansion need separate user authorization; merge only per `references/completion.md`.
+Implement and verify the request, commit only owned work when safe, and save continuity for either agent. Otherwise record the blocker and preserved work. NEEF authorizes scoped local edits, checks and commits on the branch that is checked out, in the main folder or a linked worktree; create no branches or worktrees and never switch branches. Off main, name the branch in the report. Pushing, destructive actions and scope expansion need separate user authorization; merge only per `references/completion.md`.
 
 Use Node 20+ and Git with `~/.neef/neef.mjs`; resolve the actual home and quote absolute paths. Run `node <helper> help` when command contracts are missing or changed. Commands use cwd as the project; `--project <path>` overrides it.
 

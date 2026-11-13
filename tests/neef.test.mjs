@@ -416,11 +416,20 @@ test('detached HEAD cannot create a task branch implicitly', t => {
   assert.equal(f.git('branch', '--show-current'), '');
 });
 
-test('begin preserves a different branch and refuses development outside main', t => {
+test('begin works on a feature branch in the main folder and commits there, leaving main and user work alone', t => {
   const f = fixture(t);
+  const main = f.git('rev-parse', 'main');
   f.git('switch', '-c', 'existing-work');
   f.write('user.txt', 'unfinished user work\n');
-  f.run(['begin', 'feature'], undefined, /Development requires main/);
+  const begin = f.run(['begin', 'feature']);
+  assert.equal(begin.branch, 'existing-work');
+  assert.equal(begin.worktree, undefined);
+  f.write('owned.txt', 'feature change\n');
+  const reviewed = f.run(['prepare', begin.baseline], { files: ['owned.txt'], message: 'Change on the feature branch' });
+  assert.equal(f.run(['commit', reviewed.token]).branch, 'existing-work');
+  assert.equal(f.git('show', 'existing-work:owned.txt'), 'feature change');
+  assert.equal(f.git('rev-parse', 'main'), main);
+  f.run(['prepare', f.run(['begin', 'again']).baseline], { files: ['user.txt'], message: 'Take user work' }, /Pre-existing edits: user.txt/);
   assert.equal(f.git('branch', '--show-current'), 'existing-work');
   assert.equal(fs.readFileSync(path.join(f.root, 'user.txt'), 'utf8'), 'unfinished user work\n');
 });
@@ -447,7 +456,7 @@ function worktreeFixture(t) {
   return { ...f, worktree: root, wrun: run, finish };
 }
 
-test('a linked worktree develops and commits on its own branch while the main folder still requires main', t => {
+test('a linked worktree develops and commits on its own branch, and the main folder works on any branch', t => {
   const f = worktreeFixture(t);
   const begin = f.wrun(['begin', 'worktree feature']);
   assert.equal(begin.branch, 'feature');
@@ -459,7 +468,7 @@ test('a linked worktree develops and commits on its own branch while the main fo
   assert.equal(f.git('show', 'main:owned.txt'), 'before');
   assert.equal(f.run(['begin', 'main folder']).worktree, undefined);
   f.git('switch', '-q', '-c', 'side');
-  f.run(['begin', 'side branch'], undefined, /Development requires main outside a linked worktree/);
+  assert.equal(f.run(['begin', 'side branch']).branch, 'side');
   assert.equal(spawnSync('git', ['-C', f.worktree, 'switch', '-q', '--detach'], { env: f.env(f.home) }).status, 0);
   f.wrun(['begin', 'detached worktree'], undefined, /Detached HEAD/);
 });

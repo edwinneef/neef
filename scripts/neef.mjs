@@ -1169,9 +1169,8 @@ function begin(p, slug) {
   const context = { initialized: initialized.initialized, ...(initialized.warning ? { warning: initialized.warning } : {}) };
   if (!p.isGit) return { baseline: null, ...snapshot(p), revision: initialized.revision, context, note: 'Non-Git project; no branch or commit. Ask before running git init to enable commits' };
   const before = snapshot(p);
-  if (!before.branch) fail('Detached HEAD; select main explicitly');
+  if (!before.branch) fail('Detached HEAD; select a branch explicitly');
   const linked = linkedWorktree(p);
-  if (!linked && before.branch !== 'main') fail('Development requires main outside a linked worktree; preserve the current branch and report the mismatch');
   pruneBaselines();
   const id = crypto.randomUUID();
   atomic(baselineFile(id), JSON.stringify({ project: p.root, slug: slug || null, ...before }));

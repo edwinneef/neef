@@ -40,7 +40,7 @@ Prototype completion follows `references/prototype.md`: demonstrate the bounded 
 
 ## Merge a linked worktree
 
-When `begin` reports `worktree: "linked"`, the task's commits land on that worktree's branch. After the final state save marks the task complete, run helper `merge` from the worktree. It brings the branch into main in the main folder: fast-forward when possible, otherwise one merge commit. If it refuses (conflict, main folder off main, staged or in-progress work, completion not recorded after the last commit), leave both sides intact, save the task active with that blocker and report it. After a merge commit, rerun the focused checks in the main folder; report failures as a blocker without reverting. Never delete the branch or worktree.
+When `begin` reports `worktree: "linked"`, the task's commits land on that worktree's branch. After the final state save marks the task complete, run helper `merge` from the worktree. It brings the branch into main in the main folder: fast-forward when possible, otherwise one merge commit. The merge still needs the main folder on main, although ordinary work there runs on any branch. If it refuses (conflict, main folder off main, staged or in-progress work, completion not recorded after the last commit), leave both sides intact, save the task active with that blocker and report it. After a merge commit, rerun the focused checks in the main folder; report failures as a blocker without reverting. Never delete the branch or worktree.
 
 ## Save task continuity
 
