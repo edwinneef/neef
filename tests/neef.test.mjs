@@ -2722,6 +2722,8 @@ test('reply layout is defined once in follow-up and referenced by plan, challeng
   for (const h of ['What changed', 'Checks', 'Suggestions', 'Backlog', 'Bold idea']) assert.ok(followUp.includes(`**${h}:**`), h);
   assert.match(followUp, /three most valuable steps across `needsYou` and `onItsOwn`.*`· needs you`/);
   assert.match(followUp, /keep every saved step that still holds.*A finished task adds at most two new steps to the saved lists; leave further ideas out rather than queue them/);
+  assert.match(followUp, /Offer a review after risky ordinary work\..*finished task outside a plan made commits.*`references\/importance\.md`.*`neef-challenge` command naming that task's first and last commit/);
+  assert.match(followUp, /A blocked report's user step and any REQUIRED step stay ahead of it\. A task without commits gets no offer\. Never run the review unasked; a plan keeps its own challenge\./);
   assert.match(followUp, /`N tasks left, M can run without you`/);
   assert.match(followUp, /self-contained summary card/);
   assert.match(followUp, /never point back to earlier messages/);
