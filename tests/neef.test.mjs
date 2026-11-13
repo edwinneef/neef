@@ -1290,8 +1290,14 @@ test('setup upgrades an unedited earlier direction block in place', t => {
 });
 
 // Reverts the direction block to the release that wrote modes as `/neef next` instead of `/neef-next`.
+// Earlier releases closed the rule with a single direction and no alternatives or bold idea.
+const singleClose = text => {
+  const closed = text.replace(/ Lead with that one primary direction\.[^\n]*?never repeat the primary direction\./,' Use one closing direction, without repeating it elsewhere.');
+  assert.notEqual(closed, text);
+  return closed;
+};
 const spacedModes = text => {
-  const spaced = text.replace(/current host's syntax, never a bare prose prompt: .*? or `\$neef \.\.\.`\./, () => "current host's syntax (`/neef ...` in Claude Code, `$neef ...` in Codex), never a bare prose prompt.")
+  const spaced = singleClose(text).replace(/current host's syntax, never a bare prose prompt: .*? or `\$neef \.\.\.`\./, () => "current host's syntax (`/neef ...` in Claude Code, `$neef ...` in Codex), never a bare prose prompt.")
     .replace('bare `neef-next`', 'bare `neef next`').replace('`/neef-shape <next goal>`', '`/neef shape <next goal>`');
   assert.notEqual(spaced, text);
   return spaced;
@@ -1315,6 +1321,15 @@ test('setup upgrades the spaced-mode direction block to hyphenated mode skills',
   const current = fs.readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
   assert.match(current, /`\$neef-next \.\.\.` in Codex/);
   f.write('CLAUDE.md', spacedModes(current));
+  f.run(['setup']);
+  assert.equal(fs.readFileSync(path.join(f.root, 'CLAUDE.md'), 'utf8'), current);
+});
+
+test('setup upgrades the single-closing-direction block to allow alternatives and a bold idea', t => {
+  const f = fixture(t);
+  const current = fs.readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+  assert.match(current, /up to two alternatives and one bold idea/);
+  f.write('CLAUDE.md', singleClose(current));
   f.run(['setup']);
   assert.equal(fs.readFileSync(path.join(f.root, 'CLAUDE.md'), 'utf8'), current);
 });
