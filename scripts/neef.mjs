@@ -174,6 +174,28 @@ function lock(file, action) {
 
 const stateFile = p => path.join(home(), 'state', `${p.id}.json`);
 // The plan lives beside the small state file; the state's planHash ties both to one revision.
+// Which agent session last worked on a project, so a second session sees the task is taken before resuming it.
+// Hosts expose a stable id per conversation; without one the claim is skipped and nothing is blocked.
+const sessionFile = p => path.join(home(), 'sessions', `${p.id}.json`);
+const sessionLease = 30 * 60 * 1000;
+const currentSession = () => process.env.NEEF_SESSION || process.env.CLAUDE_CODE_SESSION_ID || process.env.CODEX_THREAD_ID || null;
+function claimTask(p, task) {
+  const session = currentSession();
+  if (!session) return;
+  try { atomic(sessionFile(p), `${JSON.stringify({ session, task: task || null, updated: new Date().toISOString() })}
+`); }
+  catch { /* A missing claim only weakens the warning; it never blocks work. */ }
+}
+function otherSession(p, state) {
+  const session = currentSession();
+  if (state?.progress !== 'active' || !session || !exists(sessionFile(p))) return null;
+  try {
+    const claim = json(sessionFile(p));
+    const since = Date.parse(claim.updated), age = Date.now() - since;
+    if (typeof claim.session !== 'string' || claim.session === session || !(age > -60000 && age < sessionLease)) return null;
+    return { message: `${state.plan ? 'Plan' : 'Task'} in progress in another thread`, task: claim.task || state.task, updated: claim.updated, expires: new Date(since + sessionLease).toISOString() };
+  } catch { return null; }
+}
 const planFile = p => stateFile(p).replace(/.json$/, '.plan.json');
 const planLimit = 32768;
 // The idea board lives beside the state so its history never pushes the state past its size limit.
@@ -327,7 +349,8 @@ export function status(p) {
     if (saved.state.head !== actual.head) discrepancies.push('HEAD changed; reconcile saved progress with history and files');
   }
   const steps = savedSteps(p, saved.state);
-  return { project: p.root, ...saved, importance: effectiveImportance(p, saved.state?.importance), actual, discrepancies, steps, board: board(saved.state, loadIdeas(p), steps), ribbon: ribbon(saved.state) };
+  const busy = otherSession(p, saved.state);
+  return { project: p.root, ...saved, importance: effectiveImportance(p, saved.state?.importance), actual, discrepancies, ...(busy ? { busy } : {}), steps, board: board(saved.state, loadIdeas(p), steps), ribbon: ribbon(saved.state) };
 }
 
 // Shared by the scope board and the progress ribbon; both are read-only views of saved state.
@@ -602,6 +625,7 @@ function stateWrite(p, expected, input) {
     }
     if (!validState(value, p)) fail('Invalid state fields');
     const saved = saveState(p, current, value);
+    claimTask(p, value.task);
     if (steps) recordIdeas(p, value.recommendations, steps);
     const lists = savedSteps(p, saved.state);
     return { ...saved, steps: lists, board: board(saved.state, loadIdeas(p), lists), ribbon: ribbon(saved.state) };
@@ -744,6 +768,7 @@ function park(p, expected, input) {
 function next(p) {
   const current = status(p);
   if (current.error) return { ...current, candidates: [], reason: current.error, requiresRevalidation: true };
+  if (current.busy) return { ...current, candidates: [], reason: `${current.busy.message}; do not resume or edit its files. Report it and stop unless the user explicitly takes over; the claim lapses at ${current.busy.expires}`, requiresRevalidation: true };
   if (current.state?.progress === 'active') return { ...current, candidates: [], reason: 'Original task is unfinished; resume it before choosing new work', resume: 'continue', requiresRevalidation: true };
   const saved = current.state?.recommendations;
   // Only steps that can run without the operator are candidates; needsYou is reported, never executed.
@@ -1145,6 +1170,7 @@ function begin(p, slug) {
   pruneBaselines();
   const id = crypto.randomUUID();
   atomic(baselineFile(id), JSON.stringify({ project: p.root, slug: slug || null, ...before }));
+  claimTask(p, slug);
   const greenfield = !before.head && before.changes.length === 0;
   return { baseline: id, ...before, ...(linked ? { worktree: 'linked' } : {}), ...(gitInitialized ? { gitInitialized } : {}), ...(greenfield ? { greenfield, ...(importanceSaved(p) ? {} : { importance: 'explore' }) } : {}), revision: initialized.revision, context };
 }
@@ -1182,6 +1208,7 @@ function prepare(p, id, input) {
   const selected = Object.fromEntries(files.map(name => [name, fileState(p.root, name)]));
   // The token records what was reviewed as hashes; the diff itself is returned once, never stored.
   atomic(tokenFile(token), JSON.stringify({ project: p.root, snapshotHash: hash(JSON.stringify(actual)), files, selected, message: input.message, diffHash: hash(diff), kind: 'commit' }));
+  claimTask(p, stateRead(p).state?.task);
   return { token, files, message: input.message, diff, revision: stateRead(p).revision };
 }
 
@@ -1222,6 +1249,7 @@ function commit(p, token) {
       if (exists(privateIndex)) fs.unlinkSync(privateIndex);
     }
     pruneBaselines();
+    claimTask(p, stateRead(p).state?.task);
     return { ...snapshot(p), revision: stateRead(p).revision, output };
   });
 }
@@ -1402,7 +1430,7 @@ export async function main(args = process.argv.slice(2)) {
         .map(({ usage, changes, stops, aliases = [] }) => ({ command: usage, changes, stops, aliases })) })),
     invocation: { codex: '$neef <command>', claude: '/neef <command>' },
     aliases: { codex: subskillNames.map(command => `$neef-${command}`), claude: subskillNames.map(command => `/neef-${command}`) },
-    helperCommands: ['style [simple|guided|technical|kid] [--here] (read the effective style or save the global default; --here saves a project override, style clear --here removes it)', 'importance [explore|normal|important] [--here] (read the effective default or save the global one; --here saves a project override, importance clear --here removes it; a task may carry its own importance in state-write)', 'prototype-workspace [slug | --all] (omit slug: read-only listing of the newest 20 with name and README Status open|chosen|rejected or null; --all lists every demo; provide slug: allocate isolated scratch directory without task/Git changes)', 'prototype-delete <name...> (deletes the named demo folders of this project only after the user confirmed those exact names; validates every name first and refuses links, duplicates and unknown names)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'docs (read-only: Git-tracked and untracked-but-not-ignored .md files split into agent instructions, other docs and skipped changelogs/licenses, with known commands)', 'review [ref] (read-only: the last task\'s commits since its first begin or first save, whichever is earlier, or ref..HEAD, with saved decisions, plan, outcomes and all known commands, each with a kind; run only kind test)', 'merge (from a linked worktree whose task is complete: merges its branch into main in the main folder; fast-forward else one merge commit; refuses conflicts, staged or in-progress work and never deletes branches)', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?,outcomes?,importance?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {needsYou:[{kind,action,reason}],onItsOwn:[...],reason?,boldIdea?}; up to 20 steps per list, returned as steps by status and next; the older {primary,alternatives,reason} is saved as onItsOwn)', 'park <expected-revision> (stdin: {add:"one-line idea"} or {remove:"its text"|position}; the parked list shows in status and survives task changes)', 'state-recover <corrupt-revision>', 'projects [--update | --forget <path>] (every project with saved NEEF state, last use and next-prompt instruction version; --update upgrades outdated unedited blocks with backups and skips edited, missing and block-free projects; --forget moves the saved state of a listed project whose folder no longer exists into a backup and refuses existing folders)', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions; boldIdea: one ambitious grounded idea as a string (at most 400 characters), kept across sessions and returned by next. Each save also adds the bold idea and suggested actions to a dated idea board beside the state (newest first, last 5 bold ideas and 10 suggestions, repeats move to the top), shown in the status board. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', outcomes: 'Ordinary tasks complete on a nonempty verification note. With a plan or importance important, completion requires [{id,description,required,status,evidence}], with unique ids and at least one required outcome; supplied outcomes are always validated. Status is pending/passed/failed/blocked; passed outcomes need nonempty evidence. Required outcomes must pass, blockers must be explicitly cleared, and plan phases must finish before completion. Same-task writes preserve omitted outcomes; new tasks do not inherit them. Legacy saved states remain readable. Evidence is agent-reported, not independently proven.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,title?,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?,userInput?}]}. title is a short board name (at most 40 characters). userInput names the decision, credential, approval or manual step only the user can supply for that phase. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. The plan is stored beside the state as <id>.plan.json under 32 KiB, under the same lock and revision; the rest of the state stays under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests' };
+    helperCommands: ['style [simple|guided|technical|kid] [--here] (read the effective style or save the global default; --here saves a project override, style clear --here removes it)', 'importance [explore|normal|important] [--here] (read the effective default or save the global one; --here saves a project override, importance clear --here removes it; a task may carry its own importance in state-write)', 'prototype-workspace [slug | --all] (omit slug: read-only listing of the newest 20 with name and README Status open|chosen|rejected or null; --all lists every demo; provide slug: allocate isolated scratch directory without task/Git changes)', 'prototype-delete <name...> (deletes the named demo folders of this project only after the user confirmed those exact names; validates every name first and refuses links, duplicates and unknown names)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements; busy, without resume, while another session claimed the active task in the last 30 minutes)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'docs (read-only: Git-tracked and untracked-but-not-ignored .md files split into agent instructions, other docs and skipped changelogs/licenses, with known commands)', 'review [ref] (read-only: the last task\'s commits since its first begin or first save, whichever is earlier, or ref..HEAD, with saved decisions, plan, outcomes and all known commands, each with a kind; run only kind test)', 'merge (from a linked worktree whose task is complete: merges its branch into main in the main folder; fast-forward else one merge commit; refuses conflicts, staged or in-progress work and never deletes branches)', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?,outcomes?,importance?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {needsYou:[{kind,action,reason}],onItsOwn:[...],reason?,boldIdea?}; up to 20 steps per list, returned as steps by status and next; the older {primary,alternatives,reason} is saved as onItsOwn)', 'park <expected-revision> (stdin: {add:"one-line idea"} or {remove:"its text"|position}; the parked list shows in status and survives task changes)', 'state-recover <corrupt-revision>', 'projects [--update | --forget <path>] (every project with saved NEEF state, last use and next-prompt instruction version; --update upgrades outdated unedited blocks with backups and skips edited, missing and block-free projects; --forget moves the saved state of a listed project whose folder no longer exists into a backup and refuses existing folders)', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions; boldIdea: one ambitious grounded idea as a string (at most 400 characters), kept across sessions and returned by next. Each save also adds the bold idea and suggested actions to a dated idea board beside the state (newest first, last 5 bold ideas and 10 suggestions, repeats move to the top), shown in the status board. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', outcomes: 'Ordinary tasks complete on a nonempty verification note. With a plan or importance important, completion requires [{id,description,required,status,evidence}], with unique ids and at least one required outcome; supplied outcomes are always validated. Status is pending/passed/failed/blocked; passed outcomes need nonempty evidence. Required outcomes must pass, blockers must be explicitly cleared, and plan phases must finish before completion. Same-task writes preserve omitted outcomes; new tasks do not inherit them. Legacy saved states remain readable. Evidence is agent-reported, not independently proven.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,title?,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?,userInput?}]}. title is a short board name (at most 40 characters). userInput names the decision, credential, approval or manual step only the user can supply for that phase. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. The plan is stored beside the state as <id>.plan.json under 32 KiB, under the same lock and revision; the rest of the state stays under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests' };
   if (command === 'doctor') return doctor();
   const p = project(cwd);
   if (command === 'style') {

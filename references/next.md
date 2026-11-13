@@ -2,6 +2,8 @@
 
 Done means useful work was performed and its evidence saved, or a concrete reason that no safe action is possible was established. Refreshing advice alone is not progress.
 
+When `next` returns `busy`, another session claimed the active task within the last 30 minutes. Report its message, task and expiry, then stop without edits, commits or state writes unless the user explicitly takes over.
+
 ## Discover and choose
 
 Revalidate saved candidates against current code, tests, user goals and instructions. Candidates are the saved `onItsOwn` steps; `needsYou` steps wait for the user, so report them and never act on one without its input. An empty candidate list or a saved no-action reason requires discovery; it does not establish that the project is finished. Inspect relevant project documents, including existing GSD files under `.planning/`, for actual goals, constraints, dependencies and unfinished requirements. Rank by user value and what unlocks essential work, rather than roadmap phase number. Distinguish essential unfinished work from optional enhancements; do not invent requirements to keep busy. The saved `boldIdea` returned by `next` is context, not a candidate: work on it only when the user asks.

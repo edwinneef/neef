@@ -337,6 +337,33 @@ test('owned deletion and rename can be reviewed and committed together', t => {
   assert.equal(f.git('status', '--porcelain'), '');
 });
 
+test('next reports busy instead of resume while another session holds the active task', t => {
+  const f = fixture(t);
+  // Host session ids inherited from the test runner are cleared so each call names its own session.
+  const as = (session, args, input) => {
+    const { NEEF_SESSION, CLAUDE_CODE_SESSION_ID, CODEX_THREAD_ID, ...env } = f.env(f.home);
+    const result = spawnSync(process.execPath, [helper, '--project', f.root, ...args], { encoding: 'utf8', input: input === undefined ? undefined : JSON.stringify(input), env: session ? { ...env, NEEF_SESSION: session } : env });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    return JSON.parse(result.stdout);
+  };
+  const first = as('session-a', ['begin', 'shared-work']);
+  as('session-a', ['state-write', as('session-a', ['status']).revision], { task: 'Shared work', progress: 'active', baseline: first.baseline });
+  assert.equal(as('session-a', ['next']).resume, 'continue');
+  const other = as('session-b', ['next']);
+  assert.equal(other.resume, undefined);
+  assert.equal(other.busy.message, 'Task in progress in another thread');
+  assert.equal(other.busy.task, 'Shared work');
+  assert.match(other.reason, /do not resume/);
+  assert.equal(as('session-b', ['status']).busy.task, 'Shared work');
+  // A claim older than the lease no longer blocks, and a session without an id is never blocked.
+  const claim = path.join(f.home, 'sessions', fs.readdirSync(path.join(f.home, 'sessions'))[0]);
+  fs.writeFileSync(claim, JSON.stringify({ session: 'session-a', task: 'Shared work', updated: new Date(Date.now() - 31 * 60 * 1000).toISOString() }));
+  assert.equal(as('session-b', ['next']).resume, 'continue');
+  fs.writeFileSync(claim, JSON.stringify({ session: 'session-a', task: 'Shared work', updated: new Date().toISOString() }));
+  assert.equal(as(null, ['next']).resume, 'continue');
+  assert.equal(as('session-a', ['next']).resume, 'continue');
+});
+
 test('state revisions, locks, corruption and explicit backup recovery preserve data', t => {
   const f = fixture(t);
   assert.equal(f.run(['status']).revision, 'missing');
