@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { gitMergeReady, modeTable, ribbon } from '../scripts/neef.mjs';
+import { board, gitMergeReady, modeTable, ribbon } from '../scripts/neef.mjs';
 
 const passedOutcomes = [{ id: 'fixture', description: 'Complete the fixture task', required: true, status: 'passed', evidence: 'Fixture assertions passed.' }];
 
@@ -1628,14 +1628,14 @@ test('status shows a read-only board of the task or plan phases and parked ideas
   assert.equal(f.run(['status']).board, null);
   const parked = f.run(['park', 'missing'], { add: 'Try a dark theme' });
   const task = f.state(parked.revision, 'Add bookings', { blockers: 'Needs an API key' });
-  assert.equal(f.run(['status']).board, ['Add bookings  ⚑ blocked', '', 'Parked  1  Try a dark theme'].join('\n'));
+  assert.equal(f.run(['status']).board, ['Add bookings  ⚑ blocked', '', 'Needs you', '  Nothing right now', '', 'On its own', '  Nothing right now', '', 'Parked  1  Try a dark theme'].join('\n'));
   assert.equal(f.run(['status']).ribbon, null, 'no ribbon without a plan');
   f.state(task.revision, 'Add bookings', { blockers: '', plan: { goal: 'Bookings', scale: 'large', rationale: 'Three steps', phases: [
     { id: 'p1', title: 'Form', task: 'Build the form', dependsOn: [], acceptance: ['Form saves'], status: 'complete', verification: 'Saved one' },
     { id: 'p2', task: 'Send the email: confirm each booking', dependsOn: ['p1'], acceptance: ['Email sent'], status: 'active', userInput: 'Mail account' },
     { id: 'p3', title: 'List', task: 'Show the list', dependsOn: ['p1'], acceptance: ['List shows'], status: 'pending' }] } });
   assert.equal(f.run(['status']).board, ['Add bookings  🟩🟨⬜   1 of 3 done', '',
-    'Now     p2  Send the email   ⚑ needs you', 'Next    p3  List', 'Done    p1 Form', '', 'Parked  1  Try a dark theme'].join('\n'));
+    'Now     p2  Send the email   ⚑ needs you', 'Next    p3  List', 'Done    p1 Form', '', 'Needs you', '  Nothing right now', '', 'On its own', '  Nothing right now', '', 'Parked  1  Try a dark theme'].join('\n'));
   const blocked = f.state(f.run(['status']).revision, 'Add bookings', { blockers: 'p3: waiting on the design.' });
   assert.match(blocked.board, /Next    p3  List   ⚑ blocked/);
   assert.equal(blocked.ribbon, `🚀 Working on p2 Send the email  ⚑ needs you   then p3 List  ⚑ blocked\n▕${'█'.repeat(15)}${'░'.repeat(15)}▏ 50%`);
@@ -1902,11 +1902,55 @@ test('recommendations enforce concise shape, two-alternative limit, kinds and un
     { primary: null, alternatives: [], reason: '' },
     { primary: recommendation('x'.repeat(601)), alternatives: [] },
   ];
-  for (const input of invalid) f.run(['recommendations-write', saved.revision], input, /Provide primary|Duplicate recommendations/);
+  for (const input of invalid) f.run(['recommendations-write', saved.revision], input, /Provide needsYou|Duplicate recommendations/);
   assert.equal(fs.readFileSync(f.statePath(), 'utf8'), raw);
   fs.writeFileSync(`${f.statePath()}.lock`, 'another writer');
   f.run(['recommendations-write', saved.revision], noRecommendation, /Operation locked/);
   assert.equal(fs.readFileSync(f.statePath(), 'utf8'), raw);
+});
+
+test('two next-step lists save up to 20 steps each beside the state and return through status and next', t => {
+  const f = fixture(t);
+  const revision = f.run(['setup']).revision;
+  const many = Array.from({ length: 20 }, (_, i) => recommendation(`Add line ${i + 1} to owned.txt.`));
+  const needsYou = [recommendation('Approve pushing the commits.'), recommendation('Choose the greeting wording.', 'OPTIONAL')];
+  const saved = f.run(['recommendations-write', revision], { needsYou, onItsOwn: many, boldIdea: '/neef idea — result' });
+  assert.equal(saved.state.recommendations.primary.action, 'Add line 1 to owned.txt.');
+  assert.equal(saved.state.recommendations.alternatives.length, 2);
+  assert.ok(fs.readFileSync(f.statePath(), 'utf8').split('\n').length < 40);
+  assert.deepEqual(f.run(['status']).steps, { needsYou, onItsOwn: many });
+  const next = f.run(['next']);
+  assert.deepEqual(next.candidates, many);
+  assert.deepEqual(next.needsYou, needsYou);
+  for (const input of [
+    { needsYou: [], onItsOwn: [...many, recommendation('One too many.')] },
+    { needsYou: [recommendation('Same step.')], onItsOwn: [recommendation('same step.')] },
+    { needsYou: [], onItsOwn: [] },
+    { needsYou: [], onItsOwn: [recommendation()], primary: recommendation('Mixed forms.'), alternatives: [] },
+  ]) f.run(['recommendations-write', saved.revision], input, /Provide needsYou|Duplicate recommendations/);
+  assert.equal(f.run(['status']).steps.onItsOwn.length, 20);
+  const onlyYou = f.run(['recommendations-write', saved.revision], { needsYou: [recommendation('Approve pushing the commits.')], onItsOwn: [] });
+  assert.equal(onlyYou.state.recommendations.primary.action, 'Approve pushing the commits.');
+  assert.deepEqual(f.run(['next']).candidates, []);
+  f.run(['recommendations-write', onlyYou.revision], { primary: recommendation('Older form step.'), alternatives: [] });
+  const older = { needsYou: [], onItsOwn: [recommendation('Older form step.')] };
+  assert.deepEqual(f.run(['status']).steps, older);
+  fs.rmSync(f.statePath().replace(/\.json$/, '.ideas.json'));
+  assert.deepEqual(f.run(['status']).steps, older, 'a state saved before the lists existed still reads');
+});
+
+test('the board always shows Needs you and On its own with five steps each and a count of the rest', () => {
+  const steps = count => Array.from({ length: count }, (_, i) => recommendation(`Add line ${i + 1} to owned.txt.`));
+  const state = { task: 'Greeting', progress: 'complete' };
+  assert.match(board(state, undefined, { needsYou: [], onItsOwn: [] }), /\n\nNeeds you\n  Nothing right now\n\nOn its own\n  Nothing right now$/);
+  const some = board(state, undefined, { needsYou: steps(3), onItsOwn: steps(8) });
+  assert.match(some, /Needs you\n  1  Add line 1 to owned\.txt\.\n  2  Add line 2 to owned\.txt\.\n  3  Add line 3 to owned\.txt\.\n\nOn its own\n  1  /);
+  assert.match(some, /  5  Add line 5 to owned\.txt\.\n  \+3 more$/);
+  assert.doesNotMatch(some, /Add line 6/);
+  const long = board(state, undefined, { needsYou: [recommendation('Decide '.repeat(60))], onItsOwn: [] });
+  assert.ok(long.split('\n').every(line => line.length <= 64));
+  assert.equal(long.split('Needs you\n')[1].split('\n\n')[0].split('\n').length, 2, 'a step shows at most two lines');
+  assert.equal(board(null, undefined, { needsYou: [], onItsOwn: [] }), null);
 });
 
 test('missing and legacy recommendation state stays read-only; recovery preserves saved advice', t => {

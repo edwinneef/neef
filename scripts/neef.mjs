@@ -181,16 +181,31 @@ const ideasFile = p => stateFile(p).replace(/.json$/, '.ideas.json');
 const ideaLimits = { bold: 5, suggestions: 10 };
 const validIdeaList = (list, cap) => Array.isArray(list) && list.length <= cap
   && list.every(item => item && shortText(item.text, 600) && /^\d{4}-\d{2}-\d{2}$/.test(item.date));
+// The two full next-step lists live here too: the state keeps only a three-item mirror within its size limit.
+const stepLimit = 20;
+const stepsShown = 5;
+const validSteps = value => Boolean(value) && ['needsYou', 'onItsOwn'].every(key =>
+  Array.isArray(value[key]) && value[key].length <= stepLimit && value[key].every(validAction));
 function loadIdeas(p) {
   const empty = { bold: [], suggestions: [] };
   if (!exists(ideasFile(p))) return empty;
   try {
-    const value = json(ideasFile(p));
-    return validIdeaList(value.bold, ideaLimits.bold) && validIdeaList(value.suggestions, ideaLimits.suggestions) ? value : empty;
+    const { steps, ...value } = json(ideasFile(p));
+    if (!validIdeaList(value.bold, ideaLimits.bold) || !validIdeaList(value.suggestions, ideaLimits.suggestions)) return empty;
+    return validSteps(steps) ? { ...value, steps } : value;
   } catch { return empty; }
 }
+// What needs the operator and what can run on its own; older saves only have the state's three-item mirror.
+// The idea file is not part of the state revision, so its lists count only while they still contain the mirror.
+function savedSteps(p, state) {
+  const legacy = state?.recommendations;
+  const mirror = legacy ? [legacy.primary, ...legacy.alternatives].filter(Boolean) : [];
+  const saved = mirror.length ? loadIdeas(p).steps : null;
+  const known = new Set(saved ? [...saved.needsYou, ...saved.onItsOwn].map(item => item.action) : []);
+  return saved && mirror.every(item => known.has(item.action)) ? saved : { needsYou: [], onItsOwn: mirror };
+}
 // Newest first; a repeated idea moves to the top with today's date instead of being added twice.
-function recordIdeas(p, saved) {
+function recordIdeas(p, saved, steps) {
   if (!saved) return;
   const today = new Date().toISOString().slice(0, 10);
   const add = (list, texts, cap) => {
@@ -202,6 +217,7 @@ function recordIdeas(p, saved) {
   const next = {
     bold: add(current.bold, saved.boldIdea ? [saved.boldIdea] : [], ideaLimits.bold),
     suggestions: add(current.suggestions, [saved.primary, ...saved.alternatives].filter(Boolean).map(item => item.action), ideaLimits.suggestions),
+    ...(steps ? { steps } : current.steps ? { steps: current.steps } : {}),
   };
   const contents = `${JSON.stringify(next, null, 2)}
 `;
@@ -310,7 +326,8 @@ export function status(p) {
     if (saved.state.branch !== actual.branch) discrepancies.push('Saved branch differs; inspect before continuing');
     if (saved.state.head !== actual.head) discrepancies.push('HEAD changed; reconcile saved progress with history and files');
   }
-  return { project: p.root, ...saved, importance: effectiveImportance(p, saved.state?.importance), actual, discrepancies, board: board(saved.state, loadIdeas(p)), ribbon: ribbon(saved.state) };
+  const steps = savedSteps(p, saved.state);
+  return { project: p.root, ...saved, importance: effectiveImportance(p, saved.state?.importance), actual, discrepancies, steps, board: board(saved.state, loadIdeas(p), steps), ribbon: ribbon(saved.state) };
 }
 
 // Shared by the scope board and the progress ribbon; both are read-only views of saved state.
@@ -359,9 +376,10 @@ export function ribbon(state) {
 }
 
 // A read-only text board of the saved scope: a progress line, Now / Next / Done lanes, parked ideas,
-// then the dated idea board of recent bold ideas and suggestions.
-export function board(state, ideas = { bold: [], suggestions: [] }) {
-  if (!state?.task && !state?.parked?.length && !ideas.bold.length && !ideas.suggestions.length) return null;
+// the two next-step lists (five shown each), then the dated idea board of recent bold ideas and suggestions.
+export function board(state, ideas = { bold: [], suggestions: [] }, steps = null) {
+  if (!state?.task && !state?.parked?.length && !ideas.bold.length && !ideas.suggestions.length
+    && !steps?.needsYou.length && !steps?.onItsOwn.length) return null;
   const width = 64;
   const label = 8;
   // Packs items into lines of at most max characters, never splitting an item.
@@ -393,6 +411,13 @@ export function board(state, ideas = { bold: [], suggestions: [] }) {
   } else if (state?.task) {
     const where = state.progress === 'complete' ? '✓ done' : state.blockers?.trim() ? '⚑ blocked' : 'in progress';
     sections.push([`${clipWords(state.task, width - where.length - 2)}  ${where}`]);
+  }
+  if (steps) {
+    // Both lists always show, so an empty one reads as checked rather than missing.
+    const listed = (title, items) => [title, ...(items.length ? items.slice(0, stepsShown).flatMap((item, index) =>
+      wrap(clipWords(item.action, (width - 5) * 2 - 4), width - 5).map((line, row) => `  ${(row ? '' : String(index + 1)).padEnd(3)}${line}`))
+      : ['  Nothing right now']), ...(items.length > stepsShown ? [`  +${items.length - stepsShown} more`] : [])];
+    sections.push(listed('Needs you', steps.needsYou), listed('On its own', steps.onItsOwn));
   }
   if (state?.parked?.length) {
     sections.push(lane('Parked', state.parked.flatMap((idea, index) =>
@@ -538,7 +563,7 @@ function stateWrite(p, expected, input) {
     const current = stateRead(p);
     if (current.error) fail(current.error);
     if (current.revision !== expected) fail('Stale state revision; reread and reconcile');
-    if (input.progress === 'complete' && !Object.hasOwn(input, 'recommendations')) fail('Completed tasks require evaluated recommendations; provide primary:null with a reason when none is supported');
+    if (input.progress === 'complete' && !Object.hasOwn(input, 'recommendations')) fail('Completed tasks require evaluated recommendations; provide needsYou:[] and onItsOwn:[] with a reason when none is supported');
     const actual = snapshot(p);
     const value = { version: 1, project: p.root, revision: crypto.randomUUID(), updated: new Date().toISOString(),
       task: input.task, progress: input.progress, branch: actual.branch, head: actual.head,
@@ -554,7 +579,8 @@ function stateWrite(p, expected, input) {
       verification: input.verification ?? (current.state?.task === input.task ? current.state.verification : '') ?? '',
       next: input.next ?? (input.progress === 'active' && current.state?.task === input.task ? current.state.next : '') ?? '',
       blockers: input.blockers ?? (current.state?.task === input.task ? current.state.blockers : '') ?? '' };
-    if (Object.hasOwn(input, 'recommendations')) value.recommendations = recommendations(input.recommendations, value.progress, { task: value.task, branch: actual.branch, head: actual.head });
+    let steps;
+    if (Object.hasOwn(input, 'recommendations')) ({ value: value.recommendations, steps } = recommendations(input.recommendations, value.progress, { task: value.task, branch: actual.branch, head: actual.head }));
     const plan = Object.hasOwn(input, 'plan') ? input.plan : current.state?.task === input.task ? current.state.plan : undefined;
     if (plan !== undefined) {
       if (!validPlan(plan)) fail('Invalid plan: provide goal, scale, rationale and phases with unique ids, tasks, dependencies, acceptance criteria and valid statuses');
@@ -576,8 +602,9 @@ function stateWrite(p, expected, input) {
     }
     if (!validState(value, p)) fail('Invalid state fields');
     const saved = saveState(p, current, value);
-    if (Object.hasOwn(input, 'recommendations')) recordIdeas(p, value.recommendations);
-    return { ...saved, board: board(saved.state, loadIdeas(p)), ribbon: ribbon(saved.state) };
+    if (steps) recordIdeas(p, value.recommendations, steps);
+    const lists = savedSteps(p, saved.state);
+    return { ...saved, steps: lists, board: board(saved.state, loadIdeas(p), lists), ribbon: ribbon(saved.state) };
   });
 }
 
@@ -644,15 +671,27 @@ function validRecommendations(value) {
     && (value.boldIdea === undefined || value.boldIdea === null || shortText(value.boldIdea, 400))
     && (value.primary !== null || (value.alternatives.length === 0 && shortText(value.reason, 400)));
 }
+// Two lists: needsYou cannot move without the operator, onItsOwn can. The older primary/alternatives form
+// still saves, as onItsOwn. Returns the state's three-item mirror and the full lists for the idea file.
 function recommendations(input, progress, basis) {
-  if (!validRecommendations(input)) fail('Provide primary:{kind,action,reason} and up to two alternatives, or primary:null with reason and alternatives:[]; boldIdea is an optional string up to 400 characters');
-  const candidates = [input.primary, ...input.alternatives].filter(Boolean)
-    .map(({ kind, action, reason }) => ({ kind, action: action.trim(), reason: reason.trim() }))
+  const lists = input && (Object.hasOwn(input, 'needsYou') || Object.hasOwn(input, 'onItsOwn'));
+  const usage = 'Provide needsYou:[...] and onItsOwn:[...] with up to 20 {kind,action,reason} steps each, and a reason when both are empty; boldIdea is an optional string up to 400 characters. The older primary:{kind,action,reason} with up to two alternatives, or primary:null with reason and alternatives:[], is saved as onItsOwn';
+  const given = lists ? { needsYou: input.needsYou ?? [], onItsOwn: input.onItsOwn ?? [] } : null;
+  if (lists) {
+    if (Object.hasOwn(input, 'primary') || Object.hasOwn(input, 'alternatives') || !validSteps(given)
+      || !(input.boldIdea === undefined || input.boldIdea === null || shortText(input.boldIdea, 400))
+      || (!given.needsYou.length && !given.onItsOwn.length && !shortText(input.reason, 400))) fail(usage);
+  } else if (!validRecommendations(input)) fail(usage);
+  const rank = list => list.map(({ kind, action, reason }) => ({ kind, action: action.trim(), reason: reason.trim() }))
     .sort((a, b) => actionKinds.indexOf(a.kind) - actionKinds.indexOf(b.kind));
-  if (progress === 'complete' && candidates.some(item => item.kind === 'REQUIRED')) fail('Required work belongs to the unfinished original task; keep progress active and use next');
-  if (new Set(candidates.map(item => item.action.toLowerCase())).size !== candidates.length) fail('Duplicate recommendations');
+  const steps = lists ? { needsYou: rank(given.needsYou), onItsOwn: rank(given.onItsOwn) }
+    : { needsYou: [], onItsOwn: rank([input.primary, ...input.alternatives].filter(Boolean)) };
+  const all = [...steps.onItsOwn, ...steps.needsYou];
+  if (progress === 'complete' && all.some(item => item.kind === 'REQUIRED')) fail('Required work belongs to the unfinished original task; keep progress active and use next');
+  if (new Set(all.map(item => item.action.toLowerCase())).size !== all.length) fail('Duplicate recommendations');
+  const candidates = rank(all).slice(0, 3);
   const boldIdea = input.boldIdea?.trim();
-  return { primary: candidates[0] || null, reason: candidates.length ? '' : input.reason.trim(), alternatives: candidates.slice(1), ...(boldIdea ? { boldIdea } : {}), basis };
+  return { steps, value: { primary: candidates[0] || null, reason: candidates.length ? '' : input.reason.trim(), alternatives: candidates.slice(1), ...(boldIdea ? { boldIdea } : {}), basis } };
 }
 
 function recommendationsWrite(p, expected, input) {
@@ -663,10 +702,9 @@ function recommendationsWrite(p, expected, input) {
     const actual = snapshot(p);
     const state = current.state || { version: 1, project: p.root, revision: crypto.randomUUID(), updated: new Date().toISOString(),
       task: '', progress: 'complete', branch: actual.branch, head: actual.head, baseline: null, decisions: '', verification: '', next: '', blockers: '' };
-    const value = recommendations(input, state.progress, { task: state.task, branch: actual.branch, head: actual.head });
-    if (JSON.stringify(value) === JSON.stringify(state.recommendations)) return current;
-    const saved = saveState(p, current, { ...state, recommendations: value });
-    recordIdeas(p, value);
+    const { value, steps } = recommendations(input, state.progress, { task: state.task, branch: actual.branch, head: actual.head });
+    const saved = JSON.stringify(value) === JSON.stringify(state.recommendations) ? current : saveState(p, current, { ...state, recommendations: value });
+    recordIdeas(p, value, steps);
     return saved;
   });
 }
@@ -708,10 +746,11 @@ function next(p) {
   if (current.error) return { ...current, candidates: [], reason: current.error, requiresRevalidation: true };
   if (current.state?.progress === 'active') return { ...current, candidates: [], reason: 'Original task is unfinished; resume it before choosing new work', resume: 'continue', requiresRevalidation: true };
   const saved = current.state?.recommendations;
-  const candidates = saved ? [saved.primary, ...saved.alternatives].filter(Boolean) : [];
+  // Only steps that can run without the operator are candidates; needsYou is reported, never executed.
+  const candidates = current.steps.onItsOwn;
   const basis = saved?.basis;
   if (basis && (basis.branch !== current.actual.branch || basis.head !== current.actual.head || basis.task !== current.state.task)) current.discrepancies.push('Project changed since recommendations were saved; inspect relevance before selecting');
-  return { ...current, candidates, requiresRevalidation: true, discoveryRequired: true,
+  return { ...current, candidates, needsYou: current.steps.needsYou, requiresRevalidation: true, discoveryRequired: true,
     savedReason: saved?.reason || null,
     boldIdea: saved?.boldIdea || null,
     reason: 'Inspect current code, goals and project instructions; revalidate advice, investigate uncertainties and execute the highest-value safe action. Saved advice or its absence does not establish that no work remains.' };
@@ -1359,7 +1398,7 @@ export async function main(args = process.argv.slice(2)) {
         .map(({ usage, changes, stops, aliases = [] }) => ({ command: usage, changes, stops, aliases })) })),
     invocation: { codex: '$neef <command>', claude: '/neef <command>' },
     aliases: { codex: subskillNames.map(command => `$neef-${command}`), claude: subskillNames.map(command => `/neef-${command}`) },
-    helperCommands: ['style [simple|guided|technical|kid] [--here] (read the effective style or save the global default; --here saves a project override, style clear --here removes it)', 'importance [explore|normal|important] [--here] (read the effective default or save the global one; --here saves a project override, importance clear --here removes it; a task may carry its own importance in state-write)', 'prototype-workspace [slug | --all] (omit slug: read-only listing of the newest 20 with name and README Status open|chosen|rejected or null; --all lists every demo; provide slug: allocate isolated scratch directory without task/Git changes)', 'prototype-delete <name...> (deletes the named demo folders of this project only after the user confirmed those exact names; validates every name first and refuses links, duplicates and unknown names)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'docs (read-only: Git-tracked and untracked-but-not-ignored .md files split into agent instructions, other docs and skipped changelogs/licenses, with known commands)', 'review [ref] (read-only: the last task\'s commits since its first begin or first save, whichever is earlier, or ref..HEAD, with saved decisions, plan, outcomes and all known commands, each with a kind; run only kind test)', 'merge (from a linked worktree whose task is complete: merges its branch into main in the main folder; fast-forward else one merge commit; refuses conflicts, staged or in-progress work and never deletes branches)', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?,outcomes?,importance?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {primary,alternatives,reason,boldIdea?})', 'park <expected-revision> (stdin: {add:"one-line idea"} or {remove:"its text"|position}; the parked list shows in status and survives task changes)', 'state-recover <corrupt-revision>', 'projects [--update | --forget <path>] (every project with saved NEEF state, last use and next-prompt instruction version; --update upgrades outdated unedited blocks with backups and skips edited, missing and block-free projects; --forget moves the saved state of a listed project whose folder no longer exists into a backup and refuses existing folders)', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions; boldIdea: one ambitious grounded idea as a string (at most 400 characters), kept across sessions and returned by next. Each save also adds the bold idea and suggested actions to a dated idea board beside the state (newest first, last 5 bold ideas and 10 suggestions, repeats move to the top), shown in the status board. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', outcomes: 'Ordinary tasks complete on a nonempty verification note. With a plan or importance important, completion requires [{id,description,required,status,evidence}], with unique ids and at least one required outcome; supplied outcomes are always validated. Status is pending/passed/failed/blocked; passed outcomes need nonempty evidence. Required outcomes must pass, blockers must be explicitly cleared, and plan phases must finish before completion. Same-task writes preserve omitted outcomes; new tasks do not inherit them. Legacy saved states remain readable. Evidence is agent-reported, not independently proven.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,title?,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?,userInput?}]}. title is a short board name (at most 40 characters). userInput names the decision, credential, approval or manual step only the user can supply for that phase. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. The plan is stored beside the state as <id>.plan.json under 32 KiB, under the same lock and revision; the rest of the state stays under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests' };
+    helperCommands: ['style [simple|guided|technical|kid] [--here] (read the effective style or save the global default; --here saves a project override, style clear --here removes it)', 'importance [explore|normal|important] [--here] (read the effective default or save the global one; --here saves a project override, importance clear --here removes it; a task may carry its own importance in state-write)', 'prototype-workspace [slug | --all] (omit slug: read-only listing of the newest 20 with name and README Status open|chosen|rejected or null; --all lists every demo; provide slug: allocate isolated scratch directory without task/Git changes)', 'prototype-delete <name...> (deletes the named demo folders of this project only after the user confirmed those exact names; validates every name first and refuses links, duplicates and unknown names)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status', 'next (read-only candidates; agent revalidates and implements)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'docs (read-only: Git-tracked and untracked-but-not-ignored .md files split into agent instructions, other docs and skipped changelogs/licenses, with known commands)', 'review [ref] (read-only: the last task\'s commits since its first begin or first save, whichever is earlier, or ref..HEAD, with saved decisions, plan, outcomes and all known commands, each with a kind; run only kind test)', 'merge (from a linked worktree whose task is complete: merges its branch into main in the main folder; fast-forward else one merge commit; refuses conflicts, staged or in-progress work and never deletes branches)', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?,outcomes?,importance?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {needsYou:[{kind,action,reason}],onItsOwn:[...],reason?,boldIdea?}; up to 20 steps per list, returned as steps by status and next; the older {primary,alternatives,reason} is saved as onItsOwn)', 'park <expected-revision> (stdin: {add:"one-line idea"} or {remove:"its text"|position}; the parked list shows in status and survives task changes)', 'state-recover <corrupt-revision>', 'projects [--update | --forget <path>] (every project with saved NEEF state, last use and next-prompt instruction version; --update upgrades outdated unedited blocks with backups and skips edited, missing and block-free projects; --forget moves the saved state of a listed project whose folder no longer exists into a backup and refuses existing folders)', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions; boldIdea: one ambitious grounded idea as a string (at most 400 characters), kept across sessions and returned by next. Each save also adds the bold idea and suggested actions to a dated idea board beside the state (newest first, last 5 bold ideas and 10 suggestions, repeats move to the top), shown in the status board. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', outcomes: 'Ordinary tasks complete on a nonempty verification note. With a plan or importance important, completion requires [{id,description,required,status,evidence}], with unique ids and at least one required outcome; supplied outcomes are always validated. Status is pending/passed/failed/blocked; passed outcomes need nonempty evidence. Required outcomes must pass, blockers must be explicitly cleared, and plan phases must finish before completion. Same-task writes preserve omitted outcomes; new tasks do not inherit them. Legacy saved states remain readable. Evidence is agent-reported, not independently proven.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,title?,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?,userInput?}]}. title is a short board name (at most 40 characters). userInput names the decision, credential, approval or manual step only the user can supply for that phase. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. The plan is stored beside the state as <id>.plan.json under 32 KiB, under the same lock and revision; the rest of the state stays under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests' };
   if (command === 'doctor') return doctor();
   const p = project(cwd);
   if (command === 'style') {
