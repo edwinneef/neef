@@ -10,6 +10,6 @@ Support each finding with concrete source locations or established requirements.
 
 When actionable, persist advice with recommendations-write <current-revision> using `needsYou:[{kind,action,reason}]`, `onItsOwn:[...]`. Sort each into the list that fits and keep the saved steps from helper `steps` that still hold (`references/follow-up.md`). Use RECOMMENDED or OPTIONAL; REQUIRED is reserved for unfinished original scope. Preserve task, progress, decisions, next, baseline and context. Read status again after a revision conflict and reconcile; report persistence failures without changing project files. No useful action saves both lists empty with a reason. External recommendation state is the only permitted write.
 
-Report findings, the recommendation and useful alternatives in the two next-step lists, plus the host's `$neef-next` or `/neef-next` command when actionable. next revalidates advice against current code, goals and Git before selecting one task; with unfinished work it resumes that first. End here, even when an improvement is obvious.
+Report findings, the recommendation and useful alternatives in the closing suggestions, plus the host's `$neef-next` or `/neef-next` command when actionable. next revalidates advice against current code, goals and Git before selecting one task; with unfinished work it resumes that first. End here, even when an improvement is obvious.
 
 Report using the NEEF layout in `references/follow-up.md` (Report layout).
