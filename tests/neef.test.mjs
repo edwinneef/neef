@@ -756,6 +756,11 @@ test('install names projects with outdated instructions and offers one update', 
   assert.equal(again.outdatedProjects.count, 1);
   assert.deepEqual(again.outdatedProjects.roots, [old]);
   assert.match(again.outdatedProjects.offer, /\/neef projects --update/);
+  const report = JSON.parse(spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/neef.mjs', import.meta.url)), 'doctor'], { encoding: 'utf8', env: { ...process.env, NEEF_USER_HOME: f.user, NEEF_HOME: f.home } }).stdout);
+  const check = report.checks.find(item => item.name === 'project instructions current');
+  assert.equal(check.ok, false);
+  assert.equal(check.severity, 'warning');
+  assert.match(check.fix, /1 project with older NEEF instructions/);
   assert.equal(fs.readFileSync(path.join(old, 'AGENTS.md'), 'utf8'), singleClose(current));
 });
 

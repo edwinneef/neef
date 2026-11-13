@@ -1338,6 +1338,10 @@ export function doctor() {
     catch { add('Skills CLI metadata', false, 'Inspect invalid lock file; do not overwrite unrelated entries'); }
   }
   add('legacy ED absent', obsolete.length === 0, 'Inventory and remove only the eight exact ED installations with backups');
+  // Outdated project instructions are a warning: NEEF still works there, but their replies follow an older rule.
+  let outdated = [];
+  try { outdated = projects(false).projects.filter(item => item.status === 'outdated').map(item => item.root); } catch { /* Listing problems surface in the state checks above. */ }
+  add('project instructions current', outdated.length === 0, `${outdated.length} project${outdated.length === 1 ? '' : 's'} with older NEEF instructions (${outdated.join(', ')}); run /neef projects --update in Claude Code or $neef projects --update in Codex`, 'warning');
   return { ok: checks.every(check => check.ok || check.severity === 'warning'), checks, obsolete, discovery: 'Paths and configuration checked; native invocation requires a fresh agent session.' };
 }
 
