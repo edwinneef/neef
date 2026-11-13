@@ -1037,7 +1037,7 @@ test('ask installs shared read-only guidance without replacing unfinished work',
   assert.match(guidance, /stop without a menu or selection prompt/);
   assert.match(guidance, /explicit selection.*authorizes only/);
   assert.match(guidance, /A question about a choice is still advice/);
-  assert.match(followUp, /alternatives: at most two|at most two useful alternatives/);
+  assert.match(followUp, /alternatives: at most two|at most two useful alternatives|one or two alternatives/);
 });
 
 test('advisor installation refuses local edits to its managed reference', t => {
@@ -1647,6 +1647,21 @@ test('next returns ordered advisory candidates and inspects changed Git state wi
   assert.deepEqual(changed.candidates, [primary, alternative]);
   assert.ok(changed.discrepancies.some(message => message.includes('recommendations were saved')));
   assert.equal(changed.requiresRevalidation, true);
+});
+
+test('a bold idea is saved with recommendations and returned by next', t => {
+  const f = fixture(t);
+  const setup = f.run(['setup']);
+  const saved = f.state(setup.revision, 'Completed feature', { progress: 'complete', outcomes: passedOutcomes, recommendations: { primary: recommendation(), alternatives: [], boldIdea: '  Turn owned.txt into a shareable greeting card generator.  ' } });
+  assert.equal(saved.state.recommendations.boldIdea, 'Turn owned.txt into a shareable greeting card generator.');
+  assert.equal(f.run(['next']).boldIdea, 'Turn owned.txt into a shareable greeting card generator.');
+  f.run(['recommendations-write', saved.revision], { ...noRecommendation, boldIdea: 'x'.repeat(401) }, /boldIdea is an optional string/);
+  const cleared = f.run(['recommendations-write', saved.revision], { ...noRecommendation, boldIdea: 'Publish the greetings as a tiny web page.' });
+  assert.equal(cleared.state.recommendations.primary, null);
+  assert.equal(f.run(['next']).boldIdea, 'Publish the greetings as a tiny web page.');
+  const legacy = f.run(['recommendations-write', cleared.revision], noRecommendation);
+  assert.equal(Object.hasOwn(legacy.state.recommendations, 'boldIdea'), false);
+  assert.equal(f.run(['next']).boldIdea, null);
 });
 
 test('recommendation refresh preserves task and context, supports alternatives and no-action evaluation', t => {
@@ -2360,6 +2375,9 @@ test('reply layout is defined once in follow-up and referenced by plan, challeng
   assert.match(followUp, /self-contained summary card/);
   assert.match(followUp, /never point back to earlier messages/);
   assert.match(followUp, /fenced code block/);
+  assert.match(followUp, /Every report also carries one bold idea/);
+  assert.match(followUp, /one or two alternatives/);
+  assert.match(followUp, /`boldIdea:/);
   assert.match(followUp, /Size is a guideline/);
   for (const n of ['plan', 'challenge', 'explanation-styles']) assert.match(read(n), /follow-up\.md` \(Report layout\)/, n);
 });
