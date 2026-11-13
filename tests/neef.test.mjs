@@ -743,6 +743,22 @@ function installation(t) {
   return { ...f, user, install: run };
 }
 
+test('install names projects with outdated instructions and offers one update', t => {
+  const f = installation(t);
+  assert.equal(Object.hasOwn(f.install(true), 'outdatedProjects'), false);
+  const current = fs.readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+  const old = path.join(path.dirname(f.root), 'old-project');
+  fs.mkdirSync(old);
+  fs.writeFileSync(path.join(old, 'AGENTS.md'), singleClose(current));
+  fs.writeFileSync(path.join(f.home, 'state', 'old.json'), JSON.stringify({ project: old, updated: '2026-10-01T00:00:00.000Z' }));
+  const again = f.install(true);
+  assert.equal(again.verified, true);
+  assert.equal(again.outdatedProjects.count, 1);
+  assert.deepEqual(again.outdatedProjects.roots, [old]);
+  assert.match(again.outdatedProjects.offer, /\/neef projects --update/);
+  assert.equal(fs.readFileSync(path.join(old, 'AGENTS.md'), 'utf8'), singleClose(current));
+});
+
 test('isolated installation dry run writes nothing and both agents receive explicit-only shared behavior', t => {
   const f = installation(t);
   const dry = f.install();

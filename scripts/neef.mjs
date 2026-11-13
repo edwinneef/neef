@@ -939,7 +939,7 @@ function instructionStatus(root) {
   return { status, files };
 }
 // Every project with saved NEEF state is listed; --update upgrades unedited outdated instruction blocks with backups.
-function projects(update) {
+export function projects(update) {
   const directory = path.join(home(), 'state');
   const seen = new Map();
   if (exists(directory)) for (const name of fs.readdirSync(directory)) {

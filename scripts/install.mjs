@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { commandNames, commandDescriptions, subskillNames, retiredCommands } from './neef.mjs';
+import { commandNames, commandDescriptions, subskillNames, retiredCommands, projects } from './neef.mjs';
 
 const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const user = path.resolve(process.env.NEEF_USER_HOME || os.homedir());
@@ -122,7 +122,7 @@ export function install(apply = false) {
     fs.mkdirSync(path.join(shared, 'state'), { recursive: true });
     replace(receiptPath, JSON.stringify({ version: 1, source, installed: new Date().toISOString(), backup,
       files: Object.fromEntries(entries.filter(entry => entry.bytes !== null).map(entry => [entry.target, entry.hash])) }, null, 2));
-    return { ...result, backup, verified: true };
+    return { ...result, backup, verified: true, ...outdatedProjects() };
   } catch (error) {
     for (const entry of changed.reverse()) {
       if (entry.old) replace(entry.target, entry.old);
@@ -132,6 +132,16 @@ export function install(apply = false) {
     else if (fs.existsSync(receiptPath)) fs.unlinkSync(receiptPath);
     throw error;
   } finally { fs.closeSync(fd); fs.unlinkSync(lock); }
+}
+
+// After an install, name the projects whose instructions are now behind so the agent can offer one update.
+// A failed listing never fails the install itself.
+function outdatedProjects() {
+  try {
+    const outdated = projects(false).projects.filter(item => item.status === 'outdated').map(item => item.root);
+    return outdated.length ? { outdatedProjects: { count: outdated.length, roots: outdated,
+      offer: 'Offer to update them in one go with /neef projects --update in Claude Code or $neef projects --update in Codex; each project is backed up first' } } : {};
+  } catch { return {}; }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
