@@ -64,7 +64,7 @@ function fixture(t, initialize = true) {
   }
   const prepare = (baseline, files = ['owned.txt'], message = 'Implement change', error) => run(['prepare', baseline], { files, message }, error);
   const state = (revision, task = 'Implement feature', extra = {}, error) => run(['state-write', revision], { task, progress: 'active', ...extra }, error);
-  const statePath = () => path.join(home, 'state', fs.readdirSync(path.join(home, 'state')).find(name => name.endsWith('.json') && !name.endsWith('.plan.json')));
+  const statePath = () => path.join(home, 'state', fs.readdirSync(path.join(home, 'state')).find(name => name.endsWith('.json') && !name.endsWith('.plan.json') && !name.endsWith('.ideas.json')));
   // Direct helper calls share the fixture's isolated Git configuration.
   const env = neefHome => ({ ...process.env, NEEF_HOME: neefHome, GIT_CONFIG_GLOBAL: gitConfig, GIT_CONFIG_NOSYSTEM: '1' });
   return { root, home, git, write, run, prepare, state, statePath, env };
@@ -1662,6 +1662,28 @@ test('a bold idea is saved with recommendations and returned by next', t => {
   const legacy = f.run(['recommendations-write', cleared.revision], noRecommendation);
   assert.equal(Object.hasOwn(legacy.state.recommendations, 'boldIdea'), false);
   assert.equal(f.run(['next']).boldIdea, null);
+});
+
+test('the idea board keeps the newest 5 bold ideas and 10 suggestions with dates beside the state', t => {
+  const f = fixture(t);
+  let revision = f.run(['setup']).revision;
+  const today = new Date().toISOString().slice(0, 10);
+  for (let i = 1; i <= 7; i++) {
+    const saved = f.run(['recommendations-write', revision], { primary: recommendation(`Add greeting ${i} to owned.txt.`), alternatives: [recommendation(`Add example ${i} to owned.txt.`, 'OPTIONAL')], boldIdea: `/neef idea ${i} — result ${i}` });
+    revision = saved.revision;
+  }
+  const again = f.run(['recommendations-write', revision], { primary: recommendation('Add greeting 2 to owned.txt.'), alternatives: [], boldIdea: '/neef idea 3 — result 3' });
+  const ideas = JSON.parse(fs.readFileSync(f.statePath().replace(/\.json$/, '.ideas.json'), 'utf8'));
+  assert.deepEqual(ideas.bold.map(item => item.text), ['/neef idea 3 — result 3', '/neef idea 7 — result 7', '/neef idea 6 — result 6', '/neef idea 5 — result 5', '/neef idea 4 — result 4']);
+  assert.equal(ideas.suggestions.length, 10);
+  assert.equal(ideas.suggestions[0].text, 'Add greeting 2 to owned.txt.');
+  assert.ok([...ideas.bold, ...ideas.suggestions].every(item => item.date === today));
+  const board = f.run(['status']).board;
+  assert.match(board, /^Bold ideas$/m);
+  assert.match(board, /^Suggestions$/m);
+  assert.ok(board.indexOf('/neef idea 3') < board.indexOf('/neef idea 7'));
+  assert.ok(fs.readFileSync(f.statePath(), 'utf8').split('\n').length < 40);
+  assert.equal(again.state.recommendations.boldIdea, '/neef idea 3 — result 3');
 });
 
 test('recommendation refresh preserves task and context, supports alternatives and no-action evaluation', t => {

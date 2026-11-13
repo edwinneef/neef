@@ -2,7 +2,7 @@
 
 Report the current task so the user can see progress, trust limits and the next action at a glance. Run helper `status` and keep its full output as evidence; this format changes only the skill reply. Status is read-only, including external state. Do not run checks, resume work or install anything.
 
-When helper `board` is present, open with it verbatim in a plain code block: a read-only view of saved scope: a progress line, then Now, Next and Done lanes and numbered parked ideas, where ⚑ marks a phase that needs the user or is blocked. Never offer to edit or move its cards; scope changes go through the normal commands. Then use a short list with these labels, normally one line each:
+When helper `board` is present, open with it verbatim in a plain code block: a read-only view of saved scope: a progress line, then Now, Next and Done lanes, numbered parked ideas and the dated idea board (the last 5 bold ideas and 10 suggestions, newest first), where ⚑ marks a phase that needs the user or is blocked. Never offer to edit or move its cards; scope changes go through the normal commands. Then use a short list with these labels, normally one line each:
 
 - **Task:** task name and progress. Retain any discussion-only boundary.
 - **Git:** actual branch, short commit and whether there are uncommitted changes. Surface discrepancies with saved state; do not silently treat saved progress as current.
