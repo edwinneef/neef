@@ -1372,9 +1372,21 @@ test('setup upgrades an unedited earlier direction block in place', t => {
 
 // Reverts the direction block to the release that wrote modes as `/neef next` instead of `/neef-next`.
 // Earlier releases closed the rule with a single direction and no alternatives or bold idea.
+// Reverts the rule that lets a reply stop to the release that required a bold idea on every reply.
+const threeSuggestions = text => {
+  const three = text
+    .replace('with `Suggestions` and a `Backlog` line, including', 'with `Suggestions`, a `Backlog` line and a `Bold idea`, including')
+    .replace(' When every remaining step is OPTIONAL, write `Good place to stop` above the list.', '')
+    .replace('(`backlog` in `node ~/.neef/neef.mjs status --brief`)', '(`needsYou` plus `onItsOwn` under `steps` in `node ~/.neef/neef.mjs status`)')
+    .replace(' Add a `Bold idea`, a copyable NEEF command with its intended result, only when there is a new one; never repeat a step or an earlier idea, and never invent one to fill the slot.', ' Close with one bold idea, a copyable NEEF command with its intended result; never repeat a step.');
+  assert.notEqual(three, text);
+  assert.match(three, /a `Backlog` line and a `Bold idea`, including.*under `steps` in.*Close with one bold idea/);
+  assert.doesNotMatch(three, /Good place to stop/);
+  return three;
+};
 // Reverts the three-suggestion rule to the release that closed with two lists of five.
 const twoLists = text => {
-  const lists = text
+  const lists = threeSuggestions(text)
     .replace(/with `Suggestions`, a `Backlog` line and a `Bold idea`, including[^\n]*?rather than guess\. Every step is a copyable/, 'with two lists of next steps, including replies to ordinary prompts without a NEEF invocation: `Needs you`, every step that cannot move without input from the user, such as a decision, verdict, approval or manual step, and `Can run on its own`, every step NEEF can do without the user. Show up to five per list, most valuable first, and write `Nothing right now` under an empty list. Every step is a copyable')
     .replace(' Close with one bold idea, a copyable', ' After the lists, task and mode replies may add one bold idea, a copyable');
   assert.notEqual(lists, text);
@@ -1427,7 +1439,7 @@ test('setup upgrades the spaced-mode direction block to hyphenated mode skills',
 test('setup upgrades the single-closing-direction block to allow alternatives and a bold idea', t => {
   const f = fixture(t);
   const current = fs.readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
-  assert.match(current, /Close with one bold idea/);
+  assert.match(current, /Add a `Bold idea`/);
   f.write('CLAUDE.md', singleClose(current));
   f.run(['setup']);
   assert.equal(fs.readFileSync(path.join(f.root, 'CLAUDE.md'), 'utf8'), current);
@@ -1436,9 +1448,23 @@ test('setup upgrades the single-closing-direction block to allow alternatives an
 test('setup upgrades the two-list block to three suggestions, a backlog count and a bold idea', t => {
   const f = fixture(t);
   const current = fs.readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
-  assert.match(current, /`Suggestions` shows up to three next steps in one list.*`needs you`.*`Backlog: 13 tasks left, 7 can run without you`.*Close with one bold idea/);
+  assert.match(current, /`Suggestions` shows up to three next steps in one list.*`needs you`.*`Backlog: 13 tasks left, 7 can run without you`/);
   f.write('CLAUDE.md', twoLists(current));
   f.run(['setup']);
+  assert.equal(fs.readFileSync(path.join(f.root, 'CLAUDE.md'), 'utf8'), current);
+});
+
+test('setup upgrades the mandatory-bold-idea block to the rule that lets a reply stop', t => {
+  const f = fixture(t);
+  const current = fs.readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+  // No bold idea is required, optional-only steps say so, an empty list still says so, and the count comes from the brief status.
+  assert.match(current, /with `Suggestions` and a `Backlog` line, including/);
+  assert.match(current, /write `Nothing right now` when there are none\. When every remaining step is OPTIONAL, write `Good place to stop` above the list\./);
+  assert.match(current, /`backlog` in `node ~\/\.neef\/neef\.mjs status --brief`/);
+  assert.match(current, /Add a `Bold idea`[^.]*only when there is a new one; never repeat a step or an earlier idea, and never invent one to fill the slot\./);
+  assert.doesNotMatch(current, /Close with one bold idea/);
+  f.write('CLAUDE.md', threeSuggestions(current));
+  assert.deepEqual(f.run(['setup']).directions.files, ['AGENTS.md', 'CLAUDE.md']);
   assert.equal(fs.readFileSync(path.join(f.root, 'CLAUDE.md'), 'utf8'), current);
 });
 
@@ -1454,7 +1480,7 @@ test('projects lists every saved project with its instruction version and --upda
   const f = fixture(t);
   f.run(['setup']);
   const current = fs.readFileSync(path.join(f.root, 'AGENTS.md'), 'utf8');
-  for (const name of ['AGENTS.md', 'CLAUDE.md']) f.write(name, twoLists(current));
+  for (const name of ['AGENTS.md', 'CLAUDE.md']) f.write(name, threeSuggestions(current));
   fs.writeFileSync(path.join(f.home, 'state', 'gone.json'), JSON.stringify({ project: path.join(f.root, '..', 'removed-project'), updated: '2026-10-01T00:00:00.000Z' }));
   const listed = f.run(['projects']);
   const own = listed.projects.find(item => item.root === fs.realpathSync.native(f.root) || item.root.toLowerCase() === f.root.toLowerCase());
@@ -1462,7 +1488,7 @@ test('projects lists every saved project with its instruction version and --upda
   assert.equal(own.files['AGENTS.md'], listed.currentInstructions - 1);
   assert.equal(listed.projects.find(item => item.root.endsWith('removed-project')).status, 'gone');
   assert.deepEqual(listed.summary, { current: 0, outdated: 1, edited: 0, noBlock: 0, gone: 1 });
-  assert.equal(fs.readFileSync(path.join(f.root, 'AGENTS.md'), 'utf8'), twoLists(current));
+  assert.equal(fs.readFileSync(path.join(f.root, 'AGENTS.md'), 'utf8'), threeSuggestions(current));
   const updated = f.run(['projects', '--update']);
   const after = updated.projects.find(item => item.root === own.root);
   assert.equal(after.status, 'current');
@@ -2650,7 +2676,9 @@ test('reply layout is defined once in follow-up and referenced by plan, challeng
   assert.match(followUp, /self-contained summary card/);
   assert.match(followUp, /never point back to earlier messages/);
   assert.match(followUp, /fenced code block/);
-  assert.match(followUp, /Every report also carries one bold idea/);
+  assert.match(followUp, /A report may carry one bold idea.*Offer it only when it is new/);
+  assert.match(followUp, /When every remaining step is OPTIONAL, open the section with `Good place to stop\.`/);
+  assert.match(followUp, /\*\*Bold idea:\*\* only when this report has a new one.*Omit the section otherwise\./);
   assert.match(followUp, /`Nothing right now` when both lists are empty/);
   assert.match(followUp, /Mark exactly one step `\(recommended\)`/);
   assert.match(followUp, /`needsYou:\[\{kind,action,reason\}\]`, `onItsOwn:\[\.\.\.\]`/);
