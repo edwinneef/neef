@@ -342,7 +342,7 @@ test('next reports busy instead of resume while another session holds the active
   // Host session ids inherited from the test runner are cleared so each call names its own session.
   const as = (session, args, input) => {
     const { NEEF_SESSION, CLAUDE_CODE_SESSION_ID, CODEX_THREAD_ID, ...env } = f.env(f.home);
-    const result = spawnSync(process.execPath, [helper, '--project', f.root, ...args], { encoding: 'utf8', input: input === undefined ? undefined : JSON.stringify(input), env: session ? { ...env, NEEF_SESSION: session } : env });
+    const result = spawnSync(process.execPath, [helper, '--project', f.root, ...args], { encoding: 'utf8', input: input === undefined ? undefined : JSON.stringify(input), env: typeof session === 'string' ? { ...env, NEEF_SESSION: session } : { ...env, ...session } });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     return JSON.parse(result.stdout);
   };
@@ -362,6 +362,9 @@ test('next reports busy instead of resume while another session holds the active
   fs.writeFileSync(claim, JSON.stringify({ session: 'session-a', task: 'Shared work', updated: new Date().toISOString() }));
   assert.equal(as(null, ['next']).resume, 'continue');
   assert.equal(as('session-a', ['next']).resume, 'continue');
+  // A Codex child launched from that Claude session inherits its id but is a different thread.
+  assert.equal(as({ CLAUDE_CODE_SESSION_ID: 'session-a', CODEX_THREAD_ID: 'codex-child' }, ['next']).busy.task, 'Shared work');
+  assert.equal(as({ CLAUDE_CODE_SESSION_ID: 'session-a' }, ['next']).resume, 'continue');
 });
 
 test('state revisions, locks, corruption and explicit backup recovery preserve data', t => {

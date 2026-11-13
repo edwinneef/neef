@@ -178,7 +178,8 @@ const stateFile = p => path.join(home(), 'state', `${p.id}.json`);
 // Hosts expose a stable id per conversation; without one the claim is skipped and nothing is blocked.
 const sessionFile = p => path.join(home(), 'sessions', `${p.id}.json`);
 const sessionLease = 30 * 60 * 1000;
-const currentSession = () => process.env.NEEF_SESSION || process.env.CLAUDE_CODE_SESSION_ID || process.env.CODEX_THREAD_ID || null;
+// Codex inherits CLAUDE_CODE_SESSION_ID when started from Claude Code, so its own thread id wins.
+const currentSession = () => process.env.NEEF_SESSION || process.env.CODEX_THREAD_ID || process.env.CLAUDE_CODE_SESSION_ID || null;
 function claimTask(p, task) {
   const session = currentSession();
   if (!session) return;
