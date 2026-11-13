@@ -1831,6 +1831,30 @@ test('next returns ordered advisory candidates and inspects changed Git state wi
   assert.equal(changed.requiresRevalidation, true);
 });
 
+test('status --brief gives the task, backlog counts and top three steps without board, context, notes or full lists', t => {
+  const f = fixture(t);
+  const missing = f.run(['status', '--brief']);
+  assert.deepEqual([missing.revision, missing.task, missing.progress, missing.backlog, missing.top], ['missing', null, null, { left: 0, withoutYou: 0 }, []]);
+  const step = (kind, label, index) => ({ kind, action: `${label} ${index} `.padEnd(600, 'a'), reason: 'r'.repeat(400) });
+  const needsYou = Array.from({ length: 20 }, (_, index) => step(index ? 'OPTIONAL' : 'RECOMMENDED', 'ask', index));
+  const onItsOwn = Array.from({ length: 20 }, (_, index) => step(index === 19 ? 'REQUIRED' : index ? 'OPTIONAL' : 'RECOMMENDED', 'run', index));
+  const saved = f.state(f.run(['setup']).revision, 'Brief task', { decisions: 'd'.repeat(2000), recommendations: { needsYou, onItsOwn } });
+  const output = spawnSync(process.execPath, [helper, '--project', f.root, 'status', '--brief'], { encoding: 'utf8', env: f.env(f.home) }).stdout;
+  assert.ok(Buffer.byteLength(output) < 4096, `${Buffer.byteLength(output)} bytes`);
+  const brief = JSON.parse(output);
+  assert.deepEqual(Object.keys(brief), ['project', 'revision', 'task', 'progress', 'branch', 'head', 'importance', 'discrepancies', 'hasPlan', 'backlog', 'top']);
+  assert.deepEqual([brief.revision, brief.task, brief.progress, brief.branch, brief.hasPlan], [saved.revision, 'Brief task', 'active', 'main', false]);
+  assert.deepEqual(brief.backlog, { left: 40, withoutYou: 20 });
+  // REQUIRED, then RECOMMENDED, then OPTIONAL; within a kind, what needs the operator first.
+  assert.deepEqual(brief.top.map(item => [item.action.slice(0, 6).trim(), item.kind, item.needsYou]),
+    [['run 19', 'REQUIRED', false], ['ask 0', 'RECOMMENDED', true], ['run 0', 'RECOMMENDED', false]]);
+  fs.writeFileSync(f.statePath(), '{broken');
+  const full = f.run(['status']);
+  const corrupt = f.run(['status', '--brief']);
+  assert.match(corrupt.error, /Invalid state preserved/);
+  assert.deepEqual([corrupt.error, corrupt.backup, corrupt.revision, corrupt.task], [full.error, full.backup, full.revision, null]);
+});
+
 test('a bold idea is saved with recommendations and returned by next', t => {
   const f = fixture(t);
   const setup = f.run(['setup']);

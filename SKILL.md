@@ -17,7 +17,7 @@ The zones organize every invocation. Show headings only when useful; small tasks
 - **Evaluate:** Match every required outcome to its result and evidence. Missing required evidence keeps development unfinished.
 - **Follow-up:** Report results, changed files, checks and required gaps, then give the advisory suggestions.
 
-Implement and verify the request, commit only owned work when safe, and save continuity for either agent. Otherwise record the blocker and preserved work. NEEF authorizes scoped local edits, checks and commits on the branch that is checked out, in the main folder or a linked worktree; create no branches or worktrees and never switch branches. Off main, name the branch in the report. Pushing, destructive actions and scope expansion need separate user authorization; merge only per `references/completion.md`.
+Implement and verify the request, commit only owned work when safe, and save continuity for either agent. Otherwise record the blocker and preserved work. NEEF authorizes scoped local edits, checks and commits on the checked-out branch; create no branches or worktrees and never switch branches. Off main, report the branch. Pushing, destructive actions and scope expansion need separate user authorization; merge only per `references/completion.md`.
 
 Use Node 20+ and Git with `~/.neef/neef.mjs`; resolve the actual home and quote absolute paths. Run `node <helper> help` when command contracts are missing or changed. Commands use cwd as the project; `--project <path>` overrides it.
 
@@ -45,7 +45,7 @@ Route leading mode commands first; match bare modes exactly. Ask for missing sub
 
 ## Navigate and Execute
 
-Read applicable AGENTS.md, CLAUDE.md, relevant code and helper `status`; `next` already includes status. `begin` bootstraps missing `context`. Cached facts never override current instructions. On persistence failure, preserve state, report it and continue independent work. Reconcile stale state; retain unfinished work unless the user replaces it. During an unfinished plan, an outside request first gets park-or-switch (`references/plan.md`). Before edits that may be committed, run `begin <short-task-slug>` for a baseline. Commits require the returned baseline ID.
+Read applicable AGENTS.md, CLAUDE.md, relevant code and helper `status --brief` (full `status` for unfinished work or problems); `next` already includes status. `begin` bootstraps missing `context`. Cached facts never override current instructions. On persistence failure, preserve state, report it and continue independent work. Reconcile stale state; retain unfinished work unless the user replaces it. During an unfinished plan, an outside request first gets park-or-switch (`references/plan.md`). Before edits that may be committed, run `begin <short-task-slug>` for a baseline. Commits require the returned baseline ID.
 
 For development and before task-state writes, read `references/completion.md`. Make the smallest change with focused checks; fix introduced regressions. Keep existing stacks, patterns and tooling. If `begin` reports `greenfield`, read `references/start.md`. Runnable work ends verified to start, with run command or URL. Ordinary work needs no extra plan, suite, review or interview. Execute authorized plan phases until complete or no safe work remains. Inspect and use reasonable defaults; ask only for essential missing input or authority. Continue independent work around blockers. Batch independent calls.
 
