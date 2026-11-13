@@ -993,7 +993,7 @@ function pruneBaselines() {
   if (!exists(directory)) return;
   const referenced = new Set();
   const stateDir = path.join(home(), 'state');
-  if (exists(stateDir)) for (const name of fs.readdirSync(stateDir).filter(name => name.endsWith('.json') && !name.endsWith('.plan.json'))) {
+  if (exists(stateDir)) for (const name of fs.readdirSync(stateDir).filter(name => name.endsWith('.json') && !name.endsWith('.plan.json') && !name.endsWith('.ideas.json'))) {
     try { const baseline = json(path.join(stateDir, name)).baseline; if (baseline) referenced.add(`${baseline}.json`); } catch { /* Doctor reports invalid state. */ }
   }
   const cutoff = Date.now() - baselineRetention;
@@ -1249,7 +1249,7 @@ export function doctor() {
   catch { add('state directory permissions', false, 'Reinstall or correct state directory permissions'); }
   if (exists(stateDir)) for (const name of fs.readdirSync(stateDir)) {
     if (name.endsWith('.lock')) add(`state lock ${name}`, false, 'Inspect recorded owner; remove only if confirmed stale');
-    if (!name.endsWith('.json') || name.endsWith('.plan.json')) continue;
+    if (!name.endsWith('.json') || name.endsWith('.plan.json') || name.endsWith('.ideas.json')) continue;
     try { const value = json(path.join(stateDir, name)); add(`state ${name}`, validState(value, { root: value.project }), 'Inspect preserved file and .bak; use state-recover'); }
     catch { add(`state ${name}`, false, 'Inspect preserved file and .bak; use state-recover'); }
   }

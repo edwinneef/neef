@@ -1699,6 +1699,7 @@ test('the idea board keeps the newest 5 bold ideas and 10 suggestions with dates
   assert.ok(board.indexOf('/neef idea 3') < board.indexOf('/neef idea 7'));
   assert.ok(fs.readFileSync(f.statePath(), 'utf8').split('\n').length < 40);
   assert.equal(again.state.recommendations.boldIdea, '/neef idea 3 — result 3');
+  assert.equal(f.run(['doctor']).checks.some(check => check.name.endsWith('.ideas.json')), false);
 });
 
 test('recommendation refresh preserves task and context, supports alternatives and no-action evaluation', t => {
