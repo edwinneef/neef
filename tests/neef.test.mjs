@@ -2742,10 +2742,19 @@ test('reply layout is defined once in follow-up and referenced by plan, challeng
 test('approval prompts offer a read-only check with the other agent', () => {
   const read = n => fs.readFileSync(new URL(`../references/${n}.md`, import.meta.url), 'utf8');
   const peer = read('peer-check');
-  assert.match(peer, /Claude Code checks with Codex; Codex checks with Claude/);
   assert.match(peer, /Choosing it is not approval/);
   assert.match(peer, /codex exec --sandbox read-only/);
   assert.match(peer, /claude -p --permission-mode plan/);
+  assert.match(peer, /Step 1 · agent/);
+  assert.match(peer, /Step 2 · setting/);
+  for (const row of [
+    /Fable 5\.2 high \| `--model claude-fable-5-2 --effort high`/,
+    /Opus 5\.5 high \| `--model claude-opus-5-5 --effort high`/,
+    /Sonnet 5\.5 medium \| `--model claude-sonnet-5-5 --effort medium`/,
+    /gpt-6-astra high \| `-m gpt-6-astra -c model_reasoning_effort=high`/,
+    /gpt-6\.1-terra xhigh \| `-m gpt-6\.1-terra -c model_reasoning_effort=xhigh`/,
+    /gpt-6\.1-sol medium \| `-m gpt-6\.1-sol -c model_reasoning_effort=medium`/,
+  ]) assert.match(peer, row);
   for (const g of ['✅ Applied', '🟡 Partly applied', '❌ Rejected']) assert.ok(peer.split(/\r?\n/).includes(`**${g}**`), g);
   assert.match(peer, /### Second opinion · /);
   assert.match(peer, /list every finding once/);
