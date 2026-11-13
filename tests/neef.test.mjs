@@ -1637,11 +1637,29 @@ test('four-zone completion rejects missing or malformed outcome records without 
     f.state(saved.revision, saved.state.task, { ...complete, outcomes }, /Invalid outcomes/);
     assert.equal(fs.readFileSync(f.statePath(), 'utf8'), raw);
   }
-  for (const [field, limit] of [['id', 60], ['description', 400], ['evidence', 800]]) {
+  for (const [field, limit] of [['id', 60], ['description', 400], ['evidence', 4000]]) {
     f.state(saved.revision, saved.state.task, { outcomes: [{ ...passedOutcomes[0], [field]: 'x'.repeat(limit + 1) }] }, /Invalid outcomes/);
   }
   assert.equal(fs.existsSync(`${f.statePath()}.bak`), false);
   assert.equal(fs.readFileSync(f.statePath(), 'utf8'), raw);
+});
+
+test('outcome evidence has its own 32 KiB byte budget apart from the 8 KiB task notes', t => {
+  const f = fixture(t, false);
+  const outcome = (id, evidence) => ({ id, description: `Outcome ${id}`, required: true, status: 'passed', evidence });
+  const rich = Array.from({ length: 8 }, (_, index) => outcome(`o${index}`, 'e'.repeat(3000)));
+  const done = { progress: 'complete', importance: 'important', verification: 'Checked', recommendations: { primary: null, alternatives: [], reason: 'Fixture task is complete.' } };
+  const saved = f.state('missing', 'Rich evidence', { ...done, outcomes: rich });
+  assert.deepEqual(saved.state.outcomes, rich);
+  // A later same-task save that omits outcomes keeps them.
+  assert.deepEqual(f.state(saved.revision, 'Rich evidence', { decisions: 'Later note' }).state.outcomes, rich);
+  // The cap counts serialized UTF-8 bytes: four two-byte fills, then one sized to land exactly on it.
+  const wide = [0, 1, 2, 3].map(index => outcome(`w${index}`, 'é'.repeat(3700)));
+  const room = 32768 - Buffer.byteLength(JSON.stringify([...wide, outcome('last', '')]));
+  const revision = f.run(['status']).revision;
+  f.state(revision, 'Rich evidence', { outcomes: [...wide, outcome('last', 'x'.repeat(room + 1))] }, /Outcomes must stay under 32 KiB \(this write: 32769 bytes\)/);
+  const full = f.state(revision, 'Rich evidence', { outcomes: [...wide, outcome('last', 'x'.repeat(room))] });
+  f.state(full.revision, 'Rich evidence', { decisions: 'x'.repeat(9000) }, /State must stay under 8 KiB and 40 lines/);
 });
 
 test('four-zone completion requires every required outcome to pass but allows optional unfinished checks', t => {

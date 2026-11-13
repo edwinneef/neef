@@ -199,6 +199,7 @@ function otherSession(p, state) {
 }
 const planFile = p => stateFile(p).replace(/.json$/, '.plan.json');
 const planLimit = 32768;
+const outcomeLimit = 32768;
 // The idea board lives beside the state so its history never pushes the state past its size limit.
 const ideasFile = p => stateFile(p).replace(/.json$/, '.ideas.json');
 const ideaLimits = { bold: 5, suggestions: 10 };
@@ -532,9 +533,12 @@ function saveState(p, current, value) {
     if (field) contents = `${contents.slice(0, -2)},\n  "${key}": ${JSON.stringify(field)}\n}`;
   }
   contents += '\n';
-  const bytes = Buffer.byteLength(contents);
-  const lines = contents.split('\n').length;
-  if (bytes > 8192 || lines > 40) fail(`State must stay under 8 KiB and 40 lines (this write: ${bytes} bytes, ${lines} lines); shorten outcomes or notes`);
+  // Evidence has its own budget, so rich outcome records never squeeze the task notes.
+  const outcomeBytes = outcomes ? Buffer.byteLength(JSON.stringify(outcomes)) : 0;
+  if (outcomeBytes > outcomeLimit) fail(`Outcomes must stay under 32 KiB (this write: ${outcomeBytes} bytes); shorten evidence or link an artifact`);
+  const bytes = Buffer.byteLength(contents) - outcomeBytes;
+  const lines = contents.split('\n').length - (outcomes ? 1 : 0);
+  if (bytes > 8192 || lines > 40) fail(`State must stay under 8 KiB and 40 lines (this write: ${bytes} bytes, ${lines} lines); shorten notes`);
   // A plan-free state leaves any old plan file in place so its .bak can still recover it.
   const plans = planFile(p);
   if (planContents && (!exists(plans) || read(plans) !== planContents)) {
@@ -639,7 +643,7 @@ function validOutcomes(value) {
   return Array.isArray(value) && value.length > 0
     && value.every(outcome => outcome && shortText(outcome.id, 60) && shortText(outcome.description, 400)
       && typeof outcome.required === 'boolean' && ['pending', 'passed', 'failed', 'blocked'].includes(outcome.status)
-      && typeof outcome.evidence === 'string' && outcome.evidence.length <= 800
+      && typeof outcome.evidence === 'string' && outcome.evidence.length <= 4000
       && (outcome.status !== 'passed' || !!outcome.evidence.trim()))
     && value.some(outcome => outcome.required)
     && new Set(value.map(outcome => outcome.id)).size === value.length;
