@@ -1476,6 +1476,34 @@ test('setup upgrades the one-primary-direction block to the current closing rule
   assert.equal(fs.readFileSync(path.join(f.root, 'CLAUDE.md'), 'utf8'), current);
 });
 
+test('projects --update commits the upgraded instruction files only when they had no uncommitted changes', t => {
+  const f = fixture(t);
+  f.run(['setup']);
+  const current = fs.readFileSync(path.join(f.root, 'AGENTS.md'), 'utf8');
+  for (const name of ['AGENTS.md', 'CLAUDE.md']) f.write(name, threeSuggestions(current));
+  f.git('add', '--', 'AGENTS.md', 'CLAUDE.md');
+  f.git('commit', '-m', 'Older instructions');
+  f.write('CLAUDE.md', `${threeSuggestions(current)}\nMy own note.\n`);
+  f.write('user.txt', 'user edit\n');
+  const own = f.run(['projects', '--update']).projects.find(item => item.updated);
+  assert.deepEqual(own.updated, ['AGENTS.md', 'CLAUDE.md']);
+  assert.deepEqual(own.committed, ['AGENTS.md']);
+  assert.equal(own.commit, f.git('rev-parse', '--short', 'HEAD'));
+  assert.match(own.commitSkipped, /CLAUDE\.md left uncommitted: CLAUDE\.md had uncommitted changes/);
+  assert.equal(f.git('show', '--name-only', '--format=%s', 'HEAD'), `Update the NEEF next-prompt instructions to version ${own.files['AGENTS.md']}\n\nAGENTS.md`);
+  assert.equal(f.git('status', '--porcelain'), 'M CLAUDE.md\n M user.txt');
+
+  f.git('commit', '-q', '-m', 'Current instructions', '--', 'CLAUDE.md');
+  f.write('AGENTS.md', threeSuggestions(current));
+  f.git('commit', '-q', '-m', 'Older again', '--', 'AGENTS.md');
+  f.git('checkout', '-q', '--detach');
+  const detached = f.run(['projects', '--update']).projects.find(item => item.updated);
+  assert.deepEqual(detached.updated, ['AGENTS.md']);
+  assert.equal(detached.commit, undefined);
+  assert.match(detached.commitSkipped, /detached HEAD/);
+  assert.equal(f.git('status', '--porcelain', '--', 'AGENTS.md'), 'M AGENTS.md');
+});
+
 test('projects lists every saved project with its instruction version and --update upgrades outdated ones', t => {
   const f = fixture(t);
   f.run(['setup']);
