@@ -56,7 +56,13 @@ const home = () => path.resolve(process.env.NEEF_HOME || path.join(os.homedir(),
 const exists = p => fs.existsSync(p);
 const read = p => fs.readFileSync(p, 'utf8');
 const json = p => JSON.parse(read(p));
-const print = value => process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+// The state's inner revision is file bookkeeping; output shows only the revision that writes expect.
+const shown = value => {
+  if (!value?.state || !Object.hasOwn(value.state, 'revision')) return value;
+  const { revision: _, ...state } = value.state;
+  return { ...value, state };
+};
+const print = value => process.stdout.write(`${JSON.stringify(shown(value), null, 2)}\n`);
 
 function git(root, args, options = {}) {
   const result = spawnSync('git', ['-C', root, ...args], {

@@ -1788,7 +1788,7 @@ test('the plan ribbon names working, stuck, waiting and complete states over a p
 test('legacy completed states remain readable and require outcome records on their next completion write', t => {
   const f = fixture(t, false);
   const first = f.state('missing', 'Legacy task');
-  const legacy = { ...first.state, progress: 'complete', verification: 'Historical check.' };
+  const legacy = { ...JSON.parse(fs.readFileSync(f.statePath(), 'utf8')), progress: 'complete', verification: 'Historical check.' };
   const raw = JSON.stringify(legacy);
   fs.writeFileSync(f.statePath(), raw);
   const current = f.run(['status']);
@@ -1811,7 +1811,7 @@ test('outcomes remain compact and survive setup, recommendation refresh and reco
   const raw = fs.readFileSync(f.statePath(), 'utf8');
   assert.ok(Buffer.byteLength(raw) <= 8192);
   assert.ok(raw.split('\n').length <= 40);
-  const bad = { ...advice.state, outcomes: [{ ...passedOutcomes[0], evidence: '' }] };
+  const bad = { ...JSON.parse(raw), outcomes: [{ ...passedOutcomes[0], evidence: '' }] };
   fs.writeFileSync(f.statePath(), JSON.stringify(bad));
   const corrupt = f.run(['status']);
   assert.match(corrupt.error, /Invalid state preserved/);
@@ -1855,6 +1855,33 @@ test('next returns ordered advisory candidates and inspects changed Git state wi
   assert.deepEqual(changed.candidates, [primary, alternative]);
   assert.ok(changed.discrepancies.some(message => message.includes('recommendations were saved')));
   assert.equal(changed.requiresRevalidation, true);
+});
+
+test('helper output shows one revision, the one writes expect; the saved file keeps its own', t => {
+  const f = fixture(t);
+  const inner = () => JSON.parse(fs.readFileSync(f.statePath(), 'utf8')).revision;
+  const one = output => {
+    assert.equal(Object.hasOwn(output.state, 'revision'), false);
+    assert.equal(typeof output.revision, 'string');
+    return output;
+  };
+  const first = one(f.state('missing', 'One revision'));
+  assert.match(inner(), /^[0-9a-f-]{36}$/);
+  assert.equal(one(f.run(['status'])).revision, first.revision);
+  one(f.run(['next']));
+  const advice = one(f.run(['recommendations-write', first.revision], noRecommendation));
+  const unchanged = one(f.run(['recommendations-write', advice.revision], noRecommendation));
+  const parked = one(f.run(['park', unchanged.revision], { add: 'Later' }));
+  const second = one(f.state(parked.revision, 'One revision'));
+  // A file saved before this change, inner revision included, still reads and takes a write.
+  const before = inner();
+  assert.equal(one(f.run(['status'])).revision, second.revision);
+  one(f.state(second.revision, 'One revision'));
+  assert.notEqual(inner(), before);
+  fs.writeFileSync(f.statePath(), '{broken');
+  const corrupt = f.run(['status']);
+  one(f.run(['state-recover', corrupt.revision]));
+  assert.match(inner(), /^[0-9a-f-]{36}$/);
 });
 
 test('status --brief gives the task, backlog counts and top three steps without board, context, notes or full lists', t => {
@@ -2116,7 +2143,7 @@ test('missing and legacy recommendation state stays read-only; recovery preserve
   assert.deepEqual(corrupt.candidates, []);
   const recovered = f.run(['state-recover', corrupt.revision]);
   assert.deepEqual(recovered.state.recommendations, first.state.recommendations);
-  const legacy = { ...recovered.state };
+  const legacy = JSON.parse(fs.readFileSync(file, 'utf8'));
   delete legacy.recommendations;
   fs.writeFileSync(file, JSON.stringify(legacy));
   assert.deepEqual(f.run(['next']).candidates, []);
