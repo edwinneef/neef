@@ -16,4 +16,17 @@ The check makes no project edits, commits, task-state writes or extra installs. 
 
 ## Use the result
 
-Verify each finding against source before acting on it; the other agent can be wrong. Fold supported fixes into the item (for a plan: update and re-save it per `references/plan.md`), and list rejected findings with a one-line reason. Then show the updated summary with a short "Second opinion" section naming the agent, what changed and what was rejected, and ask the same approval question again. That second question offers only approve or request changes.
+Verify each finding against source before acting on it; the other agent can be wrong. Fold supported fixes into the item (for a plan: update and re-save it per `references/plan.md`).
+
+Then show the updated summary with a "Second opinion" section. Its first line names the agent (or same-model fallback) and the count, such as `Codex · 6 points: 3 applied, 1 partly, 2 rejected`. Below it, list every finding once, grouped by outcome, keeping the reviewer's order within each group:
+
+```
+Applied
+  ✓ <finding in a few words> → <what changed, and where: phase, decision or criterion>
+Partly applied
+  ◐ <finding> → <what was taken> · <what was left out and why>
+Rejected
+  ✗ <finding> → <one-line reason, citing the source fact when one settles it>
+```
+
+Merge duplicate findings into one line. Omit an empty group. Use plain words from the active explanation style, not the reviewer's jargon. Then ask the same approval question again. That second question offers only approve or request changes.
