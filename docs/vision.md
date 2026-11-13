@@ -19,7 +19,7 @@ Builders who use Claude Code or Codex to make things (an app, a CLI tool, a webs
 - Save each step so it can be undone.
 - Leave the owner's own edits alone.
 - Ask only when the decision is the owner's to make.
-- End every report with the next step and, separately, one bold idea.
+- End every report with the next step. Add a bold idea, separately, only when there is a new one.
 
 ## Never
 
