@@ -620,6 +620,18 @@ test('the README mode table is generated from the catalog and lists the same mod
   for (const guide of table.matchAll(/\]\((references\/[a-z-]+\.md)\)/g)) assert.ok(fs.existsSync(fileURLToPath(new URL(`../${guide[1]}`, import.meta.url))), guide[1]);
 });
 
+test('the site command list shows the seven workflow commands, the three start commands first', () => {
+  const content = fs.readFileSync(fileURLToPath(new URL('../site/src/content.ts', import.meta.url)), 'utf8');
+  const modes = content.match(/export const modes[^=]*= \[\n([\s\S]*?)\n\];/)?.[1];
+  const shown = [...modes.matchAll(/^ {2}\['\{neef\} ([^ ']+)/gm)].map(match => match[1].startsWith('<') ? 'task' : match[1]);
+  const help = JSON.parse(spawnSync(process.execPath, [helper, 'help'], { encoding: 'utf8' }).stdout);
+  const name = usage => usage.startsWith('<') ? 'task' : usage.split(' ')[0];
+  const workflow = help.groups.filter(group => group.intent !== 'Understand the project and installation').flatMap(group => group.commands.map(({ command }) => name(command)));
+  assert.equal(shown.length, 7);
+  assert.deepEqual([...shown].sort(), [...workflow].sort());
+  assert.deepEqual(shown.slice(0, 3).sort(), help.start.map(name).sort());
+});
+
 test('non-empty non-Git project supports state without creating Git or scaffolding', t => {
   const f = fixture(t, false);
   f.write('notes.txt', 'existing user file\n');

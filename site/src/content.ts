@@ -135,11 +135,9 @@ export type Effect = 'changes your project' | 'scratch folder only' | 'changes n
 export const modes: [command: string, what: string, effect: Effect][] = [
   ['{neef} <what you want>', 'Build or change something.', 'changes your project'],
   ['{neef} next', 'Finish what’s open, or do the most useful next thing.', 'changes your project'],
+  ['{neef} ask <goal>', 'Not sure how to ask? It writes the command for you.', 'changes nothing'],
   ['{neef} shape <idea>', 'A few sharp questions, then it builds.', 'changes your project'],
-  ['{neef} prototype <idea>', 'A clickable demo in a scratch folder.', 'scratch folder only'],
   ['{neef} plan <feature>', 'All questions first, a saved phased plan, one sign-off, then it builds alone.', 'changes your project'],
+  ['{neef} prototype <idea>', 'A clickable demo in a scratch folder.', 'scratch folder only'],
   ['{neef} challenge <topic>', 'An honest, ranked review.', 'changes nothing'],
-  ['{neef} options', 'A few good choices with reasons.', 'changes nothing'],
-  ['{neef} ask <goal>', 'Not sure which one? It writes the command for you.', 'changes nothing'],
-  ['{neef} help', 'Every command, flag and alias, grouped by what you want.', 'changes nothing'],
 ];
