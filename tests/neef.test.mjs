@@ -373,6 +373,12 @@ test('state revisions, locks, corruption and explicit backup recovery preserve d
   const first = f.state('missing', 'First task');
   const second = f.state(first.revision, 'Current task');
   f.state(first.revision, 'Stale overwrite', {}, /Stale state revision/);
+  // The error names what is saved now and the revision status returns, on every write path.
+  const named = new RegExp(`Saved now: task "Current task", active, updated \\S+; revision ${second.revision}$`);
+  assert.equal(f.run(['status']).revision, second.revision);
+  f.state(first.revision, 'Stale overwrite', {}, named);
+  f.run(['recommendations-write', first.revision], { primary: null, alternatives: [], reason: 'Nothing supported.' }, named);
+  f.run(['park', first.revision], { add: 'Later' }, named);
   assert.equal(f.run(['status']).state.task, 'Current task');
   const file = f.statePath();
   fs.writeFileSync(`${file}.lock`, '{"pid":123,"time":"test-owner"}');

@@ -583,6 +583,13 @@ function taskStart(p, previous, head) {
   return candidates.find(candidate => ancestor(candidate.head))?.head ?? head;
 }
 
+// A stale write names what is saved now, so the caller sees whose work it would overwrite before retrying.
+function requireRevision(current, expected) {
+  if (current.revision === expected) return;
+  const now = current.state ? `task "${current.state.task}", ${current.state.progress}, updated ${current.state.updated}` : 'no task';
+  fail(`Stale state revision; reread and reconcile. Saved now: ${now}; revision ${current.revision}`);
+}
+
 function stateWrite(p, expected, input) {
   const file = stateFile(p);
   const errors = stateInputErrors(input);
@@ -590,7 +597,7 @@ function stateWrite(p, expected, input) {
   return lock(file, () => {
     const current = stateRead(p);
     if (current.error) fail(current.error);
-    if (current.revision !== expected) fail('Stale state revision; reread and reconcile');
+    requireRevision(current, expected);
     if (input.progress === 'complete' && !Object.hasOwn(input, 'recommendations')) fail('Completed tasks require evaluated recommendations; provide needsYou:[] and onItsOwn:[] with a reason when none is supported');
     const actual = snapshot(p);
     const value = { version: 1, project: p.root, revision: crypto.randomUUID(), updated: new Date().toISOString(),
@@ -727,7 +734,7 @@ function recommendationsWrite(p, expected, input) {
   return lock(stateFile(p), () => {
     const current = stateRead(p);
     if (current.error) fail(current.error);
-    if (current.revision !== expected) fail('Stale state revision; reread and reconcile');
+    requireRevision(current, expected);
     const actual = snapshot(p);
     const state = current.state || { version: 1, project: p.root, revision: crypto.randomUUID(), updated: new Date().toISOString(),
       task: '', progress: 'complete', branch: actual.branch, head: actual.head, baseline: null, decisions: '', verification: '', next: '', blockers: '' };
@@ -746,7 +753,7 @@ function park(p, expected, input) {
   return lock(stateFile(p), () => {
     const current = stateRead(p);
     if (current.error) fail(current.error);
-    if (current.revision !== expected) fail('Stale state revision; reread and reconcile');
+    requireRevision(current, expected);
     const hasAdd = Object.hasOwn(input ?? {}, 'add'), hasRemove = Object.hasOwn(input ?? {}, 'remove');
     if (hasAdd === hasRemove) fail('Provide exactly one of add (the idea in one line) or remove (its text or 1-based position)');
     const actual = snapshot(p);
@@ -1101,7 +1108,7 @@ function setup(p, minimal = false) {
   return lock(file, () => {
     const current = stateRead(p);
     if (current.error) fail(current.error);
-    if (current.revision !== before.revision) fail('Stale state revision; reread and reconcile');
+    requireRevision(current, before.revision);
     const directions = minimal ? null : projectDirections(p);
     if (directions?.files.length) Object.assign(context, discover(p, minimal).context);
     if (current.state?.context?.fingerprint === context.fingerprint) context.architecture = current.state.context.architecture || '';
@@ -1123,7 +1130,7 @@ function contextWrite(p, expected, input) {
   return lock(stateFile(p), () => {
     const current = stateRead(p);
     if (current.error) fail(current.error);
-    if (current.revision !== expected) fail('Stale state revision; reread and reconcile');
+    requireRevision(current, expected);
     if (!current.state?.context) fail('Discover project context first with setup or bootstrap');
     if (current.state.context.architecture === input.architecture) return current;
     return saveState(p, current, { ...current.state, context: { ...current.state.context, architecture: input.architecture } });
