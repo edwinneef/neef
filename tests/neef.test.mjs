@@ -63,7 +63,7 @@ function fixture(t, initialize = true) {
     git('commit', '-m', 'Initial fixture');
   }
   const prepare = (baseline, files = ['owned.txt'], message = 'Implement change', error) => run(['prepare', baseline], { files, message }, error);
-  const state = (revision, task = 'Implement feature', extra = {}, error) => run(['state-write', revision], { task, progress: 'active', ...extra }, error);
+  const state = (revision, task = 'Implement feature', extra = {}, error) => run(['state-write', revision], { task, progress: 'active', checks: ['0 node --test'], ...extra }, error);
   const statePath = () => path.join(home, 'state', fs.readdirSync(path.join(home, 'state')).find(name => name.endsWith('.json') && !name.endsWith('.plan.json') && !name.endsWith('.ideas.json')));
   // Direct helper calls share the fixture's isolated Git configuration.
   const env = neefHome => ({ ...process.env, NEEF_HOME: neefHome, GIT_CONFIG_GLOBAL: gitConfig, GIT_CONFIG_NOSYSTEM: '1' });
@@ -442,7 +442,7 @@ function worktreeFixture(t) {
     fs.writeFileSync(path.join(root, name), value);
     const reviewed = run(['prepare', begin.baseline], { files: [name], message: `Change ${name} in worktree` });
     const committed = run(['commit', reviewed.token]);
-    run(['state-write', committed.revision], { task: 'Worktree task', progress: 'complete', outcomes: passedOutcomes, verification: 'Fixture assertions passed', recommendations: { primary: null, alternatives: [], reason: 'Fixture worktree task is complete.' } });
+    run(['state-write', committed.revision], { task: 'Worktree task', progress: 'complete', checks: ['0 node --test'], outcomes: passedOutcomes, verification: 'Fixture assertions passed', recommendations: { primary: null, alternatives: [], reason: 'Fixture worktree task is complete.' } });
   };
   return { ...f, worktree: root, wrun: run, finish };
 }
@@ -1740,6 +1740,59 @@ test('legacy completed states remain readable and require outcome records on the
   const upgraded = f.state(current.revision, legacy.task, { progress: 'complete', outcomes: passedOutcomes, recommendations: noRecommendation });
   assert.deepEqual(upgraded.state.outcomes, passedOutcomes);
   assert.equal(upgraded.state.verification, legacy.verification);
+});
+
+test('completion requires executed checks and rejects a vague verification note', async t => {
+  const f = fixture(t);
+  const saved = f.state(f.run(['status']).revision, 'Add check evidence');
+  const complete = { progress: 'complete', recommendations: noRecommendation };
+  const note = 'Ran the fixture suite';
+
+  f.state(saved.revision, 'Add check evidence', { ...complete, verification: 'done', checks: ['0 node --test'] }, /not just "done"/);
+  f.state(saved.revision, 'Add check evidence', { ...complete, verification: 'looks good', checks: ['0 node --test'] }, /not just "looks good"/);
+  f.state(saved.revision, 'Add check evidence', { ...complete, verification: note, checks: [] }, /require checks/);
+  f.state(saved.revision, 'Add check evidence', { ...complete, verification: note, checks: ['node --test'] }, /exit code/);
+  f.state(saved.revision, 'Add check evidence', { ...complete, verification: note, checks: ['1 node --test'] }, /at least one exit 0/);
+  f.state(saved.revision, 'Add check evidence', { ...complete, verification: note, checks: Array(7).fill('0 node --test') }, /at most 6 checks/);
+  f.state(saved.revision, 'Add check evidence', { ...complete, verification: note, checks: [`0 ${'x'.repeat(121)}`] }, /120 characters/);
+  f.state(saved.revision, 'Add check evidence', { progress: 'complete', verification: note, checks: 'x' }, /checks must be an array of strings/);
+
+  const done = f.state(saved.revision, 'Add check evidence', { ...complete, verification: note, checks: ['0 node --test', '1 node --test --test-name-pattern=missing'] });
+  assert.equal(done.state.progress, 'complete');
+  assert.deepEqual(done.state.checks, ['0 node --test', '1 node --test --test-name-pattern=missing']);
+});
+
+test('checks carry through same-task checkpoints and reset for a different task', async t => {
+  const f = fixture(t);
+  const saved = f.state(f.run(['status']).revision, 'Carry checks');
+  const carried = f.run(['state-write', saved.revision], { task: 'Carry checks', progress: 'active', verification: 'Ran the suite' });
+  assert.deepEqual(carried.state.checks, ['0 node --test']);
+
+  const fresh = f.run(['state-write', carried.revision], { task: 'Different task', progress: 'active', verification: 'Ran the suite' });
+  assert.equal(fresh.state.checks, undefined);
+});
+
+test('six checks still fit the state budget', async t => {
+  const f = fixture(t);
+  const saved = f.state(f.run(['status']).revision, 'Six checks');
+  const done = f.state(saved.revision, 'Six checks', {
+    progress: 'complete', verification: 'Ran six checks',
+    checks: ['0 node --test', '0 npm run lint', '0 npm run build', '0 npm run types', '0 npm run audit', '1 npm run e2e'],
+    recommendations: noRecommendation });
+  const bytes = fs.statSync(f.statePath()).size;
+  assert.ok(bytes < 8192, `state is ${bytes} bytes`);
+  assert.equal(done.state.progress, 'complete');
+});
+
+test('completed states with outcomes but no checks stay readable', t => {
+  const f = fixture(t, false);
+  const saved = f.state('missing', 'Pre-checks task', { progress: 'complete', verification: 'Ran it', outcomes: passedOutcomes, recommendations: noRecommendation });
+  const { checks: _, ...legacy } = JSON.parse(fs.readFileSync(f.statePath(), 'utf8'));
+  fs.writeFileSync(f.statePath(), JSON.stringify({ ...legacy, verification: 'done' }));
+  assert.equal(saved.state.progress, 'complete');
+  const current = f.run(['status']);
+  assert.equal(current.error, undefined);
+  assert.equal(current.state.progress, 'complete');
 });
 
 test('outcomes remain compact and survive setup, recommendation refresh and recovery', t => {

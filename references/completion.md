@@ -14,6 +14,8 @@ Before implementing, identify the requested outcomes from the prompt, relevant s
 
 Records stay light. An ordinary task keeps what is needed to resume it: the task, a `verification` note saying what was done and how it was checked, and the next step. It completes on a nonempty `verification`; write no `outcomes` for it. Full `outcomes` records are for work with a saved plan and tasks at `important`, where the helper requires them.
 
+Every completion records `checks`: executed commands with their exit code, `"<exit code> <command>"`, at most 6 entries and 120 characters per command, at least one at exit 0. Keep the failing ones when there are any. Same-task saves inherit `checks`; a different task starts empty. The `verification` note may not be only `done`, `complete` or `looks good`: it says what was done and how it was checked.
+
 For those, `outcomes` is a nonempty array of records, saved at the next normal state save:
 
 ```json
@@ -44,6 +46,6 @@ When `begin` reports `worktree: "linked"`, the task's commits land on that workt
 
 ## Save task continuity
 
-Use `state-write <revision>` with stdin JSON containing `task`, `progress` (`active` or `complete`), `baseline`, `decisions`, `verification`, `next`, `blockers` and development `outcomes` (contract above); the four note fields remain strings. Reuse the latest revision from `begin`, `commit`, bootstrap/setup or state mutation. Use `status` when no revision is available, a check fails, or progress needs reconciliation. Save at useful milestones and before stopping. HEAD changes expire a baseline; begin again before the next increment's edits. Inspect a corrupt state's backup before `state-recover <revision>`.
+Use `state-write <revision>` with stdin JSON containing `task`, `progress` (`active` or `complete`), `baseline`, `decisions`, `verification`, `next`, `blockers`, `checks` and development `outcomes` (contract above); the four note fields remain strings. Reuse the latest revision from `begin`, `commit`, bootstrap/setup or state mutation. Use `status` when no revision is available, a check fails, or progress needs reconciliation. Save at useful milestones and before stopping. HEAD changes expire a baseline; begin again before the next increment's edits. Inspect a corrupt state's backup before `state-recover <revision>`.
 
 Task writes preserve `context`; setup preserves task fields. Agreed `decisions` constrain implementation. Refresh stale facts without requiring setup.

@@ -324,6 +324,7 @@ function validState(value, p) {
     && (value.importance === undefined || importanceLevels.includes(value.importance))
     && (value.recommendations === undefined || validRecommendations(value.recommendations))
     && (value.parked === undefined || validParked(value.parked))
+    && (value.checks === undefined || Array.isArray(value.checks))
     && (value.outcomes === undefined || (validOutcomes(value.outcomes)
       && (value.progress !== 'complete' || !completionError(value))))
     && (value.plan === undefined || (validPlan(value.plan) && (value.progress !== 'complete' || value.plan.phases.every(phase => phase.status === 'complete'))))
@@ -522,13 +523,13 @@ function saveState(p, current, value) {
   const file = stateFile(p);
   // Keep project context readable as one field without expanding a small state
   // file into a permanent discovery report.
-  const { context, recommendations, plan, outcomes, parked, planHash: _, ...task } = value;
+  const { context, recommendations, plan, outcomes, checks, parked, planHash: _, ...task } = value;
   const planContents = plan ? `${JSON.stringify(plan)}
 ` : null;
   if (planContents && Buffer.byteLength(planContents) > planLimit) fail(`Plan must stay under 32 KiB (this write: ${Buffer.byteLength(planContents)} bytes); shorten phases or acceptance criteria`);
   if (planContents) task.planHash = hash(planContents);
   let contents = JSON.stringify(task, null, 2);
-  for (const [key, field] of Object.entries({ context, recommendations, outcomes, parked: parked?.length ? parked : undefined })) {
+  for (const [key, field] of Object.entries({ context, recommendations, outcomes, checks: checks?.length ? checks : undefined, parked: parked?.length ? parked : undefined })) {
     if (field) contents = `${contents.slice(0, -2)},\n  "${key}": ${JSON.stringify(field)}\n}`;
   }
   contents += '\n';
@@ -555,6 +556,7 @@ function stateInputErrors(input) {
     .map(key => `${key} must be a string (got ${kind(input[key])})`);
   if (!['active', 'complete'].includes(input.progress)) errors.push('progress must be "active" or "complete"');
   if (input.importance !== undefined && !importanceLevels.includes(input.importance)) errors.push('importance must be explore, normal or important');
+  if (input.checks !== undefined && (!Array.isArray(input.checks) || input.checks.some(check => typeof check !== 'string'))) errors.push(`checks must be an array of strings (got ${kind(input.checks)})`);
   return errors;
 }
 
@@ -602,7 +604,9 @@ function stateWrite(p, expected, input) {
       decisions: input.decisions ?? (current.state?.task === input.task ? current.state.decisions : '') ?? '',
       verification: input.verification ?? (current.state?.task === input.task ? current.state.verification : '') ?? '',
       next: input.next ?? (input.progress === 'active' && current.state?.task === input.task ? current.state.next : '') ?? '',
-      blockers: input.blockers ?? (current.state?.task === input.task ? current.state.blockers : '') ?? '' };
+      blockers: input.blockers ?? (current.state?.task === input.task ? current.state.blockers : '') ?? '',
+      // Executed checks survive same-task checkpoints so a later completion can cite them.
+      checks: input.checks ?? (current.state?.task === input.task ? current.state.checks : []) ?? [] };
     let steps;
     if (Object.hasOwn(input, 'recommendations')) ({ value: value.recommendations, steps } = recommendations(input.recommendations, value.progress, { task: value.task, branch: actual.branch, head: actual.head }));
     const plan = Object.hasOwn(input, 'plan') ? input.plan : current.state?.task === input.task ? current.state.plan : undefined;
@@ -617,7 +621,7 @@ function stateWrite(p, expected, input) {
       value.outcomes = outcomes;
     }
     if (value.progress === 'complete') {
-      const error = completionError(value);
+      const error = checksError(value) ?? vagueNoteError(value) ?? completionError(value);
       if (error) fail(error);
     }
     if (value.baseline !== null) {
@@ -643,6 +647,24 @@ function validOutcomes(value) {
       && (outcome.status !== 'passed' || !!outcome.evidence.trim()))
     && value.some(outcome => outcome.required)
     && new Set(value.map(outcome => outcome.id)).size === value.length;
+}
+// A check is one executed command and its exit code: "0 npm test". Completion needs at least one,
+// so "done" on its own cannot pass and the note cannot drift into a self-report.
+// Enforced on write only: validState re-runs completionError, and legacy states without checks must stay readable.
+const CHECK = /^\d{1,3} .{1,120}$/;
+const VAGUE_NOTE = /^(done|complete|completed|finished|looks good|all good|works|tested|ok)[.!]?$/i;
+
+function checksError(value) {
+  const checks = value.checks;
+  if (!Array.isArray(checks) || checks.length === 0) return 'Completed tasks require checks as "<exit code> <command>", for example ["0 npm test"]';
+  if (checks.length > 6) return 'Keep at most 6 checks; drop passing checks before failures';
+  const bad = checks.find(check => typeof check !== 'string' || !CHECK.test(check.trim()));
+  if (bad !== undefined) return `Each check is "<exit code> <command>" with a command of at most 120 characters (got ${JSON.stringify(bad)})`;
+  if (!checks.some(check => /^0 /.test(check.trim()))) return 'No check passed; completion needs at least one exit 0';
+  return null;
+}
+function vagueNoteError(value) {
+  return VAGUE_NOTE.test(value.verification.trim()) ? `Verification note must say what was done and how it was checked, not just "${value.verification.trim()}"` : null;
 }
 // Light records by default: an ordinary task completes on its verification note. Plans and important work keep full outcome records.
 function completionError(value) {
