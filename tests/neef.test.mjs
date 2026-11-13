@@ -1334,6 +1334,30 @@ test('setup upgrades the single-closing-direction block to allow alternatives an
   assert.equal(fs.readFileSync(path.join(f.root, 'CLAUDE.md'), 'utf8'), current);
 });
 
+test('projects lists every saved project with its instruction version and --update upgrades outdated ones', t => {
+  const f = fixture(t);
+  f.run(['setup']);
+  const current = fs.readFileSync(path.join(f.root, 'AGENTS.md'), 'utf8');
+  for (const name of ['AGENTS.md', 'CLAUDE.md']) f.write(name, singleClose(current));
+  fs.writeFileSync(path.join(f.home, 'state', 'gone.json'), JSON.stringify({ project: path.join(f.root, '..', 'removed-project'), updated: '2026-10-01T00:00:00.000Z' }));
+  const listed = f.run(['projects']);
+  const own = listed.projects.find(item => item.root === fs.realpathSync.native(f.root) || item.root.toLowerCase() === f.root.toLowerCase());
+  assert.equal(own.status, 'outdated');
+  assert.equal(own.files['AGENTS.md'], listed.currentInstructions - 1);
+  assert.equal(listed.projects.find(item => item.root.endsWith('removed-project')).status, 'gone');
+  assert.deepEqual(listed.summary, { current: 0, outdated: 1, edited: 0, noBlock: 0, gone: 1 });
+  assert.equal(fs.readFileSync(path.join(f.root, 'AGENTS.md'), 'utf8'), singleClose(current));
+  const updated = f.run(['projects', '--update']);
+  const after = updated.projects.find(item => item.root === own.root);
+  assert.equal(after.status, 'current');
+  assert.deepEqual(after.updated, ['AGENTS.md', 'CLAUDE.md']);
+  assert.ok(fs.existsSync(after.backup));
+  for (const name of ['AGENTS.md', 'CLAUDE.md']) assert.equal(fs.readFileSync(path.join(f.root, name), 'utf8'), current);
+  f.write('CLAUDE.md', current.replace('Suggestions are advisory.', 'My own note. Suggestions are advisory.'));
+  assert.equal(f.run(['projects', '--update']).projects.find(item => item.root === own.root).status, 'edited');
+  f.run(['projects', '--all'], undefined, /Usage: projects \[--update\]/);
+});
+
 test('setup refuses unsafe or edited instructions before changing either instruction file', t => {
   const f = fixture(t);
   f.write('CLAUDE.md', '<!-- neef:next-prompt:start -->\nPersonal edit\n');
