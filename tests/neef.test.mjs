@@ -2356,7 +2356,10 @@ test('a linked external home outside the project still supports continuity', t =
 test('reply layout is defined once in follow-up and referenced by plan, challenge and styles', () => {
   const read = n => fs.readFileSync(new URL(`../references/${n}.md`, import.meta.url), 'utf8');
   const followUp = read('follow-up');
-  for (const h of ['N · Narrative', 'E · Edits', 'E · Evaluation', 'F · Follow-up']) assert.ok(followUp.includes(`**${h}:**`), h);
+  for (const h of ['What changed', 'Checks', 'Next', 'Also possible']) assert.ok(followUp.includes(`**${h}:**`), h);
+  assert.match(followUp, /self-contained summary card/);
+  assert.match(followUp, /never point back to earlier messages/);
+  assert.match(followUp, /fenced code block/);
   assert.match(followUp, /Size is a guideline/);
   for (const n of ['plan', 'challenge', 'explanation-styles']) assert.match(read(n), /follow-up\.md` \(Report layout\)/, n);
 });

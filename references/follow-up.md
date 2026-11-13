@@ -10,11 +10,15 @@ Mark complete only when done. Report actual work, verification, relevant Git and
 
 ## Report layout
 
-Task and mode reports (development, plan, challenge, ask, next) use four bold headings, in this order, spelling NEEF:
+The final reply is one self-contained summary card. The user reads only this reply, so never point back to earlier messages: restate every answer, finding, decision, user step and blocker that still matters. Keep progress updates during the turn to one line each, at milestones only.
 
-- **N · Narrative:** one line saying what happened.
-- **E · Edits:** changed files, one per line, or "none".
-- **E · Evaluation:** passed, failed, skipped and remaining gaps; REQUIRED gaps first.
-- **F · Follow-up:** one next command and its intended result; then, when there is one, a single line starting `Bold idea:`.
+Task and mode reports (development, plan, challenge, ask, next) use this layout, with a blank line between sections:
 
-Size is a guideline: about five lines per section, summarizing the rest. Omit nothing required; blocked reports keep the exact user step and resume command in Follow-up. `help`, `status` and `style` keep their own formats, and one-line answers stay short. Progress updates appear at milestones only. While a plan is unfinished, the latest helper `ribbon` closes the reply verbatim in a plain code block after Follow-up: a headline saying what is happening (🚀 working, 🛑 stuck, ⏸️ waiting, ✅ complete) over a percent bar. Explanation styles change tone, never these headings.
+- `### <status emoji> <result headline>`: one line saying what happened, using ✅ done, 🟡 partly done, 🛑 blocked or ⏸️ waiting.
+- **What changed:** short bullets of the practical result, then changed files as one bullet of code-formatted paths, or "No files changed".
+- **Checks:** one line per check with ✅ passed, ❌ failed or ⏭️ skipped and why; REQUIRED gaps first. Add `Decided for you:` here when shaping requires it.
+- **Next:** the primary next command alone in a fenced code block, then `→ <intended result>` on the line below. Blocked reports put the exact user step above the block and the resume command inside it.
+- **Also possible:** up to two saved alternatives, one bullet each as `` `<command>` — <intended result> ``. Omit the section when there are none.
+- `Bold idea: <idea>` on its own last line, only when there is one.
+
+Size is a guideline: about five lines per section, summarizing the rest. Omit nothing required. `help`, `status` and `style` keep their own formats, and one-line answers stay short. While a plan is unfinished, the latest helper `ribbon` closes the reply verbatim in a plain code block after the card: a headline saying what is happening (🚀 working, 🛑 stuck, ⏸️ waiting, ✅ complete) over a percent bar. Explanation styles change tone, never these sections.

@@ -30,4 +30,4 @@ First complete work the agent is already authorized and able to do. Make the rem
 
 Distinguish a required action from optional advice. For a test, state setup, whether anything must be running, and when to stop. For a decision, explain the meaningful difference between choices and recommend one. Shortening must not remove information needed to finish the step. Keep required instructions in the final reply as well as any earlier update, and end with the single host-syntax NEEF next command required by the workflow.
 
-Styles never change the four NEEF report headings defined in `references/follow-up.md` (Report layout).
+Styles never change the report sections defined in `references/follow-up.md` (Report layout).
