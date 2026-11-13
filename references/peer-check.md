@@ -18,15 +18,26 @@ The check makes no project edits, commits, task-state writes or extra installs. 
 
 Verify each finding against source before acting on it; the other agent can be wrong. Fold supported fixes into the item (for a plan: update and re-save it per `references/plan.md`).
 
-Then show the updated summary with a "Second opinion" section. Its first line names the agent (or same-model fallback) and the count, such as `Codex · 6 points: 3 applied, 1 partly, 2 rejected`. Below it, list every finding once, grouped by outcome, keeping the reviewer's order within each group:
+Then show the updated summary with a "Second opinion" section, rendered as Markdown with room to breathe. Start with a `### Second opinion · <agent>` heading (or `same-model` for the fallback), then one count line, such as `6 points — 3 applied · 1 partly · 2 rejected`. Below it, list every finding once, grouped by outcome, keeping the reviewer's order within each group. Number findings continuously across groups. Put a blank line after each group heading and between findings; indent the outcome under its finding:
 
-```
-Applied
-  ✓ <finding in a few words> → <what changed, and where: phase, decision or criterion>
-Partly applied
-  ◐ <finding> → <what was taken> · <what was left out and why>
-Rejected
-  ✗ <finding> → <one-line reason, citing the source fact when one settles it>
+```markdown
+### Second opinion · Codex
+6 points — 3 applied · 1 partly · 2 rejected
+
+**✅ Applied**
+
+1. **<finding in a few words>**
+   → <what changed, and where: phase, decision or criterion>
+
+**🟡 Partly applied**
+
+2. **<finding>**
+   → <what was taken>; <what was left out and why>
+
+**❌ Rejected**
+
+3. **<finding>**
+   → <one-line reason, citing the source fact when one settles it>
 ```
 
 Merge duplicate findings into one line. Omit an empty group. Use plain words from the active explanation style, not the reviewer's jargon. Then ask the same approval question again. That second question offers only approve or request changes.

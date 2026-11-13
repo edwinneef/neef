@@ -2368,7 +2368,8 @@ test('approval prompts offer a read-only check with the other agent', () => {
   assert.match(peer, /Choosing it is not approval/);
   assert.match(peer, /codex exec --sandbox read-only/);
   assert.match(peer, /claude -p --permission-mode plan/);
-  for (const g of ['Applied', 'Partly applied', 'Rejected']) assert.match(peer, new RegExp(`^${g}$`, 'm'), g);
+  for (const g of ['✅ Applied', '🟡 Partly applied', '❌ Rejected']) assert.ok(peer.split(/\r?\n/).includes(`**${g}**`), g);
+  assert.match(peer, /### Second opinion · /);
   assert.match(peer, /list every finding once/);
   for (const n of ['plan', 'prototype']) assert.match(read(n), /`references\/peer-check\.md`/, n);
 });
