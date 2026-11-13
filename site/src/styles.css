@@ -87,6 +87,12 @@ main[data-swapping] .scn { opacity: 0; transform: translateY(6px); }
 /* Hero */
 .hero { padding: 52px 0 96px; }
 .hero .lede { max-width: 50ch; }
+.return { position: relative; display: inline-block; max-width: 100%; padding-bottom: .5em; }
+.return span { display: block; width: max-content; max-width: 100%; }
+.return svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.return path { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; }
+.motion .return path { animation: draw 900ms cubic-bezier(.3, .7, .2, 1) 600ms both; }
+@keyframes draw { from { stroke-dashoffset: 1; } }
 .hero-top > div { display: flex; justify-content: space-between; align-items: center; gap: 24px 48px; flex-wrap: wrap; margin-top: 22px; }
 
 /* Timeline: the log is the timeline. Rows, ticks and the playhead share one position u. */
