@@ -789,9 +789,9 @@ const installer = fileURLToPath(new URL('../scripts/install.mjs', import.meta.ur
 function installation(t) {
   const f = fixture(t, false);
   const user = path.join(path.dirname(f.root), 'user-home');
-  const run = (apply = false, error) => {
-    const result = spawnSync(process.execPath, [installer, ...(apply ? ['--apply'] : [])], {
-      encoding: 'utf8', env: { ...process.env, NEEF_USER_HOME: user, NEEF_HOME: f.home },
+  const run = (apply = false, error, { args = [], env = {} } = {}) => {
+    const result = spawnSync(process.execPath, [installer, ...(apply ? ['--apply'] : []), ...args], {
+      encoding: 'utf8', env: { ...process.env, NEEF_USER_HOME: user, NEEF_HOME: f.home, CODEX_HOME: '', NEEF_GATE: '', ...env },
     });
     assert.equal(result.status, error ? 1 : 0, result.stdout + result.stderr);
     if (error) { assert.match(result.stderr, error); return; }
@@ -876,6 +876,128 @@ test('installer preserves edited managed files and unrelated agent content', t =
   assert.equal(fs.readFileSync(target, 'utf8'), 'personal skill edit');
   assert.equal(fs.readFileSync(unrelated, 'utf8'), '{"keep":"personal configuration"}');
   assert.equal(fs.existsSync(path.join(f.home, 'install.lock')), false);
+});
+
+const notifier = { hooks: [{ type: 'command', command: 'notify-on-prompt', timeout: 10 }] };
+const hostFiles = f => ({ claude: path.join(f.user, '.claude', 'settings.json'), codex: path.join(f.user, '.codex', 'hooks.json') });
+const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8'));
+const gateEntries = settings => (settings.hooks?.UserPromptSubmit ?? []).flatMap(group => group.hooks).filter(hook => hook.command.endsWith('--neef-gate'));
+const writeHost = (file, value) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, value); };
+
+test('install adds one prompt gate entry after the owner hooks in both hosts and keeps everything else', t => {
+  const f = installation(t);
+  const { claude, codex } = hostFiles(f);
+  const own = { env: { KEEP: '1' }, hooks: { Stop: [notifier], UserPromptSubmit: [notifier] } };
+  for (const file of [claude, codex]) writeHost(file, JSON.stringify(own));
+  f.install(true);
+  f.install(true);
+  for (const file of [claude, codex]) {
+    const settings = readJson(file);
+    assert.deepEqual(settings.env, own.env);
+    assert.deepEqual(settings.hooks.Stop, own.hooks.Stop);
+    assert.deepEqual(settings.hooks.UserPromptSubmit[0], notifier);
+    assert.equal(settings.hooks.UserPromptSubmit.length, 2);
+    assert.equal(gateEntries(settings).length, 1);
+    assert.match(gateEntries(settings)[0].command, /^node ".+\/gate\.mjs" --neef-gate$/);
+    assert.equal(gateEntries(settings)[0].timeout, 10);
+  }
+  assert.equal(Object.hasOwn(readJson(path.join(f.home, 'install.json')).files, claude), false);
+});
+
+test('install refuses host hook files it cannot safely merge and leaves both unchanged', t => {
+  const f = installation(t);
+  const { claude, codex } = hostFiles(f);
+  writeHost(codex, JSON.stringify({ hooks: { UserPromptSubmit: [notifier] } }));
+  for (const bad of ['{not json', 'null', '[]', '{"hooks":"text"}', '{"hooks":{"UserPromptSubmit":{}}}']) {
+    writeHost(claude, bad);
+    f.install(true, /Unreadable JSON preserved|Unexpected hook settings shape preserved/);
+    assert.equal(fs.readFileSync(claude, 'utf8'), bad);
+    assert.deepEqual(readJson(codex), { hooks: { UserPromptSubmit: [notifier] } });
+  }
+});
+
+test('a failed Codex hook write restores Claude settings, the gate script and the receipt', t => {
+  if (process.platform !== 'win32' && process.getuid?.() === 0) return t.skip('root ignores file permissions');
+  const f = installation(t);
+  f.install(true);
+  const { claude, codex } = hostFiles(f);
+  const receipt = path.join(f.home, 'install.json');
+  writeHost(claude, JSON.stringify({ hooks: { UserPromptSubmit: [notifier] } }));
+  writeHost(codex, '{}');
+  fs.unlinkSync(path.join(f.home, 'gate.mjs'));
+  const before = { claude: fs.readFileSync(claude), receipt: fs.readFileSync(receipt) };
+  const locked = process.platform === 'win32' ? codex : path.dirname(codex);
+  fs.chmodSync(locked, process.platform === 'win32' ? 0o444 : 0o555);
+  try { f.install(true, /EPERM|EACCES/); } finally { fs.chmodSync(locked, process.platform === 'win32' ? 0o666 : 0o755); }
+  assert.deepEqual(fs.readFileSync(claude), before.claude);
+  assert.deepEqual(fs.readFileSync(receipt), before.receipt);
+  assert.equal(fs.readFileSync(codex, 'utf8'), '{}');
+  assert.equal(fs.existsSync(path.join(f.home, 'gate.mjs')), false);
+});
+
+test('install follows CODEX_HOME and creates no Codex hook file without a Codex folder', t => {
+  const f = installation(t);
+  f.install(true);
+  assert.equal(fs.existsSync(path.join(f.user, '.codex')), false);
+  const custom = path.join(f.user, 'custom codex');
+  fs.mkdirSync(custom, { recursive: true });
+  f.install(true, undefined, { env: { CODEX_HOME: custom } });
+  assert.equal(gateEntries(readJson(path.join(custom, 'hooks.json'))).length, 1);
+});
+
+test('--gate off removes only the NEEF entry and stays off until --gate on', t => {
+  const f = installation(t);
+  const { claude, codex } = hostFiles(f);
+  for (const file of [claude, codex]) writeHost(file, JSON.stringify({ hooks: { UserPromptSubmit: [notifier] } }));
+  f.install(true);
+  assert.equal(f.install(true, undefined, { args: ['--gate', 'off'] }).gate, 'off');
+  for (const file of [claude, codex]) assert.deepEqual(readJson(file), { hooks: { UserPromptSubmit: [notifier] } });
+  assert.equal(f.install(true).gate, 'off');
+  assert.equal(gateEntries(readJson(claude)).length, 0);
+  assert.equal(f.install(true, undefined, { args: ['--gate', 'on'] }).gate, 'on');
+  for (const file of [claude, codex]) {
+    assert.deepEqual(readJson(file).hooks.UserPromptSubmit[0], notifier);
+    assert.equal(gateEntries(readJson(file)).length, 1);
+  }
+});
+
+test('installer gate flags: dry run writes nothing and bad combinations print usage', t => {
+  const f = installation(t);
+  const raw = args => spawnSync(process.execPath, [installer, ...args], {
+    encoding: 'utf8', env: { ...process.env, NEEF_USER_HOME: f.user, NEEF_HOME: f.home, CODEX_HOME: '' },
+  });
+  const dry = raw(['--dry-run', '--gate', 'off']);
+  assert.equal(dry.status, 0, dry.stderr);
+  assert.match(dry.stderr, /DRY RUN/);
+  assert.equal(fs.existsSync(f.user), false);
+  for (const args of [['--gate'], ['--gate', 'maybe'], ['--apply', '--dry-run'], ['--apply', '--gate', 'off', '--gate', 'on'], ['--gate', 'off', 'extra']]) {
+    const result = raw(args);
+    assert.equal(result.status, 1, args.join(' '));
+    assert.match(result.stderr, /Usage: .*--gate on\|off/, args.join(' '));
+  }
+  assert.equal(fs.existsSync(f.user), false);
+});
+
+test('install reports when the Codex hooks feature is not on and never edits config.toml', t => {
+  const f = installation(t);
+  const config = path.join(f.user, '.codex', 'config.toml');
+  writeHost(config, 'model = "x"\n[features]\nmemories = true\n');
+  assert.match(f.install(true).codexHooks, /Codex hooks feature is not set: .*hooks = true under \[features\]/);
+  assert.equal(fs.readFileSync(config, 'utf8'), 'model = "x"\n[features]\nmemories = true\n');
+  fs.writeFileSync(config, '[features]\nhooks = true\n[other]\nhooks = false\n');
+  assert.equal(Object.hasOwn(f.install(true), 'codexHooks'), false);
+  fs.writeFileSync(config, '[features]\nhooks = false\n');
+  assert.match(f.install(true).codexHooks, /Codex hooks feature is off/);
+});
+
+test('the installed gate command runs from another folder with a space in NEEF_HOME', t => {
+  const f = installation(t);
+  const spaced = path.join(f.user, 'neef home');
+  f.install(true, undefined, { env: { NEEF_HOME: spaced } });
+  const [hook] = gateEntries(readJson(hostFiles(f).claude));
+  const result = spawnSync(hook.command, { shell: true, cwd: os.tmpdir(), encoding: 'utf8', input: '{"prompt":"make it better"}', env: { ...process.env, NEEF_GATE: '' } });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).hookSpecificOutput.hookEventName, 'UserPromptSubmit');
 });
 
 test('help groups every command and alias by intent without bootstrapping a project', t => {

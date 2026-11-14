@@ -45,9 +45,54 @@ function replace(target, bytes) {
   finally { if (fs.existsSync(temp)) fs.unlinkSync(temp); }
 }
 
-export function install(apply = false) {
+// The installed command carries this marker so later installs find NEEF's entry wherever NEEF_HOME was.
+const gateMarker = '--neef-gate';
+const gateCommand = () => `node "${path.join(shared, 'gate.mjs').replaceAll('\\', '/')}" ${gateMarker}`;
+const isGate = hook => typeof hook?.command === 'string' && hook.command.trimEnd().endsWith(gateMarker);
+
+// Returns the merged file bytes, or null when the file needs no change. Existing groups never move,
+// because Codex keys its hook trust by position.
+function mergeGate(target, old, enabled) {
+  let settings = {};
+  if (old) {
+    try { settings = JSON.parse(old.toString('utf8')); } catch { throw new Error(`Unreadable JSON preserved: ${target}`); }
+  }
+  const shape = `Unexpected hook settings shape preserved: ${target}`;
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) throw new Error(shape);
+  if (settings.hooks !== undefined && (!settings.hooks || typeof settings.hooks !== 'object' || Array.isArray(settings.hooks))) throw new Error(shape);
+  const groups = settings.hooks?.UserPromptSubmit;
+  if (groups !== undefined && (!Array.isArray(groups) || groups.some(group => !group || typeof group !== 'object' || !Array.isArray(group.hooks)))) throw new Error(shape);
+  const command = gateCommand();
+  const current = groups ?? [];
+  const kept = current.map(group => ({ ...group, hooks: group.hooks.filter(hook => !isGate(hook) || (enabled && hook.command === command)) }))
+    .filter((group, i) => group.hooks.length || !current[i].hooks.some(isGate));
+  if (enabled && !kept.some(group => group.hooks.some(isGate))) kept.push({ hooks: [{ type: 'command', command, timeout: 10 }] });
+  if (JSON.stringify(kept) === JSON.stringify(current)) return null;
+  const hooks = { ...settings.hooks, UserPromptSubmit: kept };
+  if (!kept.length) delete hooks.UserPromptSubmit;
+  const merged = { ...settings, hooks };
+  if (!Object.keys(hooks).length) delete merged.hooks;
+  return Buffer.from(`${JSON.stringify(merged, null, 2)}\n`);
+}
+
+// Codex runs hooks only when [features] hooks = true; report it, never edit config.toml.
+function codexHooksFeature() {
+  const config = path.join(codexHome(), 'config.toml');
+  if (!fs.existsSync(config)) return 'not set';
+  const features = fs.readFileSync(config, 'utf8').split(/^\s*\[/m).find(section => /^features\]/.test(section));
+  const value = features?.match(/^\s*hooks\s*=\s*(true|false)\b/m)?.[1];
+  return value === 'true' ? 'on' : value === 'false' ? 'off' : 'not set';
+}
+
+function codexHome() {
+  return process.env.CODEX_HOME ? path.resolve(process.env.CODEX_HOME) : path.join(user, '.codex');
+}
+
+// gate: 'on' or 'off' changes the prompt gate; omitted keeps the last install's choice, on by default.
+export function install(apply = false, gate) {
   const definitions = [
     ['scripts/neef.mjs', path.join(shared, 'neef.mjs')],
+    ['scripts/gate.mjs', path.join(shared, 'gate.mjs')],
     ['SKILL.md', path.join(shared, 'SKILL.md')],
     ['agents/openai.yaml', path.join(shared, 'openai.yaml')],
     ['SKILL.md', path.join(user, '.claude/skills/neef/SKILL.md')],
@@ -91,6 +136,15 @@ export function install(apply = false) {
     if (previous?.files?.[target] !== digest(old)) throw new Error(`Unmanaged or edited file preserved: ${target}`);
     entries.push({ target, old, bytes: null, hash: null });
   }
+  // The prompt gate joins each host's own hook file beside the owner's hooks; those files are merged, never receipt-owned.
+  const enabled = gate ? gate === 'on' : previous?.gate !== false;
+  const hostFiles = [path.join(user, '.claude', 'settings.json'), ...(fs.existsSync(codexHome()) ? [path.join(codexHome(), 'hooks.json')] : [])];
+  for (const target of hostFiles) {
+    noLinks(target);
+    const old = fs.existsSync(target) ? fs.readFileSync(target) : null;
+    const bytes = mergeGate(target, old, enabled);
+    if (bytes) entries.push({ target, bytes, old, hash: digest(bytes), merged: true });
+  }
   // Never silently activate files left in an existing Neef skill folder.
   for (const agent of ['.claude', '.agents']) for (const name of ['neef', ...[...commandNames, ...retiredCommands].map(command => `neef-${command}`)]) {
     const root = path.join(user, agent, 'skills', name);
@@ -107,7 +161,10 @@ export function install(apply = false) {
   noLinks(path.join(shared, 'state'));
   noLinks(path.join(shared, 'backups'));
   const action = ({ bytes, old, hash }) => bytes === null ? 'remove' : !old ? 'create' : digest(old) === hash ? 'unchanged' : 'update';
-  const result = { apply, source, shared, files: entries.map(entry => ({ target: entry.target, hash: entry.hash, existed: !!entry.old, action: action(entry) })) };
+  const codexFeature = enabled && fs.existsSync(codexHome()) ? codexHooksFeature() : 'on';
+  const result = { apply, source, shared, gate: enabled ? 'on' : 'off',
+    ...(codexFeature !== 'on' ? { codexHooks: `Codex hooks feature is ${codexFeature}: Codex runs the prompt gate only with hooks = true under [features] in ${path.join(codexHome(), 'config.toml')}` } : {}),
+    files: entries.map(entry => ({ target: entry.target, hash: entry.hash, existed: !!entry.old, action: action(entry) })) };
   if (!apply) return result;
   fs.mkdirSync(shared, { recursive: true });
   const lock = path.join(shared, 'install.lock');
@@ -139,8 +196,8 @@ export function install(apply = false) {
     }
     fs.mkdirSync(path.join(shared, 'state'), { recursive: true });
     const commit = sourceCommit();
-    replace(receiptPath, JSON.stringify({ version: 1, source, installed: new Date().toISOString(), backup, ...(commit ? { commit } : {}),
-      files: Object.fromEntries(entries.filter(entry => entry.bytes !== null).map(entry => [entry.target, entry.hash])) }, null, 2));
+    replace(receiptPath, JSON.stringify({ version: 1, source, installed: new Date().toISOString(), backup, ...(commit ? { commit } : {}), gate: enabled,
+      files: Object.fromEntries(entries.filter(entry => entry.bytes !== null && !entry.merged).map(entry => [entry.target, entry.hash])) }, null, 2));
     return { ...result, backup, verified: true, ...changelog(previous?.commit, commit), ...outdatedProjects() };
   } catch (error) {
     for (const entry of changed.reverse()) {
@@ -166,10 +223,15 @@ function outdatedProjects() {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const args = process.argv.slice(2);
-    if (args.length > 1 || args.some(arg => arg !== '--apply' && arg !== '--dry-run')) throw new Error('Usage: node scripts/install.mjs [--apply | --dry-run]; default is a JSON dry run, --dry-run lists targets');
-    if (args[0] === '--dry-run') console.log(install(false).files.map(file => `${file.action} ${file.target}`).join('\n'));
-    else console.log(JSON.stringify(install(args[0] === '--apply'), null, 2));
+    const usage = 'Usage: node scripts/install.mjs [--apply | --dry-run] [--gate on|off]; default is a JSON dry run, --dry-run lists targets, --gate turns the prompt gate on or off and is remembered';
+    const gateAt = args.indexOf('--gate');
+    const gate = gateAt === -1 ? undefined : args[gateAt + 1];
+    const modes = gateAt === -1 ? args : args.filter((_, i) => i !== gateAt && i !== gateAt + 1);
+    if (gateAt !== -1 && !['on', 'off'].includes(gate)) throw new Error(usage);
+    if (modes.length > 1 || modes.some(arg => arg !== '--apply' && arg !== '--dry-run')) throw new Error(usage);
+    if (modes[0] === '--dry-run') console.log(install(false, gate).files.map(file => `${file.action} ${file.target}`).join('\n'));
+    else console.log(JSON.stringify(install(modes[0] === '--apply', gate), null, 2));
     // The closing line goes to stderr so stdout stays parseable and a dry run cannot be mistaken for an install.
-    console.error(args[0] === '--apply' ? 'INSTALLED: the files above were written.' : 'DRY RUN: nothing was installed. Run `node scripts/install.mjs --apply` to install.');
+    console.error(modes[0] === '--apply' ? 'INSTALLED: the files above were written.' : 'DRY RUN: nothing was installed. Run `node scripts/install.mjs --apply` to install.');
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }
