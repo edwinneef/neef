@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check scripts/neef.mjs && node --check scripts/install.mjs && npm test",
+    "check": "node --check scripts/neef.mjs && node --check scripts/install.mjs && node --check scripts/gate.mjs && npm test",
     "site:dev": "npm --prefix site run dev",
     "site:build": "npm --prefix site run build",
     "site:preview": "npm --prefix site run preview"
