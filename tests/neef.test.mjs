@@ -422,6 +422,26 @@ test('detached HEAD cannot create a task branch implicitly', t => {
   assert.equal(f.git('branch', '--show-current'), '');
 });
 
+test('a new begin for the same task keeps files that were clean at its earlier baseline committable', t => {
+  const f = fixture(t);
+  f.write('user.txt', 'user draft\n');
+  const first = f.run(['begin', 'phased']);
+  f.write('owned.txt', 'phase 2 edit\n');
+  f.write('docs.txt', 'phase 4 docs\n');
+  f.run(['commit', f.prepare(first.baseline, ['docs.txt'], 'Phase 4 docs').token]);
+  const second = f.run(['begin', 'phased']);
+  assert.deepEqual(second.inherited, ['owned.txt']);
+  f.prepare(second.baseline, ['user.txt'], 'Take user work', /Pre-existing edits: user.txt/);
+  f.run(['commit', f.prepare(second.baseline, ['owned.txt'], 'Phase 2 edit').token]);
+  const third = f.run(['begin', 'phased']);
+  f.write('owned.txt', 'phase 3 edit\n');
+  f.run(['commit', f.prepare(third.baseline, ['owned.txt'], 'Phase 3 edit').token]);
+  assert.equal(f.git('show', 'HEAD:owned.txt'), 'phase 3 edit');
+  f.prepare(f.run(['begin', 'other task']).baseline, ['user.txt'], 'Take user work', /Pre-existing edits: user.txt/);
+  f.prepare(f.run(['begin', 'phased']).baseline, ['user.txt'], 'Take user work', /Pre-existing edits: user.txt/);
+  assert.equal(fs.readFileSync(path.join(f.root, 'user.txt'), 'utf8'), 'user draft\n');
+});
+
 test('begin works on a feature branch in the main folder and commits there, leaving main and user work alone', t => {
   const f = fixture(t);
   const main = f.git('rev-parse', 'main');
