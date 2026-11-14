@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { board, gitMergeReady, modeTable, ribbon } from '../scripts/neef.mjs';
@@ -2966,4 +2966,84 @@ test('installer --dry-run lists each target with its action and writes nothing',
   const both = run('--dry-run', '--apply');
   assert.equal(both.status, 1);
   assert.match(both.stderr, /Usage: node scripts\/install\.mjs \[--apply \| --dry-run\]/);
+});
+
+// wait-file runs while the test writes, so it needs a child that does not block the test.
+function waitFile(f, args) {
+  return new Promise(resolve => {
+    const child = spawn(process.execPath, [helper, '--project', f.root, 'wait-file', ...args], { env: f.env(f.home) });
+    let output = '';
+    child.stdout.on('data', chunk => { output += chunk; });
+    child.on('close', code => resolve({ code, output: JSON.parse(output) }));
+  });
+}
+const later = (ms, action) => new Promise(resolve => setTimeout(() => resolve(action()), ms));
+
+test('wait-file returns a file created after the mark, even when its folder did not exist yet', async t => {
+  const f = fixture(t);
+  const mark = f.run(['wait-file', 'logs/run-*/out.log', '--mark']);
+  assert.match(mark.watch, /^[a-f0-9-]{36}$/);
+  assert.equal(mark.marked, 0);
+  const waiting = waitFile(f, ['--watch', mark.watch]);
+  await later(300, () => f.write('logs/run-1/out.log', 'result\n'));
+  const { code, output } = await waiting;
+  assert.equal(code, 0);
+  // The helper reports its canonical project root, which on Windows may differ from the fixture's in drive-letter case.
+  assert.equal(path.relative(f.root, output.file), path.join('logs', 'run-1', 'out.log'));
+  assert.deepEqual(output.files, [output.file]);
+  assert.equal(output.limit, 600);
+});
+
+test('wait-file ignores a file that has not changed since the mark and times out with exit 2', async t => {
+  const f = fixture(t);
+  f.write('logs/old.log', 'earlier run\n');
+  const mark = f.run(['wait-file', 'logs/*.log', '--mark']);
+  assert.equal(mark.marked, 1);
+  const started = Date.now();
+  const { code, output } = await waitFile(f, ['--watch', mark.watch, '--timeout', '2']);
+  assert.equal(code, 2);
+  assert.equal(output.timedOut, true);
+  assert.equal(output.limit, 2);
+  assert.ok(Date.now() - started < 4000 + 2000, `${Date.now() - started} ms`);
+});
+
+test('wait-file --contains reads only what was added after the mark', async t => {
+  const f = fixture(t);
+  const log = path.join(f.root, 'logs', 'listener.log');
+  f.write('logs/listener.log', 'session saved\n');
+  const pattern = path.join(f.root, 'logs', '*.log');
+  const stale = f.run(['wait-file', pattern, '--mark']);
+  const noise = waitFile(f, ['--watch', stale.watch, '--timeout', '3', '--contains', 'session saved']);
+  await later(300, () => fs.appendFileSync(log, 'still running\n'));
+  assert.equal((await noise).output.timedOut, true);
+  const fresh = f.run(['wait-file', pattern, '--mark']);
+  const done = waitFile(f, ['--watch', fresh.watch, '--timeout', '10', '--contains', 'session saved']);
+  await later(300, () => fs.appendFileSync(log, 'session saved\n'));
+  const { code, output } = await done;
+  assert.equal(code, 0);
+  assert.equal(output.file, log);
+});
+
+test('wait-file names the newest changed file and lists them all', async t => {
+  const f = fixture(t);
+  const mark = f.run(['wait-file', 'logs/*.log', '--mark']);
+  const waiting = waitFile(f, ['--watch', mark.watch, '--timeout', '10']);
+  await later(200, () => f.write('logs/a.log', 'first\n'));
+  await later(200, () => {
+    f.write('logs/b.log', 'second\n');
+    const ahead = new Date(Date.now() + 5000);
+    fs.utimesSync(path.join(f.root, 'logs', 'b.log'), ahead, ahead);
+  });
+  const { output } = await waiting;
+  assert.equal(path.relative(f.root, output.file), path.join('logs', 'b.log'));
+  assert.deepEqual(output.files.map(file => path.relative(f.root, file)).sort(), [path.join('logs', 'a.log'), path.join('logs', 'b.log')]);
+});
+
+test('wait-file refuses bad limits, unknown watches and a missing pattern', t => {
+  const f = fixture(t);
+  const mark = f.run(['wait-file', 'logs/*.log', '--mark']);
+  for (const limit of ['0', '-5', '1.5', 'soon', '1501']) f.run(['wait-file', '--watch', mark.watch, '--timeout', limit], undefined, /Timeout must be a whole number of seconds from 1 to 1500/);
+  f.run(['wait-file', '--watch', crypto.randomUUID()], undefined, /Unknown watch/);
+  f.run(['wait-file', '--mark'], undefined, /Usage: wait-file/);
+  f.run(['wait-file'], undefined, /Usage: wait-file/);
 });

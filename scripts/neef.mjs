@@ -1508,6 +1508,94 @@ export function doctor() {
   return { ok: checks.every(check => check.ok || check.severity === 'warning'), checks, obsolete, discovery: 'Paths and configuration checked; native invocation requires a fresh agent session.' };
 }
 
+// A manual check's evidence: mark what the matching files look like now, then wait for one to differ.
+// Comparing with the mark, not with a start time, means clock skew and a fast user cannot fool the wait.
+const watchFile = id => path.join(home(), 'watches', `${id}.json`);
+const waitUsage = 'Usage: wait-file <pattern> --mark, then wait-file --watch <id> [--timeout <seconds>] [--contains <text>]';
+const waitDefault = 600, waitMaximum = 1500, containsWindow = 1024 * 1024;
+
+function matchingFiles(pattern) {
+  const [root, ...segments] = pattern.split(/[\\/]+/);
+  let found = [root === '' ? path.sep : root + path.sep];
+  for (const [index, segment] of segments.entries()) {
+    const last = index === segments.length - 1;
+    const shape = segment.includes('*') ? new RegExp(`^${segment.split('*').map(part => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`, process.platform === 'win32' ? 'i' : '') : null;
+    found = found.flatMap(directory => {
+      let entries;
+      try { entries = fs.readdirSync(directory, { withFileTypes: true }); }
+      catch (error) { return ['ENOENT', 'ENOTDIR'].includes(error.code) ? [] : fail(`Cannot read ${directory}: ${error.code}`); }
+      return entries.filter(entry => (shape ? shape.test(entry.name) : entry.name === segment || (process.platform === 'win32' && entry.name.toLowerCase() === segment.toLowerCase())) && (last ? entry.isFile() : entry.isDirectory()))
+        .map(entry => path.join(directory, entry.name));
+    });
+  }
+  return found;
+}
+
+function fileMarks(pattern) {
+  const marks = {};
+  for (const file of matchingFiles(pattern)) {
+    // A file that vanishes between listing and reading simply is not there yet.
+    try { const stat = fs.statSync(file); marks[file] = { size: stat.size, mtimeMs: stat.mtimeMs }; } catch (error) { if (error.code !== 'ENOENT') fail(`Cannot read ${file}: ${error.code}`); }
+  }
+  return marks;
+}
+
+function waitMark(p, pattern) {
+  const absolute = path.resolve(p.root, pattern);
+  const directory = path.join(home(), 'watches');
+  fs.mkdirSync(directory, { recursive: true });
+  for (const name of fs.readdirSync(directory)) {
+    try { if (fs.statSync(path.join(directory, name)).mtimeMs < Date.now() - 24 * 60 * 60 * 1000) fs.unlinkSync(path.join(directory, name)); } catch { /* Pruning never blocks a check. */ }
+  }
+  const files = fileMarks(absolute), watch = crypto.randomUUID();
+  atomic(watchFile(watch), JSON.stringify({ pattern: absolute, files }));
+  return { watch, pattern: absolute, marked: Object.keys(files).length };
+}
+
+function addedText(file, from) {
+  const size = fs.statSync(file).size, start = Math.max(from, size - containsWindow);
+  const buffer = Buffer.alloc(size - start), handle = fs.openSync(file, 'r');
+  try { fs.readSync(handle, buffer, 0, buffer.length, start); } finally { fs.closeSync(handle); }
+  return buffer.toString('utf8');
+}
+
+async function waitWatch(id, limit, contains) {
+  if (!/^[a-f0-9-]{36}$/.test(id || '') || !exists(watchFile(id))) fail('Unknown watch; run wait-file <pattern> --mark first');
+  const mark = json(watchFile(id)), began = performance.now();
+  const waited = () => Math.round((performance.now() - began) / 1000);
+  let previous = {};
+  for (;;) {
+    const current = fileMarks(mark.pattern);
+    const changed = Object.keys(current).filter(file => {
+      const before = mark.files[file], now = current[file];
+      if (before && before.size === now.size && before.mtimeMs === now.mtimeMs) return false;
+      // The same size on two polls in a row: the writer has at least paused.
+      if (previous[file]?.size !== now.size) return false;
+      try { return !contains || addedText(file, before && now.size >= before.size ? before.size : 0).includes(contains); } catch { return false; }
+    });
+    if (changed.length) {
+      changed.sort((a, b) => current[b].mtimeMs - current[a].mtimeMs);
+      return { file: changed[0], files: changed, waited: waited(), limit };
+    }
+    if (performance.now() - began >= limit * 1000) return { timedOut: true, pattern: mark.pattern, waited: waited(), limit };
+    previous = current;
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+}
+
+function waitFileCommand(p, args) {
+  if (args.includes('--mark')) return args.length === 2 && args[0] !== '--mark' ? waitMark(p, args[0]) : fail(waitUsage);
+  const options = { '--watch': undefined, '--timeout': String(waitDefault), '--contains': undefined };
+  for (let index = 0; index < args.length; index += 2) {
+    if (!Object.hasOwn(options, args[index]) || args[index + 1] === undefined) fail(waitUsage);
+    options[args[index]] = args[index + 1];
+  }
+  if (!options['--watch']) fail(waitUsage);
+  const limit = Number(options['--timeout']);
+  if (!/^[1-9]\d*$/.test(options['--timeout']) || limit > waitMaximum) fail(`Timeout must be a whole number of seconds from 1 to ${waitMaximum}`);
+  return waitWatch(options['--watch'], limit, options['--contains']);
+}
+
 export async function main(args = process.argv.slice(2)) {
   const option = args.indexOf('--project');
   let cwd = process.cwd();
@@ -1522,7 +1610,7 @@ export async function main(args = process.argv.slice(2)) {
         .map(({ usage, changes, stops, aliases = [] }) => ({ command: usage, changes, stops, aliases })) })),
     invocation: { codex: '$neef <command>', claude: '/neef <command>' },
     aliases: { codex: subskillNames.map(command => `$neef-${command}`), claude: subskillNames.map(command => `/neef-${command}`) },
-    helperCommands: ['style [simple|guided|technical|kid] [--here] (read the effective style or save the global default; --here saves a project override, style clear --here removes it)', 'importance [explore|normal|important] [--here] (read the effective default or save the global one; --here saves a project override, importance clear --here removes it; a task may carry its own importance in state-write)', 'prototype-workspace [slug | --all] (omit slug: read-only listing of the newest 20 with name and README Status open|chosen|rejected or null; --all lists every demo; provide slug: allocate isolated scratch directory without task/Git changes)', 'prototype-delete <name...> (deletes the named demo folders of this project only after the user confirmed those exact names; validates every name first and refuses links, duplicates and unknown names)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status [--brief] (--brief: task, progress, branch, backlog counts and the top three steps only)', 'next (read-only candidates; agent revalidates and implements; busy, without resume, while another session claimed the active task in the last 30 minutes)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository; inherited lists dirty files the previous baseline with the same slug on this branch, at an ancestor HEAD, did not hold as pre-existing, which prepare accepts)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'docs (read-only: Git-tracked and untracked-but-not-ignored .md files split into agent instructions, other docs and skipped changelogs/licenses, with known commands)', 'review [ref] (read-only: the last task\'s commits since its first begin or first save, whichever is earlier, or ref..HEAD, with saved decisions, plan, outcomes and all known commands, each with a kind; run only kind test)', 'merge (from a linked worktree whose task is complete: merges its branch into main in the main folder; fast-forward else one merge commit; refuses conflicts, staged or in-progress work and never deletes branches)', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?,outcomes?,importance?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {needsYou:[{kind,action,reason}],onItsOwn:[...],reason?,boldIdea?}; up to 20 steps per list, returned as steps by status and next; the older {primary,alternatives,reason} is saved as onItsOwn)', 'park <expected-revision> (stdin: {add:"one-line idea"} or {remove:"its text"|position}; the parked list shows in status and survives task changes)', 'state-recover <corrupt-revision>', 'projects [--update | --forget <path>] (every project with saved NEEF state, last use and next-prompt instruction version; --update upgrades outdated unedited blocks with backups, skips edited, missing and block-free projects, and commits only the updated files on a checked-out branch when they had no uncommitted changes, reporting commit or commitSkipped per project; --forget moves the saved state of a listed project whose folder no longer exists into a backup and refuses existing folders)', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions; boldIdea: one ambitious grounded idea as a string (at most 400 characters), kept across sessions and returned by next. Each save also adds the bold idea and suggested actions to a dated idea board beside the state (newest first, last 5 bold ideas and 10 suggestions, repeats move to the top), shown in the status board. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', outcomes: 'Ordinary tasks complete on a nonempty verification note. With a plan or importance important, completion requires [{id,description,required,status,evidence}], with unique ids and at least one required outcome; supplied outcomes are always validated. Status is pending/passed/failed/blocked; passed outcomes need nonempty evidence. Required outcomes must pass, blockers must be explicitly cleared, and plan phases must finish before completion. Same-task writes preserve omitted outcomes; new tasks do not inherit them. Legacy saved states remain readable. Evidence is agent-reported, not independently proven.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,title?,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?,userInput?}]}. title is a short board name (at most 40 characters). userInput names the decision, credential, approval or manual step only the user can supply for that phase. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. The plan is stored beside the state as <id>.plan.json under 32 KiB, under the same lock and revision; the rest of the state stays under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests' };
+    helperCommands: ['style [simple|guided|technical|kid] [--here] (read the effective style or save the global default; --here saves a project override, style clear --here removes it)', 'importance [explore|normal|important] [--here] (read the effective default or save the global one; --here saves a project override, importance clear --here removes it; a task may carry its own importance in state-write)', 'prototype-workspace [slug | --all] (omit slug: read-only listing of the newest 20 with name and README Status open|chosen|rejected or null; --all lists every demo; provide slug: allocate isolated scratch directory without task/Git changes)', 'prototype-delete <name...> (deletes the named demo folders of this project only after the user confirmed those exact names; validates every name first and refuses links, duplicates and unknown names)', 'wait-file <pattern> --mark, then wait-file --watch <id> [--timeout <seconds>] [--contains <text>] (for a manual check whose result lands in a file: --mark records the matching files now and returns a watch id at once; --watch then waits for a file that is new or differs from its mark and has stopped growing, returning {file,files,waited,limit}, or {timedOut:true} with exit code 2 at the limit, 600 seconds by default and 1500 at most; --contains reads only text added after the mark; * matches within one path segment; reads only, writes no task state)', 'setup', 'bootstrap', 'context-write <expected-revision> (stdin: {architecture})', 'status [--brief] (--brief: task, progress, branch, backlog counts and the top three steps only)', 'next (read-only candidates; agent revalidates and implements; busy, without resume, while another session claimed the active task in the last 30 minutes)', 'begin <slug> (initializes Git on main in an empty folder; greenfield marks an empty repository; inherited lists dirty files the previous baseline with the same slug on this branch, at an ancestor HEAD, did not hold as pre-existing, which prepare accepts)', 'prepare <baseline-id> (stdin: {files,message})', 'commit <reviewed-token>', 'docs (read-only: Git-tracked and untracked-but-not-ignored .md files split into agent instructions, other docs and skipped changelogs/licenses, with known commands)', 'review [ref] (read-only: the last task\'s commits since its first begin or first save, whichever is earlier, or ref..HEAD, with saved decisions, plan, outcomes and all known commands, each with a kind; run only kind test)', 'merge (from a linked worktree whose task is complete: merges its branch into main in the main folder; fast-forward else one merge commit; refuses conflicts, staged or in-progress work and never deletes branches)', 'state-write <expected-revision> (stdin: {task,progress,decisions,verification,next,blockers,recommendations,plan?,outcomes?,importance?}; task, decisions, verification, next and blockers are strings)', 'recommendations-write <expected-revision> (stdin: {needsYou:[{kind,action,reason}],onItsOwn:[...],reason?,boldIdea?}; up to 20 steps per list, returned as steps by status and next; the older {primary,alternatives,reason} is saved as onItsOwn)', 'park <expected-revision> (stdin: {add:"one-line idea"} or {remove:"its text"|position}; the parked list shows in status and survives task changes)', 'state-recover <corrupt-revision>', 'projects [--update | --forget <path>] (every project with saved NEEF state, last use and next-prompt instruction version; --update upgrades outdated unedited blocks with backups, skips edited, missing and block-free projects, and commits only the updated files on a checked-out branch when they had no uncommitted changes, reporting commit or commitSkipped per project; --forget moves the saved state of a listed project whose folder no longer exists into a backup and refuses existing folders)', 'doctor'], recommendations: 'primary:{kind:REQUIRED|RECOMMENDED|OPTIONAL,action,reason}; alternatives: at most two such actions; boldIdea: one ambitious grounded idea as a string (at most 400 characters), kept across sessions and returned by next. Each save also adds the bold idea and suggested actions to a dated idea board beside the state (newest first, last 5 bold ideas and 10 suggestions, repeats move to the top), shown in the status board. For no supported action: primary:null, alternatives:[], reason. Completion requires an explicit recommendation evaluation; REQUIRED work must stay active.', outcomes: 'Ordinary tasks complete on a nonempty verification note. With a plan or importance important, completion requires [{id,description,required,status,evidence}], with unique ids and at least one required outcome; supplied outcomes are always validated. Status is pending/passed/failed/blocked; passed outcomes need nonempty evidence. Required outcomes must pass, blockers must be explicitly cleared, and plan phases must finish before completion. Same-task writes preserve omitted outcomes; new tasks do not inherit them. Legacy saved states remain readable. Evidence is agent-reported, not independently proven.', plan: 'Optional state field: {goal,scale:small|large,rationale,phases:[{id,title?,task,dependsOn:[id],acceptance:[criterion],status:pending|active|complete,verification?,userInput?}]}. title is a short board name (at most 40 characters). userInput names the decision, credential, approval or manual step only the user can supply for that phase. Completed phases require verification evidence. Omitted plans persist only for the same task; incomplete phases keep progress active. The plan is stored beside the state as <id>.plan.json under 32 KiB, under the same lock and revision; the rest of the state stays under 8 KiB and 40 lines.', options: '--project <path>; NEEF_HOME overrides shared data for isolated tests' };
   if (command === 'doctor') return doctor();
   const p = project(cwd);
   if (command === 'style') {
@@ -1551,6 +1639,7 @@ export async function main(args = process.argv.slice(2)) {
     return prototypeWorkspace(p, rest[0], all);
   }
   if (command === 'prototype-delete') return prototypeDelete(p, args.slice(1));
+  if (command === 'wait-file') return waitFileCommand(p, args.slice(1));
   if (command === 'next') return next(p);
   if (command === 'begin') return begin(p, argument);
   if (command === 'state-write') return stateWrite(p, argument, input());
@@ -1566,5 +1655,10 @@ export async function main(args = process.argv.slice(2)) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  try { print(await main()); } catch (error) { print({ error: error.message }); process.exitCode = 1; }
+  try {
+    const result = await main();
+    print(result);
+    // A wait that ran out is not an error and not a result: its own exit code tells them apart.
+    if (result?.timedOut) process.exitCode = 2;
+  } catch (error) { print({ error: error.message }); process.exitCode = 1; }
 }
