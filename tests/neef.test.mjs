@@ -3047,3 +3047,17 @@ test('wait-file refuses bad limits, unknown watches and a missing pattern', t =>
   f.run(['wait-file', '--mark'], undefined, /Usage: wait-file/);
   f.run(['wait-file'], undefined, /Usage: wait-file/);
 });
+
+test('a manual check with file evidence is marked before its steps and waited for, with a named limit', () => {
+  const completion = fs.readFileSync(new URL('../references/completion.md', import.meta.url), 'utf8');
+  const followUp = fs.readFileSync(new URL('../references/follow-up.md', import.meta.url), 'utf8');
+  assert.match(completion, /`wait-file <pattern> --mark` first and show the steps only after it returns a watch id/);
+  assert.match(completion, /tell the user the limit/);
+  assert.match(completion, /A file that has not changed since the mark is never evidence/);
+  assert.match(completion, /While the wait runs, the check is not a blocker/);
+  assert.match(completion, /A wait that times out or is stopped is not a result: give the exact step still needed and the resume command/);
+  assert.match(completion, /A check that leaves no file keeps the report-back command/);
+  assert.match(followUp, /A check NEEF marked before showing its steps and is waiting for with helper `wait-file` is not a blocker/);
+  assert.match(followUp, /name the time limit/);
+  assert.match(followUp, /Once that wait times out or is stopped, it is a blocker like any other user step and gets the resume command with its placeholders/);
+});
