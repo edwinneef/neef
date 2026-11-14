@@ -25,8 +25,8 @@ Choosing the check opens two native questions in turn, because the question tool
 
 1. Write the item exactly as shown for approval, plus the goal, agreed decisions and relevant file paths, into one prompt. Ask for concrete problems only: wrong assumptions against source, missing edge cases, simpler alternatives, unverifiable acceptance criteria. Tell it not to edit files and to answer in at most 15 bullets.
 2. Run the chosen agent's CLI read-only from the project folder with the picked setting's flags, with a finite timeout (about 10 minutes). A CLI run is a fresh session, even when it is the host's own agent:
-   - Codex: `codex exec --sandbox read-only --ephemeral <flags> -C "<project>" -o "<tmp>/peer.md" -` with the prompt on stdin.
-   - Claude: `claude -p --permission-mode plan <flags>` with the prompt on stdin, run in the project folder.
+   - Codex: `codex exec --sandbox read-only --ephemeral <flags> -C "<project>" -o "<tmp>/peer.md" -` with the prompt on stdin and `NEEF_GATE=off` in its environment.
+   - Claude: `claude -p --permission-mode plan <flags>` with the prompt on stdin and `NEEF_GATE=off` in its environment, run in the project folder.
 3. If the CLI is missing, rejects the model or setting, fails or times out, say so in one line, then run the same prompt through a fresh native subagent of the current host instead and label the result as same-model.
 
 The check makes no project edits, commits, task-state writes or extra installs. A host permission prompt for running the other CLI is the user's to answer; a denial ends the check without retrying, and the approval question returns without it.

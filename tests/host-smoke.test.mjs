@@ -87,9 +87,9 @@ test('logged processes preserve arguments and input, close logs, and record laun
   const stem = path.join(root, 'success');
   const input = '$neef inspect this & preserve "quotes"';
   const argument = 'space & | %PATH% "quote"';
-  const expression = 'let input=""; process.stdin.setEncoding("utf8"); process.stdin.on("data",x=>input+=x); process.stdin.on("end",()=>{console.log(JSON.stringify({input,arg:process.argv[1],ceiling:process.env.GIT_CEILING_DIRECTORIES})); console.error("saved stderr");});';
-  assert.equal(await runLoggedProcess(process.execPath, ['-e', expression, argument], { root, stem, input, timeoutMs: 3000 }), 0);
-  assert.deepEqual(JSON.parse(fs.readFileSync(`${stem}.jsonl`, 'utf8')), { input, arg: argument, ceiling: path.dirname(root) });
+  const expression = 'let input=""; process.stdin.setEncoding("utf8"); process.stdin.on("data",x=>input+=x); process.stdin.on("end",()=>{console.log(JSON.stringify({input,arg:process.argv[1],ceiling:process.env.GIT_CEILING_DIRECTORIES,gate:process.env.NEEF_GATE})); console.error("saved stderr");});';
+  assert.equal(await runLoggedProcess(process.execPath, ['-e', expression, argument], { root, stem, input, env: { ...process.env, NEEF_GATE: '' }, timeoutMs: 3000 }), 0);
+  assert.deepEqual(JSON.parse(fs.readFileSync(`${stem}.jsonl`, 'utf8')), { input, arg: argument, ceiling: path.dirname(root), gate: 'off' });
   assert.equal(fs.readFileSync(`${stem}.prompt.txt`, 'utf8'), input);
   assert.match(fs.readFileSync(`${stem}.stderr.txt`, 'utf8'), /saved stderr/);
   assertClosed(opened);

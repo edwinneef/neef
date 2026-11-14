@@ -11,6 +11,7 @@ Current evidence for NEEF and how to reproduce it. The dated history of earlier 
 - Storage boundaries: state, baselines, preferences, prototypes and backups stay outside the project; baseline pruning keeps recent and referenced files.
 - Setup: discovery limits, managed AGENTS.md/CLAUDE.md blocks, backups, upgrades and rollback (rollback test runs on Windows only).
 - Installation: dry run, receipt hashes, backups, retirement of owned files, refusal of edited or unmanaged files, every reference installed for both hosts, and `doctor`.
+- Prompt gate: the hook output shape and every rule clause (`tests/gate.test.mjs`); merging after existing hooks in both hosts, wrong-shape refusal, rollback after a failed Codex write, `CODEX_HOME`, `--gate on|off` persistence and flag errors, and the Codex hooks feature report.
 - Host launchers: Codex sandbox and approval arguments, Windows native executables, bounded timeouts and owned-process cleanup.
 
 These tests prove helper and installer behaviour. They do not prove that a fresh agent session loads or follows the instructions.

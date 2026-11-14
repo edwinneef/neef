@@ -107,7 +107,7 @@ export async function runLoggedProcess(program, args, { root, stem, env = proces
   try {
     descriptors.push(fs.openSync(`${stem}.jsonl`, 'w'));
     descriptors.push(fs.openSync(`${stem}.stderr.txt`, 'w'));
-    const child = spawn(program, args, { cwd: root, env: { ...env, GIT_CEILING_DIRECTORIES: env.GIT_CEILING_DIRECTORIES || path.dirname(root) },
+    const child = spawn(program, args, { cwd: root, env: { ...env, NEEF_GATE: env.NEEF_GATE || 'off', GIT_CEILING_DIRECTORIES: env.GIT_CEILING_DIRECTORIES || path.dirname(root) },
       stdio: ['pipe', ...descriptors], windowsHide: true });
     const done = waitForHost(child, timeoutMs, stopTimeoutMs);
     child.stdin.on('error', () => {});
